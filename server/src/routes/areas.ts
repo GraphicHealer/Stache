@@ -1,0 +1,224 @@
+import type { FastifyInstance } from 'fastify';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { db } from '../db';
+import { areas, labels, photos } from '../db/schema';
+import { breadcrumb } from '../lib/breadcrumb';
+import { recordEvent } from '../lib/events';
+import {
+  coverThumbsForAreas,
+  insertPhoto,
+  photoUrl,
+  savePhotoFile,
+  thumbUrl,
+  thumbsForItems,
+} from '../lib/photos';
+import { items } from '../db/schema';
+
+interface CreateAreaBody {
+  name?: string | null;
+  parent_id?: string | null;
+  label_code?: string | null;
+}
+
+interface PatchAreaBody {
+  name?: string | null;
+  parent_id?: string | null;
+  cover_photo_id?: string | null;
+}
+
+function areaJson(a: typeof areas.$inferSelect, cover?: { thumbUrl: string; url: string } | null) {
+  return {
+    id: a.id,
+    parent_id: a.parentId,
+    name: a.name,
+    label_code: a.labelCode,
+    cover_photo_id: a.coverPhotoId,
+    cover_thumb: cover?.thumbUrl ?? null,
+    cover_url: cover?.url ?? null,
+    created_at: a.createdAt,
+    archived_at: a.archivedAt,
+  };
+}
+
+export async function areaRoutes(app: FastifyInstance) {
+  // Root areas for browsing.
+  app.get('/api/areas', async () => {
+    const roots = await db
+      .select()
+      .from(areas)
+      .where(and(isNull(areas.parentId), isNull(areas.archivedAt)))
+      .orderBy(asc(areas.createdAt));
+    const covers = await coverThumbsForAreas(roots);
+    return {
+      areas: roots.map((a) => {
+        const c = covers.get(a.id);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null);
+      }),
+    };
+  });
+
+  // Create an area — optionally claiming a pre-printed label.
+  app.post('/api/areas', async (req, reply) => {
+    const body = (req.body ?? {}) as CreateAreaBody;
+
+    if (body.parent_id) {
+      const [parent] = await db.select().from(areas).where(eq(areas.id, body.parent_id));
+      if (!parent || parent.archivedAt) return reply.notFound('parent area not found');
+    }
+
+    let labelCode: string | null = null;
+    if (body.label_code) {
+      const [label] = await db.select().from(labels).where(eq(labels.code, body.label_code));
+      if (!label) return reply.badRequest('unknown label code');
+      if (label.areaId) return reply.conflict('label already claimed');
+      labelCode = label.code;
+    }
+
+    const [area] = await db
+      .insert(areas)
+      .values({ name: body.name ?? null, parentId: body.parent_id ?? null, labelCode })
+      .returning();
+    if (labelCode) {
+      await db.update(labels).set({ areaId: area.id }).where(eq(labels.code, labelCode));
+    }
+    const ev = await recordEvent('area.created', 'area', area.id, {
+      label_code: labelCode,
+      parent_id: area.parentId,
+    });
+    return reply.code(201).send({ area: areaJson(area), event_id: ev.id });
+  });
+
+  // Area detail: breadcrumb, sub-areas, contents.
+  app.get('/api/areas/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+
+    const [crumb, subs, contents, areaPhotos] = await Promise.all([
+      breadcrumb(id),
+      db
+        .select()
+        .from(areas)
+        .where(and(eq(areas.parentId, id), isNull(areas.archivedAt)))
+        .orderBy(asc(areas.createdAt)),
+      db
+        .select()
+        .from(items)
+        .where(and(eq(items.areaId, id), isNull(items.hiddenAt)))
+        .orderBy(asc(items.createdAt)),
+      db.select().from(photos).where(eq(photos.areaId, id)),
+    ]);
+
+    const covers = await coverThumbsForAreas(subs);
+    const thumbs = await thumbsForItems(contents.map((i) => i.id));
+    const cover = areaPhotos.find((p) => p.id === area.coverPhotoId) ?? areaPhotos[0];
+
+    return {
+      area: areaJson(
+        area,
+        cover ? { thumbUrl: thumbUrl(cover), url: photoUrl(cover) } : null,
+      ),
+      archived: !!area.archivedAt,
+      breadcrumb: crumb,
+      subareas: subs.map((a) => {
+        const c = covers.get(a.id);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null);
+      }),
+      items: contents.map((i) => {
+        const t = thumbs.get(i.id);
+        return {
+          id: i.id,
+          area_id: i.areaId,
+          name: i.name,
+          description: i.description,
+          quantity: i.quantity,
+          status: i.status,
+          lent_to: i.lentTo,
+          not_here_count: i.notHereCount,
+          thumb: t ? thumbUrl(t) : null,
+          photo: t ? photoUrl(t) : null,
+        };
+      }),
+      photos: areaPhotos.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })),
+    };
+  });
+
+  app.patch('/api/areas/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as PatchAreaBody;
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    const eventIds: string[] = [];
+
+    if (body.parent_id !== undefined && body.parent_id !== area.parentId) {
+      if (body.parent_id === id) return reply.badRequest('an area cannot contain itself');
+      if (body.parent_id) {
+        const [parent] = await db.select().from(areas).where(eq(areas.id, body.parent_id));
+        if (!parent) return reply.badRequest('parent area not found');
+        // Reject moving into own descendant.
+        const chain = await breadcrumb(body.parent_id);
+        if (chain.some((c) => c.id === id))
+          return reply.badRequest('an area cannot move inside itself');
+      }
+      const ev = await recordEvent('area.moved', 'area', id, {
+        from_parent_id: area.parentId,
+        to_parent_id: body.parent_id,
+      });
+      eventIds.push(ev.id);
+    }
+    if (body.name !== undefined && body.name !== area.name) {
+      const ev = await recordEvent('area.updated', 'area', id, { prev: { name: area.name } });
+      eventIds.push(ev.id);
+    }
+
+    const [updated] = await db
+      .update(areas)
+      .set({
+        name: body.name === undefined ? area.name : body.name,
+        parentId: body.parent_id === undefined ? area.parentId : body.parent_id,
+        coverPhotoId: body.cover_photo_id === undefined ? area.coverPhotoId : body.cover_photo_id,
+      })
+      .where(eq(areas.id, id))
+      .returning();
+    return { area: areaJson(updated), event_ids: eventIds };
+  });
+
+  // Archive (soft delete). The label keeps resolving to this area.
+  app.delete('/api/areas/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    await db.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, id));
+    const ev = await recordEvent('area.archived', 'area', id, { name: area.name });
+    return { ok: true, event_id: ev.id };
+  });
+
+  // Upload a photo for an area; `cover` field marks it as the cover.
+  app.post('/api/areas/:id/photos', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+
+    const savedPhotos = [];
+    let wantsCover = !area.coverPhotoId;
+    for await (const part of req.parts()) {
+      if (part.type === 'file') {
+        const buf = await part.toBuffer();
+        const saved = await savePhotoFile(buf);
+        savedPhotos.push(await insertPhoto(saved, { areaId: id }));
+      } else if (part.fieldname === 'cover' && part.value === 'true') {
+        wantsCover = true;
+      }
+    }
+    if (savedPhotos.length === 0) return reply.badRequest('no photo uploaded');
+    if (wantsCover) {
+      await db
+        .update(areas)
+        .set({ coverPhotoId: savedPhotos[0].id })
+        .where(eq(areas.id, id));
+    }
+    return reply.code(201).send({
+      photos: savedPhotos.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })),
+    });
+  });
+}
