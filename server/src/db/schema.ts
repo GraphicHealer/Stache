@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, integer, real, boolean, timestamp, jsonb, index, uniqueIndex, vector,
+  pgTable, uuid, text, integer, real, boolean, timestamp, date, jsonb, index, uniqueIndex, vector,
 } from 'drizzle-orm/pg-core';
 
 export const labels = pgTable('labels', {
@@ -32,6 +32,8 @@ export const items = pgTable('items', {
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   takeoutCount: integer('takeout_count').notNull().default(0),
   remindSnoozedUntil: timestamp('remind_snoozed_until', { withTimezone: true }),
+  warrantyUntil: date('warranty_until', { mode: 'string' }), // optional "covered until"
+  restockBelow: integer('restock_below'), // optional "alert when qty <= this"
   notHereCount: integer('not_here_count').notNull().default(0),
   hiddenAt: timestamp('hidden_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

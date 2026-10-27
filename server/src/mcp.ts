@@ -124,6 +124,131 @@ function buildMcpServer(): McpServer {
     },
   );
 
+  // Receipt/voice ingest paths: an assistant can file and annotate items.
+  server.registerTool(
+    'add_item',
+    {
+      description:
+        'File a new item into the inventory (e.g. from a delivered-purchase receipt). ' +
+        'Needs a home: pass area_id, a QR area_label like ST-000001, or area_name ' +
+        '(matched loosely, created if absent).',
+      inputSchema: {
+        name: z.string().optional(),
+        description: z.string().optional(),
+        quantity: z.number().int().min(1).optional(),
+        barcode: z.string().optional(),
+        warranty_until: z.string().optional(), // YYYY-MM-DD
+        restock_below: z.number().int().min(0).optional(),
+        area_id: z.string().uuid().optional(),
+        area_label: z.string().optional(),
+        area_name: z.string().optional(),
+      },
+    },
+    async ({ name, description, quantity, barcode, warranty_until, restock_below, area_id, area_label, area_name }) => {
+      let areaId = area_id;
+      if (!areaId && area_label) {
+        const [l] = await db.select().from(labels).where(eq(labels.code, area_label.toUpperCase()));
+        if (l?.areaId) areaId = l.areaId;
+      }
+      if (!areaId && area_name) {
+        const [a] = await sql<{ id: string }[]>`
+          SELECT id FROM areas WHERE archived_at IS NULL AND name ILIKE ${area_name} LIMIT 1`;
+        if (a) {
+          areaId = a.id;
+        } else {
+          const [created] = await db.insert(areas).values({ name: area_name }).returning();
+          await recordEvent('area.created', 'area', created.id, { name: area_name });
+          areaId = created.id;
+        }
+      }
+      if (!areaId) return text({ error: 'no area given - pass area_id, area_label, or area_name' });
+      const [area] = await db.select().from(areas).where(eq(areas.id, areaId));
+      if (!area || area.archivedAt) return text({ error: 'area not found' });
+
+      const [item] = await db
+        .insert(items)
+        .values({
+          areaId,
+          name: name ?? null,
+          description: description ?? null,
+          quantity: quantity ?? 1,
+          barcode: barcode ?? null,
+          warrantyUntil: warranty_until ?? null,
+          restockBelow: restock_below ?? null,
+        })
+        .returning();
+      await recordEvent('item.filed', 'item', item.id, { area_id: areaId, via: 'mcp' });
+      return text({ ok: true, item_id: item.id, path: await pathOf(areaId) });
+    },
+  );
+
+  server.registerTool(
+    'update_item',
+    {
+      description:
+        'Update an item (name, description, quantity, barcode, status, lent_to, warranty_until, restock_below). ' +
+        'Useful for voice descriptions: "the drill is in the garage" -> update the item the user means.',
+      inputSchema: {
+        item_id: z.string().uuid(),
+        name: z.string().nullable().optional(),
+        description: z.string().nullable().optional(),
+        quantity: z.number().int().min(1).optional(),
+        barcode: z.string().nullable().optional(),
+        status: z.enum(['home', 'out', 'lent', 'unaccounted', 'gone']).optional(),
+        lent_to: z.string().nullable().optional(),
+        warranty_until: z.string().nullable().optional(),
+        restock_below: z.number().int().min(0).nullable().optional(),
+      },
+    },
+    async ({ item_id, status, lent_to, ...fields }) => {
+      const [i] = await db.select().from(items).where(eq(items.id, item_id));
+      if (!i || i.isPrivate || i.hiddenAt) return text({ error: 'item not found' });
+
+      const edits: Record<string, unknown> = {};
+      const prev: Record<string, unknown> = {};
+      const map = {
+        name: 'name', description: 'description', quantity: 'quantity',
+        barcode: 'barcode', warranty_until: 'warrantyUntil', restock_below: 'restockBelow',
+      } as const;
+      for (const [k, col] of Object.entries(map)) {
+        const v = (fields as Record<string, unknown>)[k];
+        if (v !== undefined && v !== (i as any)[col]) {
+          prev[col] = (i as any)[col];
+          edits[col] = v;
+        }
+      }
+      if (Object.keys(prev).length) {
+        await recordEvent('item.updated', 'item', item_id, { prev, next: edits });
+      }
+
+      if (status !== undefined && status !== i.status) {
+        await recordEvent('item.status', 'item', item_id, {
+          prev: {
+            status: i.status, lent_to: i.lentTo, out_since: i.outSince,
+            hidden_at: i.hiddenAt, takeout_count: i.takeoutCount, last_used: i.lastUsedAt,
+          },
+          next: { status, lent_to: lent_to ?? null },
+        });
+        edits.status = status;
+        edits.lentTo = status === 'lent' ? (lent_to ?? i.lentTo) : null;
+        if (status === 'home') {
+          edits.outSince = null;
+          edits.hiddenAt = null;
+        } else {
+          if (!i.outSince) edits.outSince = new Date();
+          if (['out', 'lent'].includes(status) && i.status === 'home') {
+            edits.lastUsedAt = new Date();
+            edits.takeoutCount = i.takeoutCount + 1;
+          }
+          if (status === 'gone') edits.hiddenAt = new Date();
+        }
+      }
+      if (!Object.keys(edits).length) return text({ ok: true, changed: false });
+      await db.update(items).set(edits).where(eq(items.id, item_id));
+      return text({ ok: true, changed: true, path: await pathOf(i.areaId) });
+    },
+  );
+
   server.registerTool(
     'resolve_label',
     {

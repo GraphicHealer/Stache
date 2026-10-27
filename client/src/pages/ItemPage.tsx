@@ -21,6 +21,10 @@ export function ItemPage() {
     queryKey: ['item', id],
     queryFn: () => api.get(`/api/items/${id}`),
   });
+  const { data: areaHint } = useQuery({
+    queryKey: ['suggested-area', id],
+    queryFn: () => api.get(`/api/items/${id}/suggested-area`).catch(() => ({ suggestions: [] })),
+  });
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['item', id] });
     if (data?.item?.area_id) qc.invalidateQueries({ queryKey: ['area', data.item.area_id] });
@@ -198,6 +202,48 @@ export function ItemPage() {
         {item.status === 'lent' && <span className="badge warn">→ {item.lent_to ?? '?'}</span>}
         {item.status === 'out' && <span className="badge warn">out</span>}
       </div>
+
+      {(areaHint?.suggestions ?? []).length > 0 && item.status === 'home' && (
+        <div className="suggest">
+          <p className="muted">Similar things live in:</p>
+          {areaHint.suggestions.map((s: any) => (
+            <button
+              key={s.area_id}
+              className="btn"
+              onClick={() => patch({ area_id: s.area_id }, `Moved to ${s.path}`)}
+            >
+              {s.path}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <details className="opt-details">
+        <summary>Details (optional)</summary>
+        <label className="row">
+          <span className="muted">Warranty until</span>
+          <input
+            className="input"
+            type="date"
+            defaultValue={item.warranty_until ?? ''}
+            onBlur={(e) => patch({ warranty_until: e.target.value || null }, 'Saved')}
+          />
+        </label>
+        <label className="row">
+          <span className="muted">Restock when below</span>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            placeholder="off"
+            defaultValue={item.restock_below ?? ''}
+            onBlur={(e) =>
+              patch({ restock_below: e.target.value === '' ? null : parseInt(e.target.value, 10) }, 'Saved')
+            }
+          />
+        </label>
+        <p className="muted">Low stock shows up quietly in the Inbox and digest.</p>
+      </details>
 
       {(!item.owner_id || item.owner_id === user?.id) && (
         <label className="row">

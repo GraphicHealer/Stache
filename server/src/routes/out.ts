@@ -5,7 +5,9 @@ import { items } from '../db/schema';
 import { recordEvent } from '../lib/events';
 import { thumbsForItems, thumbUrl } from '../lib/photos';
 import {
+  fetchLowStock,
   fetchMissing,
+  fetchWarrantyExpiring,
   getDigestConfig,
   outJson,
   sendDigest,
@@ -108,11 +110,16 @@ export async function outRoutes(app: FastifyInstance) {
     const { out, unaccounted } = await fetchMissing(null);
     const list = [...out, ...unaccounted];
     const thumbs = await outJson(list);
+    const low = await fetchLowStock(null);
+    const warranties = await fetchWarrantyExpiring(null);
     return {
       out_count: out.length,
       unaccounted_count: unaccounted.length,
       total: list.length,
       items: thumbs.map((i) => ({ name: i.name, path: i.area_path, days: i.days })),
+      low_stock_count: low.length,
+      low_stock: low.map((i) => ({ name: i.name, quantity: i.quantity, restock_below: i.restockBelow })),
+      warranty_expiring: warranties.map((i) => ({ name: i.name, warranty_until: i.warrantyUntil })),
     };
   });
 

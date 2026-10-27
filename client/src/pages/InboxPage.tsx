@@ -1,52 +1,142 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
 
-/** Optional triage of unnamed items. Skipping forever is supported. */
+interface InboxItem {
+  id: string;
+  area_id: string;
+  area_path: string;
+  ai_name: string | null;
+  thumb: string | null;
+}
+
+/**
+ * Optional triage, one card at a time: photo, where it is, AI's guess.
+ * Right / Fix / Later - skipping forever is supported.
+ */
 export function InboxPage() {
   const qc = useQueryClient();
   const { toast } = useApp();
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [idx, setIdx] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
   const [done, setDone] = useState<Set<string>>(new Set());
+  const [later, setLater] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({ queryKey: ['inbox'], queryFn: () => api.get('/api/inbox') });
 
-  const items = (data?.items ?? []).filter((i: any) => !done.has(i.id));
+  const items: InboxItem[] = (data?.items ?? []).filter(
+    (i: InboxItem) => !done.has(i.id) && !later.has(i.id),
+  );
+  const current = items[Math.min(idx, items.length - 1)];
 
-  const save = async (id: string) => {
-    const name = (drafts[id] ?? '').trim();
-    if (!name) return;
-    await api.patch(`/api/items/${id}`, { name }).then((r) => toast('Named', r.event_ids?.[0]));
-    setDone((s) => new Set(s).add(id));
-    qc.invalidateQueries({ queryKey: ['inbox'] });
+  const finish = (id: string, s: 'done' | 'later') => {
+    const set = s === 'done' ? done : later;
+    const setter = s === 'done' ? setDone : setLater;
+    setter(new Set(set).add(id));
+    setEditing(false);
+    setDraft('');
+    if (idx >= items.length - 1) setIdx(0);
+  };
+
+  const accept = async (item: InboxItem) => {
+    if (item.ai_name) {
+      const r = await api.patch(`/api/items/${item.id}`, { name: item.ai_name });
+      toast(`Named "${item.ai_name}"`, r.event_ids?.[0]);
+      qc.invalidateQueries({ queryKey: ['item', item.id] });
+    }
+    finish(item.id, 'done');
+  };
+
+  const saveFix = async (item: InboxItem) => {
+    const name = draft.trim();
+    if (name) {
+      const r = await api.patch(`/api/items/${item.id}`, { name });
+      toast(`Named "${name}"`, r.event_ids?.[0]);
+      qc.invalidateQueries({ queryKey: ['item', item.id] });
+    }
+    finish(item.id, 'done');
   };
 
   return (
     <div className="page">
       <h1>Inbox</h1>
-      <p className="muted">Unnamed things, newest first. Name them if you feel like it - or don't.</p>
       {isLoading && <p className="muted">Loading…</p>}
-      {!isLoading && items.length === 0 && <p className="muted">All clear.</p>}
-      {items.map((i: any) => (
-        <div key={i.id} className="inbox-card">
-          {i.thumb ? <img src={i.thumb} alt="" /> : <div className="thumb-placeholder" />}
-          <div className="inbox-body">
-            <div className="grid-sub">{i.area_path}</div>
+      {!isLoading && !current && <p className="muted">All clear. Nothing needs naming.</p>}
+
+      {current && (
+        <div className="triage">
+          <p className="muted">
+            {later.size > 0 ? `${items.length} to go · ` : ''}{idx + 1} / {items.length}
+          </p>
+          <Link to={`/items/${current.id}`} className="triage-photo">
+            {current.thumb ? <img src={current.thumb} alt="" /> : <span>no photo</span>}
+          </Link>
+          <p className="grid-sub">{current.area_path}</p>
+          {current.ai_name && <p>AI thinks: <b>{current.ai_name}</b></p>}
+
+          {editing ? (
             <div className="row">
               <input
                 className="input"
-                placeholder={i.ai_name ? `AI: ${i.ai_name}` : 'Name it?'}
-                value={drafts[i.id] ?? i.ai_name ?? ''}
-                onChange={(e) => setDrafts((d) => ({ ...d, [i.id]: e.target.value }))}
-                onKeyDown={(e) => e.key === 'Enter' && save(i.id)}
+                autoFocus
+                placeholder={current.ai_name ?? 'Name it'}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveFix(current)}
               />
-              <button className="btn" onClick={() => save(i.id)}>Save</button>
-              <button className="btn" onClick={() => setDone((s) => new Set(s).add(i.id))}>Later</button>
+              <button className="btn" onClick={() => saveFix(current)}>Save</button>
             </div>
-          </div>
+          ) : (
+            <div className="triage-actions">
+              <button className="btn" onClick={() => accept(current)}>✓ Right</button>
+              <button
+                className="btn"
+                onClick={() => { setEditing(true); setDraft(current.ai_name ?? ''); }}
+              >
+                ✎ Fix
+              </button>
+              <button className="btn btn-ghost" onClick={() => finish(current.id, 'later')}>
+                ⏭ Later
+              </button>
+            </div>
+          )}
         </div>
-      ))}
+      )}
+
+      {(data?.low_stock ?? []).length > 0 && (
+        <>
+          <h2>Running low</h2>
+          {(data?.low_stock ?? []).map((i: any) => (
+            <div key={i.id} className="inbox-card">
+              {i.thumb ? <img src={i.thumb} alt="" /> : <div className="thumb-placeholder" />}
+              <div className="inbox-body">
+                <Link to={`/items/${i.id}`}>{i.name ?? 'unnamed'}</Link>
+                <div className="grid-sub">
+                  {i.quantity} left · restocks below {i.restock_below} · {i.area_path}
+                </div>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {(data?.warranty_expiring ?? []).length > 0 && (
+        <>
+          <h2>Warranties ending</h2>
+          {(data?.warranty_expiring ?? []).map((i: any) => (
+            <div key={i.id} className="inbox-card">
+              {i.thumb ? <img src={i.thumb} alt="" /> : <div className="thumb-placeholder" />}
+              <div className="inbox-body">
+                <Link to={`/items/${i.id}`}>{i.name ?? 'unnamed'}</Link>
+                <div className="grid-sub">until {i.warranty_until} · {i.area_path}</div>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
 
       {(data?.lent_out ?? []).length > 0 && (
         <>

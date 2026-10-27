@@ -76,6 +76,7 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
       const allowed = new Set([
         'name', 'description', 'quantity', 'barcode',
         'detectedCodes', 'isPrivate', 'remindSnoozedUntil',
+        'warrantyUntil', 'restockBelow',
       ]);
       const set = Object.fromEntries(
         Object.entries(prev)

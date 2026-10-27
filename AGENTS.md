@@ -85,6 +85,12 @@ curl localhost:8080/api/health
 - **Digest/webhooks**: `/api/webhooks/*` are session-exempt but require the
   `settings.webhook_token` query param. Digest config lives in
   `settings.digest`; scheduler compares against container `TZ`.
+- **Optional item fields**: `warranty_until` (date, mode 'string' so no Date
+  coercion) and `restock_below` (int). Low stock = `quantity <= restock_below`;
+  surfaces in `/api/inbox`, the digest payload, and `out-sensor` - never alerts.
+- **MCP writes**: `add_item` (files an item; resolves area by id/label/name,
+  find-or-create on name) and `update_item` (fields + status, same event
+  payloads as the PATCH route so undo works identically).
 
 ## Feature boundaries
 

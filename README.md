@@ -45,7 +45,18 @@ Items not in their home container are tracked in two states: **out** (you took i
 - **`/out` page** - everything out of place, Out and Unaccounted as separate sections grouped by area, sorted by time out ("out 3 days"). Multi-select + bulk put-back, per-item put back / mark gone / snooze reminders.
 - **Usage data** - taking an item out silently records `last_used` and increments `takeout_count`; shown on the item page. No extra input.
 - **Reminders (optional)** - Settings → "Out reminders" posts **one bundled digest** (photos + names) to any webhook URL, at a daily time (container `TZ`) or when triggered. Snoozed items are skipped.
-- **Home Assistant** - `GET /api/webhooks/out-sensor?token=…` returns `{out_count, unaccounted_count, total, items:[{name, path, days}]}` for a REST sensor; `POST /api/webhooks/digest?token=…` fires the digest from an automation. Both URLs shown with copy buttons in Settings.
+- **Home Assistant** - `GET /api/webhooks/out-sensor?token=…` returns `{out_count, unaccounted_count, total, items:[{name, path, days}], low_stock, warranty_expiring}` for a REST sensor; `POST /api/webhooks/digest?token=…` fires the digest from an automation. Both URLs shown with copy buttons in Settings.
+
+## Optional details
+
+Two fields on the item page (under "Details"), both fully optional and never in the filing flow:
+
+- **Warranty until** - a date. Items with warranties ending within 30 days show quietly in the Inbox, digest, and sensor.
+- **Restock when below** - a number for consumables. When quantity drops to it, the item appears in a "Running low" Inbox section plus digest/sensor data. No alerts, no nagging.
+
+## AI area suggestions
+
+On an item page, if CLIP has seen enough similar photos, a "Similar things live in" card suggests the area those look-alikes already live in (nearest-embedding neighbors, similarity-weighted). One tap moves it there, undoable like every move. `GET /api/items/:id/suggested-area` exposes it.
 
 ## Accounts & privacy
 
@@ -55,7 +66,7 @@ Items are **shared with the household by default**. Toggle "Private" on an item 
 
 ## MCP
 
-The MCP endpoint is off by default. Settings → "MCP connections" creates a named connection with its **own URL** (`<host>/mcp/<slug>`) **and a separate bearer token** - paste both into a ChatGPT/Claude connector (URL field + auth field), revoke either independently. Tools: `search_items`, `list_areas`, `area_contents`, `item_details`, `move_item`, `resolve_label`. Hosted connectors require public HTTPS - front it with a reverse proxy, Tailscale Funnel, or Cloudflare Tunnel.
+The MCP endpoint is off by default. Settings → "MCP connections" creates a named connection with its **own URL** (`<host>/mcp/<slug>`) **and a separate bearer token** - paste both into a ChatGPT/Claude connector (URL field + auth field), revoke either independently. Tools: `search_items`, `list_areas`, `area_contents`, `item_details`, `move_item`, `resolve_label`, `add_item`, `update_item`. The two write tools open integrations like receipt ingestion (an assistant files delivered purchases via `add_item`, with an `area_name` it finds or creates) and voice descriptions (`update_item` applies spoken names/notes/status). Hosted connectors require public HTTPS - front it with a reverse proxy, Tailscale Funnel, or Cloudflare Tunnel.
 
 ## Develop
 
@@ -78,6 +89,6 @@ DATABASE_URL=postgres://stash:stash@localhost:5432/stash npm run dev
 
 ## Roadmap status
 
-Done: core loop (areas, labels, photo filing, browsing, search), move/lend/not-here, out-vs-unaccounted tracking with one-tap put-back, bundled digest reminders + Home Assistant sensor, household auth + per-item privacy, inbox triage, undo, offline outbox, printable label sheets, Zebra/CUPS/DYMO label printing, AI name/description/tag suggestions, in-container CLIP visual search (similar items + photo search), barcode detection + free product lookup, per-connection MCP endpoints.
+Done: core loop (areas, labels, photo filing, browsing, search), move/lend/not-here, out-vs-unaccounted tracking with one-tap put-back, bundled digest reminders + Home Assistant sensor, household auth + per-item privacy, card-style inbox triage (Right/Fix/Later), optional warranty + low-stock tracking, AI area suggestions, undo, offline outbox, printable label sheets, Zebra/CUPS/DYMO label printing, AI name/description/tag suggestions, in-container CLIP visual search (similar items + photo search), barcode detection + free product lookup, per-connection MCP endpoints with write tools (add_item, update_item).
 
-Not yet: pile-splitting, receipt ingestion, warranties/low-stock, swipe-style inbox triage.
+Not yet: pile-splitting, receipts parsed in-app (covered via MCP add_item instead), voice input in-app (covered via MCP update_item).

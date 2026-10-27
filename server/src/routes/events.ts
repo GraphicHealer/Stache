@@ -6,6 +6,7 @@ import { undoEvent } from '../lib/events';
 import { itemVisible } from '../lib/visibility';
 import { thumbsForItems, thumbUrl } from '../lib/photos';
 import { breadcrumb } from '../lib/breadcrumb';
+import { fetchLowStock, fetchWarrantyExpiring } from '../lib/digest';
 
 export async function miscRoutes(app: FastifyInstance) {
   // Recent undoable actions (also powers the "what just happened" history).
@@ -66,6 +67,18 @@ export async function miscRoutes(app: FastifyInstance) {
       }
     }
 
+    // Quiet notices: low stock + warranties ending soon. Optional data only.
+    const uid = req.user?.id ?? null;
+    const low = await fetchLowStock(uid);
+    const expiring = await fetchWarrantyExpiring(uid);
+    const miscThumbs = await thumbsForItems([...low, ...expiring].map((i) => i.id));
+    for (const i of [...low, ...expiring]) {
+      if (!crumbs.has(i.areaId)) {
+        const c = await breadcrumb(i.areaId);
+        crumbs.set(i.areaId, c.map((x) => x.name ?? '?').join(' › '));
+      }
+    }
+
     return {
       items: rows.map((i) => {
         const t = thumbs.get(i.id);
@@ -93,6 +106,21 @@ export async function miscRoutes(app: FastifyInstance) {
           thumb: t ? thumbUrl(t) : null,
         };
       }),
+      low_stock: low.map((i) => ({
+        id: i.id,
+        name: i.name,
+        quantity: i.quantity,
+        restock_below: i.restockBelow,
+        area_path: crumbs.get(i.areaId) ?? '',
+        thumb: (t => t ? thumbUrl(t) : null)(miscThumbs.get(i.id)),
+      })),
+      warranty_expiring: expiring.map((i) => ({
+        id: i.id,
+        name: i.name,
+        warranty_until: i.warrantyUntil,
+        area_path: crumbs.get(i.areaId) ?? '',
+        thumb: (t => t ? thumbUrl(t) : null)(miscThumbs.get(i.id)),
+      })),
     };
   });
 }

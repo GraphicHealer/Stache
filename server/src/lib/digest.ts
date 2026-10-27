@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql as dsql } from 'drizzle-orm';
 import { db, sql } from '../db';
 import { items, settings } from '../db/schema';
 import { breadcrumb } from './breadcrumb';
@@ -128,6 +128,41 @@ export async function outJson(rows: OutRow[]) {
   );
 }
 
+const visibleTo = (userId: string | null) =>
+  userId
+    ? or(eq(items.isPrivate, false), eq(items.ownerId, userId))!
+    : eq(items.isPrivate, false);
+
+/** Consumables at or under their restock threshold. */
+export async function fetchLowStock(userId: string | null = null) {
+  return db
+    .select()
+    .from(items)
+    .where(
+      and(
+        isNull(items.hiddenAt),
+        visibleTo(userId),
+        isNotNull(items.restockBelow),
+        lte(items.quantity, items.restockBelow),
+      ),
+    );
+}
+
+/** Items whose warranty ends within `days` days (inclusive of today). */
+export async function fetchWarrantyExpiring(userId: string | null = null, days = 30) {
+  return db
+    .select()
+    .from(items)
+    .where(
+      and(
+        isNull(items.hiddenAt),
+        visibleTo(userId),
+        isNotNull(items.warrantyUntil),
+        dsql`warranty_until >= current_date AND warranty_until <= current_date + make_interval(days => ${days})`,
+      ),
+    );
+}
+
 /** One bundled digest POST - shared items only, snoozed items skipped. */
 export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
   const cfg = await getDigestConfig();
@@ -135,13 +170,18 @@ export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
   const list = [...out, ...unaccounted].filter(
     (r) => !r.remindSnoozedUntil || r.remindSnoozedUntil < new Date(),
   );
-  if (!cfg.enabled || !cfg.webhook_url || !list.length) {
+  const low = await fetchLowStock(null);
+  const warranties = await fetchWarrantyExpiring(null);
+  if (!cfg.enabled || !cfg.webhook_url || (!list.length && !low.length && !warranties.length)) {
     return { sent: false, count: list.length };
   }
   const thumbs = await thumbsForItems(list.map((r) => r.id));
   const base = cfg.base_url.replace(/\/$/, '');
   const payload = {
-    text: `${list.length} thing(s) still out of their spot`,
+    text:
+      `${list.length} thing(s) still out of their spot` +
+      (low.length ? `, ${low.length} running low` : '') +
+      (warranties.length ? `, ${warranties.length} warranty(ies) ending` : ''),
     count: list.length,
     items: await Promise.all(
       list.map(async (r) => ({
@@ -154,6 +194,18 @@ export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
         photo: (t => t ? `${base}${thumbUrl(t)}` : null)(thumbs.get(r.id)),
       })),
     ),
+    low_stock: await Promise.all(
+      low.map(async (i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        restock_below: i.restockBelow,
+        path: await areaPath(i.areaId),
+      })),
+    ),
+    warranty_expiring: warranties.map((i) => ({
+      name: i.name,
+      warranty_until: i.warrantyUntil,
+    })),
   };
   await fetch(cfg.webhook_url, {
     method: 'POST',

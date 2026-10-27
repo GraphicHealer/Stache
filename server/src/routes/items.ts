@@ -43,6 +43,8 @@ function itemJson(i: typeof items.$inferSelect) {
     takeout_count: i.takeoutCount,
     last_used: i.lastUsedAt,
     remind_snoozed_until: i.remindSnoozedUntil,
+    warranty_until: i.warrantyUntil,
+    restock_below: i.restockBelow,
     ai_name: i.aiName,
     ai_description: i.aiDescription,
     ai_tags: i.aiTags,
@@ -179,6 +181,8 @@ export async function itemRoutes(app: FastifyInstance) {
       detected_codes: 'detectedCodes',
       is_private: 'isPrivate',
       remind_snoozed_until: 'remindSnoozedUntil',
+      warranty_until: 'warrantyUntil',
+      restock_below: 'restockBelow',
     } as const;
     const prev: Record<string, unknown> = {};
     const next: Record<string, unknown> = {};
@@ -191,7 +195,9 @@ export async function itemRoutes(app: FastifyInstance) {
             ? Math.max(1, parseInt(body[key], 10) || 1)
             : key === 'remind_snoozed_until' && body[key]
               ? new Date(body[key])
-              : body[key];
+              : key === 'restock_below'
+                ? (body[key] === null ? null : Math.max(0, parseInt(body[key], 10) || 0))
+                : body[key];
       }
     }
     if (Object.keys(prev).length) {
@@ -216,6 +222,8 @@ export async function itemRoutes(app: FastifyInstance) {
         takeoutCount: item.takeoutCount,
         lastUsedAt: item.lastUsedAt,
         remindSnoozedUntil: item.remindSnoozedUntil,
+        warrantyUntil: item.warrantyUntil,
+        restockBelow: item.restockBelow,
       })
       .where(eq(items.id, id))
       .returning();
@@ -314,6 +322,40 @@ export async function itemRoutes(app: FastifyInstance) {
         };
       }),
     };
+  });
+
+  // Where similar things already live - CLIP neighbors' areas, weighted by
+  // similarity. Suggestion only; the user moves it or doesn't.
+  app.get('/api/items/:id/suggested-area', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!mlHealthy() || !item.embedding) return { suggestions: [] };
+
+    const neighbors = await nearestToItem(id, 12, req.user?.id ?? null);
+    if (!neighbors.length) return { suggestions: [] };
+    const meta = await pg<{ id: string; area_id: string }[]>`
+      SELECT id, area_id FROM items WHERE id IN ${pg(neighbors.map((n) => n.id))}`;
+    const areaOf = new Map(meta.map((m) => [m.id, m.area_id]));
+
+    const score = new Map<string, number>();
+    for (const n of neighbors) {
+      const a = areaOf.get(n.id);
+      if (a && a !== item.areaId) score.set(a, (score.get(a) ?? 0) + (1 - n.dist));
+    }
+    const top = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const suggestions = await Promise.all(
+      top.map(async ([areaId, s]) => {
+        const c = await breadcrumb(areaId);
+        return {
+          area_id: areaId,
+          name: c.at(-1)?.name ?? null,
+          path: c.map((x) => x.name ?? '?').join(' › '),
+          score: Math.round(s * 100) / 100,
+        };
+      }),
+    );
+    return { suggestions };
   });
 
   // Free external product lookup for a scanned/found barcode.
