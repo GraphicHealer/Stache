@@ -283,6 +283,10 @@ export function SettingsPage() {
           <p className="muted">Sensor = GET. Digest trigger = POST.</p>
         </>
       )}
+
+      <p className="muted" style={{ marginTop: '32px' }}>
+        Stash {import.meta.env.VITE_APP_VERSION || 'dev'}
+      </p>
     </div>
   );
 }

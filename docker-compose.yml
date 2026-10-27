@@ -16,6 +16,9 @@ services:
       retries: 12
 
   app:
+    # Prebuilt release image - `docker compose pull` grabs it; `build` still
+    # works for local development from source.
+    image: ghcr.io/graphichealer/stash:latest
     build: .
     restart: unless-stopped
     depends_on:

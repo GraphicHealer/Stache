@@ -1,3 +1,8 @@
+// Baked at build time by the release workflow (Dockerfile ARG APP_VERSION).
+interface ImportMetaEnv {
+  readonly VITE_APP_VERSION?: string;
+}
+
 // Native BarcodeDetector (Chrome/Android WebView). Fallback is @zxing/browser.
 interface BarcodeDetectorOptions {
   formats?: string[];

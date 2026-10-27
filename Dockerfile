@@ -8,12 +8,17 @@ COPY client/package.json client/
 RUN npm install
 
 FROM deps AS build
+# Release workflow bakes the tag in; shows in the UI via Vite.
+ARG APP_VERSION=dev
+ENV VITE_APP_VERSION=${APP_VERSION}
 COPY server/ server/
 COPY client/ client/
 RUN npm run build -w server && npm run build -w client
 
 FROM node:22-bookworm-slim AS runtime
-ENV NODE_ENV=production
+ARG APP_VERSION=dev
+ENV NODE_ENV=production \
+    APP_VERSION=${APP_VERSION}
 WORKDIR /app
 
 # `lp` for CUPS label printers; `ca-certificates` for HTTPS AI providers.

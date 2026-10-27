@@ -12,5 +12,7 @@ export const env = {
   // Built PWA. In Docker: /app/client/dist. In dev the Vite server serves it.
   clientDist: process.env.CLIENT_DIST ?? path.resolve(here, '../../client/dist'),
   migrationsDir: process.env.MIGRATIONS_DIR ?? path.resolve(here, '../migrations'),
+  // Baked at image build time by the release workflow.
+  appVersion: process.env.APP_VERSION ?? 'dev',
   isProd: process.env.NODE_ENV === 'production',
 };

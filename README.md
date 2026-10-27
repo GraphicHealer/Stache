@@ -12,10 +12,14 @@ Self-hosted home inventory for people who won't fill in forms. See `PLAN.md` for
 ## Run
 
 ```sh
-docker compose up --build
+docker compose up --build      # build from source
+# or use the prebuilt release image:
+docker compose pull && docker compose up -d
 ```
 
 App is at http://localhost:8080. Migrations run automatically on boot. Photos live in the `stash_data` volume.
+
+Publishing a GitHub Release builds `ghcr.io/graphichealer/stash:<version>` + `:latest` (amd64 + arm64) via Actions and bakes the tag into the UI (Settings footer) and `/api/health`.
 
 Print labels from `/labels` - QR codes encode `<origin>/l/<code>`, so print them from the URL you'll actually scan against.
 

@@ -45,7 +45,7 @@ export function buildApp() {
     decorateReply: false,
   });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  app.get('/api/health', async () => ({ ok: true, version: env.appVersion }));
 
   // Better Auth handles everything under /api/auth/*.
   app.route({
