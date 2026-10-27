@@ -4,7 +4,7 @@ import { useApp } from '../context';
 
 /**
  * Sign in, or create the first household account when no users exist yet
- * (server reports that via /api/setup — sign-up is closed afterward).
+ * (server reports that via /api/setup - sign-up is closed afterward).
  */
 export function LoginPage() {
   const { setUser } = useApp();

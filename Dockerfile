@@ -1,4 +1,4 @@
-# Stash — single-container build (app only; Postgres runs separately)
+# Stash - single-container build (app only; Postgres runs separately)
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app

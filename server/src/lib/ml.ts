@@ -8,7 +8,7 @@ import { env } from '../env';
 
 /**
  * In-process CLIP (ViT-B/32) via transformers.js + onnxruntime-node.
- * Models download once into DATA_DIR/models (~350MB) — the /data volume.
+ * Models download once into DATA_DIR/models (~350MB) - the /data volume.
  */
 const MODEL = 'Xenova/clip-vit-base-patch32';
 
@@ -57,7 +57,7 @@ function ensureClip(): Promise<Clip> {
   return clipPromise;
 }
 
-/** Warm the cache at boot — first photo shouldn't wait on a download. */
+/** Warm the cache at boot - first photo shouldn't wait on a download. */
 export function preloadClip(): void {
   ensureClip().catch((e) => console.error('[ml] CLIP load failed:', e.message));
 }

@@ -29,7 +29,7 @@ export async function recordEvent(
 
 /**
  * Applies the inverse of an event and marks it undone.
- * Undo never destroys data — filing an item is undone by hiding it, etc.
+ * Undo never destroys data - filing an item is undone by hiding it, etc.
  */
 export async function undoEvent(id: string): Promise<{ ok: boolean; message?: string }> {
   const [ev] = await db.select().from(events).where(eq(events.id, id));

@@ -160,7 +160,7 @@ export function ItemPage() {
         .filter((c: any) => c.text !== item.barcode)
         .map((c: any) => (
           <div key={c.text} className="suggest">
-            <p className="muted">Found barcode <b>{c.text}</b> in a photo — same item?</p>
+            <p className="muted">Found barcode <b>{c.text}</b> in a photo - same item?</p>
             <div className="row">
               <button className="btn" onClick={() => patch({ barcode: c.text }, 'Barcode attached')}>Yes</button>
               <button
@@ -206,7 +206,7 @@ export function ItemPage() {
             checked={item.is_private}
             onChange={(e) => patch({ is_private: e.target.checked }, e.target.checked ? 'Private' : 'Shared')}
           />
-          Private — only you can see this
+          Private - only you can see this
         </label>
       )}
       {item.is_private && <span className="badge warn">private</span>}

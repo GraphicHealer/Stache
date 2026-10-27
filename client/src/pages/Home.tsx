@@ -29,7 +29,7 @@ export function Home() {
       toast('Filed', r.event_id);
       qc.invalidateQueries({ queryKey: ['area', areaId] });
       qc.invalidateQueries({ queryKey: ['inbox'] });
-      // Filing stays fast — ask about a barcode found in the photo after the fact.
+      // Filing stays fast - ask about a barcode found in the photo after the fact.
       const code = await detectBarcodeInPhoto(blob);
       if (code) {
         api.get(`/api/codes/${encodeURIComponent(code.text)}/lookup`)
@@ -39,7 +39,7 @@ export function Home() {
     } catch {
       await outboxAdd({ kind: 'file-item', fields: { area_id: areaId }, blobs: [blob], createdAt: Date.now() });
       await refreshPending();
-      toast('Offline — queued for sync');
+      toast('Offline - queued for sync');
     }
   };
 
@@ -98,7 +98,7 @@ export function Home() {
           </>
         ) : (
           <div className="banner-name muted">
-            {stagedPhoto ? 'Photo staged — scan where it went' : 'Scan an area label to start filing'}
+            {stagedPhoto ? 'Photo staged - scan where it went' : 'Scan an area label to start filing'}
           </div>
         )}
         {pending > 0 && <span className="badge warn">{pending} queued</span>}

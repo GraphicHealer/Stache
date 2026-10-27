@@ -26,7 +26,7 @@ export async function setAiConfig(cfg: AiConfig): Promise<void> {
     .onConflictDoUpdate({ target: settings.key, set: { value: cfg as any } });
 }
 
-/** Call on item creation — queues AI naming when a provider is configured. */
+/** Call on item creation - queues AI naming when a provider is configured. */
 export async function maybeQueueItem(itemId: string): Promise<void> {
   const cfg = await getAiConfig();
   if (cfg?.enabled) {
@@ -42,7 +42,7 @@ Reply with ONLY a JSON object:
   "tags": string[],             // search synonyms/words, e.g. ["power tool","cordless","driver"]
   "ocr_text": string | null     // text visible in the image: brands, model numbers, labels
 }
-Rules: never guess a name — null is better than wrong. No markdown, no explanation.`;
+Rules: never guess a name - null is better than wrong. No markdown, no explanation.`;
 
 async function suggestOne(itemId: string): Promise<void> {
   const cfg = await getAiConfig();
@@ -72,7 +72,7 @@ async function suggestOne(itemId: string): Promise<void> {
     const product = await lookupBarcode(codeToLookup).catch(() => null);
     context.push(
       `Barcode ${codeToLookup} was seen on or with this item` +
-        (product ? ` — it resolves to "${product.name}"${product.brand ? ` by ${product.brand}` : ''}` : '') +
+        (product ? ` - it resolves to "${product.name}"${product.brand ? ` by ${product.brand}` : ''}` : '') +
         '.',
     );
   }
@@ -112,7 +112,7 @@ async function suggestOne(itemId: string): Promise<void> {
     ocr_text?: string | null;
   };
 
-  // Suggest, never overwrite — user-entered fields always win.
+  // Suggest, never overwrite - user-entered fields always win.
   await db
     .update(items)
     .set({

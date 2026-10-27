@@ -52,7 +52,7 @@ export async function miscRoutes(app: FastifyInstance) {
         crumbs.set(i.areaId, c.map((x) => x.name ?? '?').join(' › '));
       }
     }
-    // Gently: things marked out or lent — never a nag, just a list.
+    // Gently: things marked out or lent - never a nag, just a list.
     const out = await db
       .select()
       .from(items)

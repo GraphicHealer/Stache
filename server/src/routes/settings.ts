@@ -41,7 +41,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   });
 
   // --- MCP connections -----------------------------------------------------
-  // Each external AI gets its own URL (/mcp/<token>) — revocable independently.
+  // Each external AI gets its own URL (/mcp/<token>) - revocable independently.
 
   app.get('/api/settings/mcp', async () => ({
     connections: await db.select().from(mcpTokens).orderBy(asc(mcpTokens.createdAt)),

@@ -31,7 +31,7 @@ code { color: var(--muted); }
 .muted { color: var(--muted); }
 .editable { cursor: pointer; }
 
-/* Buttons — big, one-handed friendly */
+/* Buttons - big, one-handed friendly */
 .btn {
   display: inline-flex;
   align-items: center;

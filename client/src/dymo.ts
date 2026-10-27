@@ -1,7 +1,7 @@
 import QRCode from 'qrcode';
 
 /**
- * DYMO LabelWriter printing via the DYMO Web Service — the standard browser
+ * DYMO LabelWriter printing via the DYMO Web Service - the standard browser
  * path for Dymo. Requires DYMO Connect installed and running on this machine.
  */
 const DLS = 'https://127.0.0.1:41951/DYMO/DLS/Printing';
@@ -11,7 +11,7 @@ export async function dymoPrinters(): Promise<string[]> {
   try {
     res = await fetch(`${DLS}/GetPrinters`);
   } catch {
-    throw new Error('DYMO Web Service not reachable — is DYMO Connect running on this device?');
+    throw new Error('DYMO Web Service not reachable - is DYMO Connect running on this device?');
   }
   const doc = new DOMParser().parseFromString(await res.text(), 'text/xml');
   return [...doc.querySelectorAll('Printers > * > Name')]

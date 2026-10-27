@@ -60,7 +60,7 @@ export async function printerRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Test label — Zebra gets real ZPL; CUPS gets a PNG.
+  // Test label - Zebra gets real ZPL; CUPS gets a PNG.
   app.post('/api/printers/:id/test', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [p] = await db.select().from(printers).where(eq(printers.id, id));

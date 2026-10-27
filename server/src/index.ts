@@ -12,7 +12,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function main() {
   await ensurePhotoDir();
 
-  // Postgres may still be starting — wait for it.
+  // Postgres may still be starting - wait for it.
   for (let attempt = 0; ; attempt++) {
     try {
       await sql`SELECT 1`;

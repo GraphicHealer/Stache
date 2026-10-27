@@ -58,7 +58,7 @@ export async function areaRoutes(app: FastifyInstance) {
     };
   });
 
-  // Create an area — optionally claiming a pre-printed label.
+  // Create an area - optionally claiming a pre-printed label.
   app.post('/api/areas', async (req, reply) => {
     const body = (req.body ?? {}) as CreateAreaBody;
 

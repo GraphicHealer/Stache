@@ -64,7 +64,7 @@ export async function searchRoutes(app: FastifyInstance) {
       areaList.map((a) => ({ id: a.id, coverPhotoId: a.cover_photo_id })),
     );
 
-    // CLIP text embedding — catches "looks like" queries text can't.
+    // CLIP text embedding - catches "looks like" queries text can't.
     let itemIds = itemRows.map((r) => r.id);
     if (await mlHealthy()) {
       try {
@@ -73,7 +73,7 @@ export async function searchRoutes(app: FastifyInstance) {
         const seen = new Set(itemIds);
         itemIds = itemIds.concat(similar.filter((n) => !seen.has(n.id)).map((n) => n.id));
       } catch {
-        /* embeddings unavailable — text matches still returned */
+        /* embeddings unavailable - text matches still returned */
       }
     }
 
@@ -86,7 +86,7 @@ export async function searchRoutes(app: FastifyInstance) {
     };
   });
 
-  // Search by photo — "find things like this".
+  // Search by photo - "find things like this".
   app.post('/api/search/photo', async (req, reply) => {
     if (!(await mlHealthy())) return reply.badRequest('ML service not available');
     let buf: Buffer | null = null;

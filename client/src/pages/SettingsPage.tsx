@@ -5,7 +5,7 @@ import { useApp } from '../context';
 
 const copy = (text: string) => navigator.clipboard?.writeText(text).catch(() => {});
 
-/** AI provider settings + MCP connections — any OpenAI-compatible endpoint. */
+/** AI provider settings + MCP connections - any OpenAI-compatible endpoint. */
 export function SettingsPage() {
   const { toast, user, signOut } = useApp();
   const qc = useQueryClient();
@@ -98,7 +98,7 @@ export function SettingsPage() {
 
       <h2>AI suggestions</h2>
       <p className="muted">
-        Optional. Point at any OpenAI-compatible vision endpoint — Ollama, LM Studio, llama.cpp, or a
+        Optional. Point at any OpenAI-compatible vision endpoint - Ollama, LM Studio, llama.cpp, or a
         hosted provider. It only ever <i>suggests</i>; your text always wins.
       </p>
       <label className="row">
@@ -124,7 +124,7 @@ export function SettingsPage() {
       <input
         className="input"
         type="password"
-        placeholder={data?.has_api_key ? 'API key (set — enter to replace)' : 'API key (optional)'}
+        placeholder={data?.has_api_key ? 'API key (set - enter to replace)' : 'API key (optional)'}
         value={form.api_key}
         onChange={(e) => setForm({ ...form, api_key: e.target.value })}
       />
@@ -133,7 +133,7 @@ export function SettingsPage() {
       <h2>MCP connections</h2>
       <p className="muted">
         Let external AIs (ChatGPT, Claude…) search and manage this inventory. Each connection gets
-        its own URL and auth token — share both, revoke either anytime. Needs HTTPS exposure
+        its own URL and auth token - share both, revoke either anytime. Needs HTTPS exposure
         (reverse proxy, Tailscale Funnel, Cloudflare Tunnel) for hosted connectors.
       </p>
       {(mcp?.connections ?? []).map((c: any) => (

@@ -25,7 +25,7 @@ export function InboxPage() {
   return (
     <div className="page">
       <h1>Inbox</h1>
-      <p className="muted">Unnamed things, newest first. Name them if you feel like it — or don't.</p>
+      <p className="muted">Unnamed things, newest first. Name them if you feel like it - or don't.</p>
       {isLoading && <p className="muted">Loading…</p>}
       {!isLoading && items.length === 0 && <p className="muted">All clear.</p>}
       {items.map((i: any) => (

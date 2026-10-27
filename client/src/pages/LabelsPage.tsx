@@ -137,7 +137,7 @@ export function LabelsPage() {
       <h1>Labels</h1>
       <p className="muted">
         {labels.length} generated · {claimed} in use. QR codes point at{' '}
-        <code>{window.location.origin}/l/…</code> — print from the address you'll scan against.
+        <code>{window.location.origin}/l/…</code> - print from the address you'll scan against.
       </p>
       <div className="row">
         <button className="btn" disabled={busy} onClick={() => newBatch(12)}>+ 12</button>

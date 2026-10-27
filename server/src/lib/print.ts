@@ -92,7 +92,7 @@ function lp(args: string[]): Promise<void> {
   });
 }
 
-/** Print via CUPS — needs `lp` in the image (cups-client) and a reachable server. */
+/** Print via CUPS - needs `lp` in the image (cups-client) and a reachable server. */
 export async function printCups(p: Printer, codes: string[], origin: string): Promise<void> {
   if (!p.queue) throw new Error('CUPS queue name not set');
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'stash-labels-'));

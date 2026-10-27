@@ -146,13 +146,13 @@ function buildMcpServer(): McpServer {
 }
 
 /**
- * Stateless Streamable HTTP endpoint — one transport per request. Each
+ * Stateless Streamable HTTP endpoint - one transport per request. Each
  * connection (Settings → MCP) gets its own URL (/mcp/<slug>) PLUS a separate
- * bearer token in the Authorization header — the same split ChatGPT/Claude
+ * bearer token in the Authorization header - the same split ChatGPT/Claude
  * connectors expect. No connections = no endpoint. Front with HTTPS to expose.
  */
 export function registerMcp(app: FastifyInstance) {
-  // Bare /mcp is not an endpoint — connections live at /mcp/<slug>.
+  // Bare /mcp is not an endpoint - connections live at /mcp/<slug>.
   app.route({
     method: ['GET', 'POST', 'DELETE'],
     url: '/mcp',

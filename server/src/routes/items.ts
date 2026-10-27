@@ -47,12 +47,12 @@ function itemJson(i: typeof items.$inferSelect) {
   };
 }
 
-/** Private items are visible to their owner only — everyone else gets a 404. */
+/** Private items are visible to their owner only - everyone else gets a 404. */
 const hiddenFrom = (i: typeof items.$inferSelect, req: { user: { id: string } | null }) =>
   i.isPrivate && i.ownerId !== req.user?.id;
 
 export async function itemRoutes(app: FastifyInstance) {
-  // File an item. Accepts multipart (photo files + fields) — the normal path —
+  // File an item. Accepts multipart (photo files + fields) - the normal path -
   // or plain JSON with an area_id.
   app.post('/api/items', async (req, reply) => {
     const fields: Record<string, string> = {};
@@ -213,7 +213,7 @@ export async function itemRoutes(app: FastifyInstance) {
       .send({ photos: saved.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })) });
   });
 
-  // "Not here" — lowers confidence and suggests where else to look.
+  // "Not here" - lowers confidence and suggests where else to look.
   app.post('/api/items/:id/not-here', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
@@ -286,7 +286,7 @@ export async function itemRoutes(app: FastifyInstance) {
     return { code, product };
   });
 
-  // Hide (soft delete) — undoable.
+  // Hide (soft delete) - undoable.
   app.delete('/api/items/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
