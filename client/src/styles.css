@@ -202,6 +202,18 @@ textarea.input { resize: vertical; }
 .triage-actions { display: flex; gap: 12px; justify-content: center; margin-top: 12px; }
 .triage-actions .btn { min-width: 96px; padding: 14px 0; font-size: 17px; }
 
+/* Pile-split overlay */
+.split-photo { position: relative; max-width: 420px; margin: 0 auto; border-radius: 12px; overflow: visible; }
+.split-photo > img { width: 100%; border-radius: 12px; display: block; }
+.split-box { position: absolute; border: 2px solid var(--accent, #6cf); border-radius: 6px; }
+.split-box span {
+  position: absolute; top: -10px; left: -10px; width: 20px; height: 20px;
+  background: var(--accent, #6cf); color: #000; border-radius: 50%;
+  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.split-row input[type=checkbox] { width: 20px; height: 20px; }
+.split-row .input { flex: 1; }
+
 /* Collapsible optional details on the item page */
 .opt-details { margin: 12px 0; }
 .opt-details summary { cursor: pointer; color: var(--muted); }

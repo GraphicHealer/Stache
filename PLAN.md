@@ -158,7 +158,7 @@ What it does, as **suggestions** you accept, edit, or ignore:
 - Give each photo a short name and a longer description. **[done]**
 - Add tags and synonyms the way you'd really search ("power tool, driver, cordless"). **[done]**
 - Read text in the image: brand names, model numbers, packaging labels. **[done - VLM OCR]**
-- Split a photo of a pile into separate items. **[todo]**
+- Split a photo of a pile into separate items. **[done]** - explicit "Split pile…" action on the item page; the VLM proposes regions but nothing is filed until the user checks the ones they want, so background clutter never becomes phantom items.
 - Suggest which area a new photo belongs in, based on where similar things already live. **[done]**
 - Power photo and fuzzy-language search. **[done - CLIP + pg_trgm/levenshtein]**
 
@@ -196,7 +196,6 @@ Design rules - all implemented:
 
 ## Remaining ideas
 
-- **Pile-splitting** - photo of a pile → separate item suggestions. Needs real object segmentation; the only significant AI feature still open.
 - **Voice descriptions in-app** - intentionally via MCP instead (an assistant can hear you and `update_item`).
 
 ## Decisions taken (was "open questions")

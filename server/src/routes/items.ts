@@ -1,11 +1,14 @@
 import type { FastifyInstance } from 'fastify';
+import path from 'node:path';
+import sharp from 'sharp';
 import { asc, eq } from 'drizzle-orm';
 import { db, sql as pg } from '../db';
+import { env } from '../env';
 import { items, photos } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
 import { recordEvent } from '../lib/events';
 import { insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
-import { kickAi, maybeQueueItem } from '../lib/ai';
+import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
 import { analyzeItemPhoto, mlHealthy, nearestToItem } from '../lib/ml';
 import { detectCodes, lookupBarcode, type DetectedCode } from '../lib/barcodes';
 
@@ -356,6 +359,90 @@ export async function itemRoutes(app: FastifyInstance) {
       }),
     );
     return { suggestions };
+  });
+
+  // Pile splitting, step 1: ask the VLM what distinct objects are in the
+  // photo. Suggestions only - nothing is created until the user confirms.
+  app.post('/api/items/:id/split-suggestions', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    const [photo] = await db
+      .select()
+      .from(photos)
+      .where(eq(photos.itemId, id))
+      .orderBy(asc(photos.createdAt))
+      .limit(1);
+    if (!photo) return reply.badRequest('item has no photo to split');
+    try {
+      const suggestions = await detectObjects(path.join(env.dataDir, 'photos', photo.path));
+      return { suggestions, photo_url: photoUrl(photo) };
+    } catch (e) {
+      return reply.badRequest(`split detection failed: ${(e as Error).message}`);
+    }
+  });
+
+  // Pile splitting, step 2: file the objects the user actually checked.
+  // New items share the source item's home area; each gets a crop of the photo.
+  app.post('/api/items/:id/split', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { picks } = (req.body ?? {}) as {
+      picks?: { name?: string | null; label?: string; box?: number[] }[];
+    };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!picks?.length) return reply.badRequest('no picks given');
+    const [photo] = await db
+      .select()
+      .from(photos)
+      .where(eq(photos.itemId, id))
+      .orderBy(asc(photos.createdAt))
+      .limit(1);
+    if (!photo) return reply.badRequest('item has no photo to split');
+
+    const file = path.join(env.dataDir, 'photos', photo.path);
+    const meta = await sharp(file).metadata();
+    const W = meta.width ?? 0;
+    const H = meta.height ?? 0;
+    const created = [];
+    const eventIds: string[] = [];
+
+    for (const pick of picks.slice(0, 12)) {
+      const b = pick.box ?? [];
+      if (b.length !== 4) continue;
+      // box is [ymin, xmin, ymax, xmax] normalized 0-1000.
+      const left = Math.max(0, Math.round((b[1] / 1000) * W));
+      const top = Math.max(0, Math.round((b[0] / 1000) * H));
+      const width = Math.min(W - left, Math.round(((b[3] - b[1]) / 1000) * W));
+      const height = Math.min(H - top, Math.round(((b[2] - b[0]) / 1000) * H));
+      if (width < 16 || height < 16) continue;
+
+      const buf = await sharp(file).extract({ left, top, width, height }).toBuffer();
+      const name = pick.name?.trim() || null;
+      const [child] = await db
+        .insert(items)
+        .values({
+          areaId: item.areaId,
+          name,
+          aiName: name ? null : (pick.label ?? null),
+          ownerId: item.ownerId,
+          isPrivate: item.isPrivate,
+        })
+        .returning();
+      const saved = await savePhotoFile(buf);
+      await insertPhoto(saved, { itemId: child.id });
+      analyzeItemPhoto(child.id, saved.path).catch(() => {});
+      const ev = await recordEvent('item.filed', 'item', child.id, {
+        area_id: item.areaId,
+        via: 'split',
+        source_item_id: id,
+      });
+      eventIds.push(ev.id);
+      created.push({ id: child.id, name: child.name, thumb: `/photos/${saved.thumbPath}` });
+    }
+    for (const c of created) await maybeQueueItem(c.id);
+    if (created.length) kickAi();
+    return { items: created, event_ids: eventIds };
   });
 
   // Free external product lookup for a scanned/found barcode.

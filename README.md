@@ -54,6 +54,10 @@ Two fields on the item page (under "Details"), both fully optional and never in 
 - **Warranty until** - a date. Items with warranties ending within 30 days show quietly in the Inbox, digest, and sensor.
 - **Restock when below** - a number for consumables. When quantity drops to it, the item appears in a "Running low" Inbox section plus digest/sensor data. No alerts, no nagging.
 
+## Pile splitting
+
+Took a photo of a whole pile instead of one thing? "Split pile…" on the item page asks the VLM for the distinct objects, draws their regions on the photo, and lets you check the ones to file - each becomes its own item in the same area with a cropped photo. Strictly confirm-first: it only runs when you ask, and nothing is created until you pick. Background clutter never becomes phantom items.
+
 ## AI area suggestions
 
 On an item page, if CLIP has seen enough similar photos, a "Similar things live in" card suggests the area those look-alikes already live in (nearest-embedding neighbors, similarity-weighted). One tap moves it there, undoable like every move. `GET /api/items/:id/suggested-area` exposes it.
@@ -89,6 +93,6 @@ DATABASE_URL=postgres://stash:stash@localhost:5432/stash npm run dev
 
 ## Roadmap status
 
-Done: core loop (areas, labels, photo filing, browsing, search), move/lend/not-here, out-vs-unaccounted tracking with one-tap put-back, bundled digest reminders + Home Assistant sensor, household auth + per-item privacy, card-style inbox triage (Right/Fix/Later), optional warranty + low-stock tracking, AI area suggestions, undo, offline outbox, printable label sheets, Zebra/CUPS/DYMO label printing, AI name/description/tag suggestions, in-container CLIP visual search (similar items + photo search), barcode detection + free product lookup, per-connection MCP endpoints with write tools (add_item, update_item).
+Done: core loop (areas, labels, photo filing, browsing, search), move/lend/not-here, out-vs-unaccounted tracking with one-tap put-back, bundled digest reminders + Home Assistant sensor, household auth + per-item privacy, card-style inbox triage (Right/Fix/Later), optional warranty + low-stock tracking, AI area suggestions, undo, offline outbox, printable label sheets, Zebra/CUPS/DYMO label printing, AI name/description/tag suggestions, in-container CLIP visual search (similar items + photo search), barcode detection + free product lookup, confirm-first pile splitting via the VLM, per-connection MCP endpoints with write tools (add_item, update_item).
 
-Not yet: pile-splitting, receipts parsed in-app (covered via MCP add_item instead), voice input in-app (covered via MCP update_item).
+Not yet: receipts parsed in-app (covered via MCP add_item instead), voice input in-app (covered via MCP update_item).

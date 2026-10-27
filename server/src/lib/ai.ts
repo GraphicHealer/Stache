@@ -44,6 +44,28 @@ Reply with ONLY a JSON object:
 }
 Rules: never guess a name - null is better than wrong. No markdown, no explanation.`;
 
+/** Shared VLM call - returns the raw text content. */
+async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promise<string> {
+  const res = await fetch(`${cfg.base_url.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {}),
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      temperature: 0.2,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: userContent },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`AI provider ${res.status}: ${await res.text()}`);
+  const body: any = await res.json();
+  return body.choices?.[0]?.message?.content ?? '';
+}
+
 async function suggestOne(itemId: string): Promise<void> {
   const cfg = await getAiConfig();
   if (!cfg?.enabled) return;
@@ -82,28 +104,7 @@ async function suggestOne(itemId: string): Promise<void> {
   if (context.length) userContent.push({ type: 'text', text: context.join(' ') });
   userContent.push({ type: 'image_url', image_url: { url: dataUrl } });
 
-  const res = await fetch(`${cfg.base_url.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {}),
-    },
-    body: JSON.stringify({
-      model: cfg.model,
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: PROMPT },
-        {
-          role: 'user',
-          content: userContent,
-        },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`AI provider ${res.status}: ${await res.text()}`);
-
-  const body: any = await res.json();
-  const content: string = body.choices?.[0]?.message?.content ?? '';
+  const content = await callVlm(cfg, PROMPT, userContent);
   const jsonText = content.replace(/```(?:json)?/g, '').trim();
   const parsed = JSON.parse(jsonText.match(/\{[\s\S]*\}/)?.[0] ?? '{}') as {
     name?: string | null;
@@ -123,6 +124,52 @@ async function suggestOne(itemId: string): Promise<void> {
       aiStatus: 'done',
     })
     .where(eq(items.id, itemId));
+}
+
+export interface DetectedObject {
+  label: string;
+  /** [ymin, xmin, ymax, xmax], normalized 0-1000. */
+  box: [number, number, number, number];
+}
+
+const SPLIT_PROMPT = `You detect distinct physical objects in a photo of household stuff.
+Reply with ONLY a JSON array:
+[{"label": "short noun phrase", "box": [ymin, xmin, ymax, xmax]}]
+Coordinates are normalized to 0-1000 relative to the image. List each separate
+visible object once - hands, clothes, and background surfaces are not objects.
+No markdown, no explanation.`;
+
+/**
+ * Find objects in a photo for the user to pick from. Suggestions only - nothing
+ * here files anything; the split-confirm route does that on explicit picks.
+ */
+export async function detectObjects(photoFile: string): Promise<DetectedObject[]> {
+  const cfg = await getAiConfig();
+  if (!cfg?.enabled) throw new Error('AI provider is not configured');
+  const dataUrl = `data:image/webp;base64,${(await fs.readFile(photoFile)).toString('base64')}`;
+  const content = await callVlm(cfg, SPLIT_PROMPT, [
+    { type: 'image_url', image_url: { url: dataUrl } },
+  ]);
+  const jsonText = content.replace(/```(?:json)?/g, '').trim();
+  const parsed = JSON.parse(jsonText.match(/\[[\s\S]*\]/)?.[0] ?? '[]');
+  if (!Array.isArray(parsed)) return [];
+
+  const raw = parsed
+    .filter((o: any) => o?.label && Array.isArray(o.box ?? o.box_2d))
+    .map((o: any) => ({
+      label: String(o.label).slice(0, 120),
+      box: ((o.box ?? o.box_2d) as unknown[]).map((v) => Number(v) || 0),
+    }))
+    .filter((o) => o.box.length === 4);
+  // Some models emit 0-1 fractions despite the prompt - rescale those.
+  const scale = raw.length && raw.every((o) => Math.max(...o.box) <= 1.5) ? 1000 : 1;
+  return raw
+    .map((o): DetectedObject => ({
+      label: o.label,
+      box: o.box.map((v) => Math.max(0, Math.min(1000, v * scale))) as DetectedObject['box'],
+    }))
+    .filter((o) => o.label && o.box[2] - o.box[0] > 15 && o.box[3] - o.box[1] > 15)
+    .slice(0, 12);
 }
 
 let running = false;

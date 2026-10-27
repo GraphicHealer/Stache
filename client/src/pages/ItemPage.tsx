@@ -16,6 +16,9 @@ export function ItemPage() {
   const [desc, setDesc] = useState('');
   const [scanning, setScanning] = useState(false);
   const [suggested, setSuggested] = useState<{ id: string; name: string | null }[] | null>(null);
+  const [split, setSplit] = useState<{ photo_url: string; suggestions: { label: string; box: number[] }[] } | null>(null);
+  const [splitBusy, setSplitBusy] = useState(false);
+  const [picks, setPicks] = useState<{ on: boolean; name: string }[]>([]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['item', id],
@@ -84,6 +87,30 @@ export function ItemPage() {
       toast('Marked not here', r.event_id);
       setSuggested(r.suggested_areas);
       refresh();
+    }
+  };
+
+  const startSplit = async () => {
+    setSplitBusy(true);
+    const r = await api.post(`/api/items/${id}/split-suggestions`, {}).catch((e) => (toast(e.message), null));
+    setSplitBusy(false);
+    if (!r) return;
+    if (!r.suggestions?.length) return toast('No distinct objects found');
+    setSplit(r);
+    setPicks(r.suggestions.map((s: { label: string }) => ({ on: true, name: s.label })));
+  };
+
+  const confirmSplit = async () => {
+    if (!split) return;
+    const chosen = split.suggestions
+      .map((s, i) => ({ ...s, i }))
+      .filter((s) => picks[s.i]?.on)
+      .map((s) => ({ name: picks[s.i].name.trim() || null, label: s.label, box: s.box }));
+    if (!chosen.length) return setSplit(null);
+    const r = await api.post(`/api/items/${id}/split`, { picks: chosen }).catch((e) => (toast(e.message), null));
+    if (r) {
+      toast(`Filed ${r.items.length} item(s)`, r.event_ids?.[0]);
+      setSplit(null);
     }
   };
 
@@ -268,8 +295,62 @@ export function ItemPage() {
         <button className="btn" onClick={notHere}>
           Not here{item.not_here_count > 0 ? ` (${item.not_here_count})` : ''}
         </button>
+        <button className="btn" disabled={splitBusy || !photos.length} onClick={startSplit}>
+          {splitBusy ? 'Looking…' : 'Split pile…'}
+        </button>
         <button className="btn danger" onClick={hide}>Hide</button>
       </div>
+
+      {split && (
+        <div className="split-view">
+          <div className="split-photo">
+            <img src={split.photo_url} alt="" />
+            {split.suggestions.map((s, i) =>
+              picks[i]?.on ? (
+                <div
+                  key={i}
+                  className="split-box"
+                  style={{
+                    top: `${s.box[0] / 10}%`,
+                    left: `${s.box[1] / 10}%`,
+                    height: `${(s.box[2] - s.box[0]) / 10}%`,
+                    width: `${(s.box[3] - s.box[1]) / 10}%`,
+                  }}
+                >
+                  <span>{i + 1}</span>
+                </div>
+              ) : null,
+            )}
+          </div>
+          <p className="muted">Check the objects to file as their own items. Nothing else is added.</p>
+          {split.suggestions.map((s, i) => (
+            <div key={i} className="row split-row">
+              <input
+                type="checkbox"
+                checked={picks[i]?.on ?? false}
+                onChange={(e) =>
+                  setPicks((p) => p.map((x, j) => (j === i ? { ...x, on: e.target.checked } : x)))
+                }
+              />
+              <span className="muted">#{i + 1}</span>
+              <input
+                className="input"
+                value={picks[i]?.name ?? ''}
+                placeholder={s.label}
+                onChange={(e) =>
+                  setPicks((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+                }
+              />
+            </div>
+          ))}
+          <div className="row">
+            <button className="btn" onClick={confirmSplit}>
+              File {picks.filter((p) => p.on).length} item(s)
+            </button>
+            <button className="btn btn-ghost" onClick={() => setSplit(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {suggested && suggested.length > 0 && (
         <div className="suggest">
