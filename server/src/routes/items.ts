@@ -40,6 +40,9 @@ function itemJson(i: typeof items.$inferSelect) {
     detected_codes: i.detectedCodes,
     owner_id: i.ownerId,
     is_private: i.isPrivate,
+    takeout_count: i.takeoutCount,
+    last_used: i.lastUsedAt,
+    remind_snoozed_until: i.remindSnoozedUntil,
     ai_name: i.aiName,
     ai_description: i.aiDescription,
     ai_tags: i.aiTags,
@@ -136,18 +139,36 @@ export async function itemRoutes(app: FastifyInstance) {
       item.areaId = body.area_id;
     }
 
-    // Take out / lend / bring home.
+    // Take out / lend / unaccounted / gone / put back home.
     if (body.status !== undefined && body.status !== item.status) {
-      if (!['home', 'out', 'lent'].includes(body.status))
-        return reply.badRequest('status must be home|out|lent');
+      if (!['home', 'out', 'lent', 'unaccounted', 'gone'].includes(body.status))
+        return reply.badRequest('status must be home|out|lent|unaccounted|gone');
       const ev = await recordEvent('item.status', 'item', id, {
-        prev: { status: item.status, lent_to: item.lentTo, out_since: item.outSince },
+        prev: {
+          status: item.status,
+          lent_to: item.lentTo,
+          out_since: item.outSince,
+          hidden_at: item.hiddenAt,
+          takeout_count: item.takeoutCount,
+          last_used: item.lastUsedAt,
+        },
         next: { status: body.status, lent_to: body.lent_to ?? null },
       });
       eventIds.push(ev.id);
+      const goingOut = ['out', 'lent'].includes(body.status) && item.status === 'home';
       item.status = body.status;
       item.lentTo = body.status === 'lent' ? (body.lent_to ?? item.lentTo) : null;
-      item.outSince = body.status === 'home' ? null : new Date();
+      if (body.status === 'home') {
+        item.outSince = null;
+        item.hiddenAt = null;
+      } else if (!item.outSince) {
+        item.outSince = new Date();
+      }
+      if (goingOut) {
+        item.lastUsedAt = new Date();
+        item.takeoutCount += 1;
+      }
+      if (body.status === 'gone') item.hiddenAt = new Date();
     }
 
     const editable = {
@@ -157,6 +178,7 @@ export async function itemRoutes(app: FastifyInstance) {
       barcode: 'barcode',
       detected_codes: 'detectedCodes',
       is_private: 'isPrivate',
+      remind_snoozed_until: 'remindSnoozedUntil',
     } as const;
     const prev: Record<string, unknown> = {};
     const next: Record<string, unknown> = {};
@@ -164,7 +186,12 @@ export async function itemRoutes(app: FastifyInstance) {
       if (body[key] !== undefined && body[key] !== (item as any)[col]) {
         prev[col] = (item as any)[col];
         next[col] = body[key];
-        (item as any)[col] = key === 'quantity' ? Math.max(1, parseInt(body[key], 10) || 1) : body[key];
+        (item as any)[col] =
+          key === 'quantity'
+            ? Math.max(1, parseInt(body[key], 10) || 1)
+            : key === 'remind_snoozed_until' && body[key]
+              ? new Date(body[key])
+              : body[key];
       }
     }
     if (Object.keys(prev).length) {
@@ -185,6 +212,10 @@ export async function itemRoutes(app: FastifyInstance) {
         barcode: item.barcode,
         detectedCodes: item.detectedCodes,
         isPrivate: item.isPrivate,
+        hiddenAt: item.hiddenAt,
+        takeoutCount: item.takeoutCount,
+        lastUsedAt: item.lastUsedAt,
+        remindSnoozedUntil: item.remindSnoozedUntil,
       })
       .where(eq(items.id, id))
       .returning();
@@ -222,10 +253,16 @@ export async function itemRoutes(app: FastifyInstance) {
     const ev = await recordEvent('item.not_here', 'item', id, {
       count_before: item.notHereCount,
       area_id: item.areaId,
+      status_before: item.status,
     });
     const [updated] = await db
       .update(items)
-      .set({ notHereCount: item.notHereCount + 1 })
+      .set({
+        notHereCount: item.notHereCount + 1,
+        // "Not here" means the location is unknown - it's unaccounted for.
+        status: item.status === 'home' ? 'unaccounted' : item.status,
+        outSince: item.outSince ?? new Date(),
+      })
       .where(eq(items.id, id))
       .returning();
 

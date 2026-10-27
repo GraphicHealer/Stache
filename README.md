@@ -37,6 +37,16 @@ Visual search runs in-process via CLIP (transformers.js/ONNX, ~580MB model cache
 
 Barcodes/QRs in item photos are detected both at capture (browser BarcodeDetector/zxing) and on the server (zxing-wasm). When one is spotted you're asked "same item?" - yes attaches it as the item's `barcode`. Confirmed codes get a free product lookup (OpenFoodFacts → OpenProductsFacts → OpenBeautyFacts, no key; misses are silently skipped) and the result feeds the AI prompt as context. `GET /api/codes/:code/lookup` exposes the lookup directly.
 
+## Out & missing items
+
+Items not in their home container are tracked in two states: **out** (you took it, it comes back) and **unaccounted for** (reported "not here", or out 30+ days). An item's `area_id` stays its home, so "put back" is one tap with no scan - scanning a container's QR while things are out of it offers to mark them returned.
+
+- **Home widget** - "Still out" row of big thumbnails (newest first, "+N more"), tap to put back. Hidden entirely when nothing is out. Neutral styling, no badges, no overdue language.
+- **`/out` page** - everything out of place, Out and Unaccounted as separate sections grouped by area, sorted by time out ("out 3 days"). Multi-select + bulk put-back, per-item put back / mark gone / snooze reminders.
+- **Usage data** - taking an item out silently records `last_used` and increments `takeout_count`; shown on the item page. No extra input.
+- **Reminders (optional)** - Settings → "Out reminders" posts **one bundled digest** (photos + names) to any webhook URL, at a daily time (container `TZ`) or when triggered. Snoozed items are skipped.
+- **Home Assistant** - `GET /api/webhooks/out-sensor?token=…` returns `{out_count, unaccounted_count, total, items:[{name, path, days}]}` for a REST sensor; `POST /api/webhooks/digest?token=…` fires the digest from an automation. Both URLs shown with copy buttons in Settings.
+
 ## Accounts & privacy
 
 Auth is [Better Auth](https://better-auth.com) (email + password, secure session cookies). First visit asks you to create the first household account; after that, sign-up is closed and logged-in members add people from Settings → Household.
@@ -68,6 +78,6 @@ DATABASE_URL=postgres://stash:stash@localhost:5432/stash npm run dev
 
 ## Roadmap status
 
-Done: core loop (areas, labels, photo filing, browsing, search), move/lend/not-here, inbox triage, undo, offline outbox, printable label sheets, Zebra/CUPS/DYMO label printing, AI name/description/tag suggestions, in-container CLIP visual search (similar items + photo search), barcode detection + free product lookup, per-connection MCP endpoints.
+Done: core loop (areas, labels, photo filing, browsing, search), move/lend/not-here, out-vs-unaccounted tracking with one-tap put-back, bundled digest reminders + Home Assistant sensor, household auth + per-item privacy, inbox triage, undo, offline outbox, printable label sheets, Zebra/CUPS/DYMO label printing, AI name/description/tag suggestions, in-container CLIP visual search (similar items + photo search), barcode detection + free product lookup, per-connection MCP endpoints.
 
-Not yet: pile-splitting, receipt ingestion, warranties/low-stock, multi-user auth.
+Not yet: pile-splitting, receipt ingestion, warranties/low-stock, swipe-style inbox triage.

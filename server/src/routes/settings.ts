@@ -4,6 +4,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '../db';
 import { items, mcpTokens } from '../db/schema';
 import { getAiConfig, kickAi, setAiConfig } from '../lib/ai';
+import { getDigestConfig, setDigestConfig, webhookToken } from '../lib/digest';
 
 export async function settingsRoutes(app: FastifyInstance) {
   app.get('/api/settings/ai', async () => {
@@ -64,6 +65,25 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.delete('/api/settings/mcp/:id', async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(mcpTokens).where(eq(mcpTokens.id, id));
+    return { ok: true };
+  });
+
+  // --- Out reminders (bundled digest + HA webhooks) -------------------------
+
+  app.get('/api/settings/digest', async () => {
+    const cfg = await getDigestConfig();
+    return { ...cfg, webhook_token: await webhookToken() };
+  });
+
+  app.put('/api/settings/digest', async (req) => {
+    const body = (req.body ?? {}) as Record<string, any>;
+    const prev = await getDigestConfig();
+    await setDigestConfig({
+      enabled: !!body.enabled,
+      webhook_url: body.webhook_url ?? prev.webhook_url,
+      time: body.time ?? prev.time,
+      base_url: body.base_url ?? prev.base_url,
+    });
     return { ok: true };
   });
 }

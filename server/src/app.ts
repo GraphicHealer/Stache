@@ -17,6 +17,7 @@ import { searchRoutes } from './routes/search';
 import { miscRoutes } from './routes/events';
 import { printerRoutes } from './routes/printers';
 import { settingsRoutes } from './routes/settings';
+import { outRoutes } from './routes/out';
 import { registerMcp } from './mcp';
 
 export function buildApp() {
@@ -65,6 +66,7 @@ export function buildApp() {
       url === '/api/health' ||
       url === '/api/setup' ||
       url.startsWith('/api/auth') ||
+      url.startsWith('/api/webhooks/') ||
       url.startsWith('/mcp');
     if (!protectedPath || open) {
       req.user = await sessionUser(req).catch(() => null);
@@ -107,6 +109,7 @@ export function buildApp() {
   app.register(miscRoutes);
   app.register(printerRoutes);
   app.register(settingsRoutes);
+  app.register(outRoutes);
   registerMcp(app);
 
   app.setNotFoundHandler((req, reply) => {

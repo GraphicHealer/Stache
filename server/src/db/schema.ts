@@ -26,9 +26,12 @@ export const items = pgTable('items', {
   description: text('description'),
   quantity: integer('quantity').notNull().default(1),
   barcode: text('barcode'),
-  status: text('status').notNull().default('home'), // home | out | lent
+  status: text('status').notNull().default('home'), // home | out | lent | unaccounted | gone
   lentTo: text('lent_to'),
   outSince: timestamp('out_since', { withTimezone: true }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  takeoutCount: integer('takeout_count').notNull().default(0),
+  remindSnoozedUntil: timestamp('remind_snoozed_until', { withTimezone: true }),
   notHereCount: integer('not_here_count').notNull().default(0),
   hiddenAt: timestamp('hidden_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

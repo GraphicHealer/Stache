@@ -51,26 +51,38 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
     case 'item.not_here':
       await db
         .update(items)
-        .set({ notHereCount: p.count_before ?? 0 })
+        .set({ notHereCount: p.count_before ?? 0, status: p.status_before ?? 'home' })
         .where(eq(items.id, entityId));
       break;
-    case 'item.status':
-      await db
-        .update(items)
-        .set({ status: p.prev.status, lentTo: p.prev.lent_to, outSince: p.prev.out_since })
-        .where(eq(items.id, entityId));
-      break;
-    case 'item.updated': {
-      const prev = p.prev ?? {};
+    case 'item.status': {
+      // Timestamps round-trip through JSONB as strings - coerce back to Date.
+      const date = (v: unknown) => (v ? new Date(v as string) : null);
       await db
         .update(items)
         .set({
-          name: prev.name,
-          description: prev.description,
-          quantity: prev.quantity,
-          barcode: prev.barcode,
+          status: p.prev.status,
+          lentTo: p.prev.lent_to,
+          outSince: date(p.prev.out_since),
+          hiddenAt: date(p.prev.hidden_at),
+          takeoutCount: p.prev.takeout_count ?? undefined,
+          lastUsedAt: 'last_used' in p.prev ? date(p.prev.last_used) : undefined,
         })
         .where(eq(items.id, entityId));
+      break;
+    }
+    case 'item.updated': {
+      // prev holds drizzle column keys for whatever fields changed.
+      const prev = (p.prev ?? {}) as Record<string, unknown>;
+      const allowed = new Set([
+        'name', 'description', 'quantity', 'barcode',
+        'detectedCodes', 'isPrivate', 'remindSnoozedUntil',
+      ]);
+      const set = Object.fromEntries(
+        Object.entries(prev)
+          .filter(([k]) => allowed.has(k))
+          .map(([k, v]) => [k, k === 'remindSnoozedUntil' && v ? new Date(v as string) : v]),
+      );
+      await db.update(items).set(set).where(eq(items.id, entityId));
       break;
     }
     case 'area.created':

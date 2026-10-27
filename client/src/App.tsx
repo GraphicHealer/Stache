@@ -11,6 +11,7 @@ import { SearchPage } from './pages/SearchPage';
 import { InboxPage } from './pages/InboxPage';
 import { LabelsPage } from './pages/LabelsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { OutPage } from './pages/OutPage';
 import { LoginPage } from './pages/LoginPage';
 
 /**
@@ -63,6 +64,7 @@ const NAV = [
   { to: '/browse', label: 'Browse' },
   { to: '/search', label: 'Find' },
   { to: '/inbox', label: 'Inbox' },
+  { to: '/out', label: 'Out' },
   { to: '/labels', label: 'Labels' },
   { to: '/settings', label: 'Setup' },
 ];
@@ -83,6 +85,7 @@ export function App() {
           <Route path="/browse" element={<BrowsePage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/out" element={<OutPage />} />
           <Route path="/labels" element={<LabelsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route

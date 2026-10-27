@@ -25,6 +25,7 @@ services:
       DATABASE_URL: postgres://stash:stash@db:5432/stash
       PORT: 8080
       DATA_DIR: /data
+      TZ: ${TZ:-UTC}   # digest "time" setting uses this timezone
     volumes:
       - stash_data:/data
     ports:

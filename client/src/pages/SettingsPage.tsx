@@ -12,7 +12,10 @@ export function SettingsPage() {
   const { data } = useQuery({ queryKey: ['settings-ai'], queryFn: () => api.get('/api/settings/ai') });
   const { data: mcp } = useQuery({ queryKey: ['settings-mcp'], queryFn: () => api.get('/api/settings/mcp') });
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
+  const { data: digest } = useQuery({ queryKey: ['settings-digest'], queryFn: () => api.get('/api/settings/digest') });
   const [form, setForm] = useState({ enabled: false, base_url: '', model: '', api_key: '' });
+  const [dg, setDg] = useState({ enabled: false, webhook_url: '', time: '09:00', base_url: '' });
+  const [dgLoaded, setDgLoaded] = useState(false);
   const [connName, setConnName] = useState('');
   const [member, setMember] = useState({ name: '', email: '', password: '' });
   const [loaded, setLoaded] = useState(false);
@@ -27,7 +30,16 @@ export function SettingsPage() {
       });
       setLoaded(true);
     }
-  }, [data, loaded]);
+    if (digest && !dgLoaded) {
+      setDg({
+        enabled: digest.enabled,
+        webhook_url: digest.webhook_url,
+        time: digest.time,
+        base_url: digest.base_url,
+      });
+      setDgLoaded(true);
+    }
+  }, [data, loaded, digest, dgLoaded]);
 
   const save = async () => {
     try {
@@ -186,6 +198,91 @@ export function SettingsPage() {
           Add
         </button>
       </div>
+
+      <h2>Out reminders</h2>
+      <p className="muted">
+        Optional. One bundled digest of everything still out, posted to a webhook - works with
+        ntfy, Discord, a Home Assistant webhook, or anything that takes a JSON POST.
+        Never per-item pings.
+      </p>
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={dg.enabled}
+          onChange={(e) => setDg({ ...dg, enabled: e.target.checked })}
+        />
+        Enabled
+      </label>
+      <input
+        className="input"
+        placeholder="Webhook URL (ntfy, HA webhook, etc.)"
+        value={dg.webhook_url}
+        onChange={(e) => setDg({ ...dg, webhook_url: e.target.value })}
+      />
+      <div className="row">
+        <input
+          className="input"
+          type="time"
+          style={{ maxWidth: '140px' }}
+          value={dg.time}
+          onChange={(e) => setDg({ ...dg, time: e.target.value })}
+        />
+        <span className="muted">daily (server timezone)</span>
+      </div>
+      <input
+        className="input"
+        placeholder="Public base URL for photo links (optional)"
+        value={dg.base_url}
+        onChange={(e) => setDg({ ...dg, base_url: e.target.value })}
+      />
+      <div className="row">
+        <button
+          className="btn"
+          onClick={async () => {
+            await api.put('/api/settings/digest', dg);
+            toast('Saved');
+          }}
+        >
+          Save
+        </button>
+        <button
+          className="btn btn-ghost"
+          onClick={async () => {
+            try {
+              const r = await api.post('/api/digest/test');
+              toast(r.sent ? `Sent (${r.count} items)` : `Nothing sent (${r.count} out)`);
+            } catch (e) {
+              toast(`Failed: ${(e as Error).message}`);
+            }
+          }}
+        >
+          Send test
+        </button>
+      </div>
+      {digest?.webhook_token && (
+        <>
+          <p className="muted">For Home Assistant automations and sensors:</p>
+          <div className="row">
+            <code className="mcp-url">{`${window.location.origin}/api/webhooks/out-sensor?token=${digest.webhook_token}`}</code>
+            <button
+              className="btn btn-small"
+              onClick={() => copy(`${window.location.origin}/api/webhooks/out-sensor?token=${digest.webhook_token}`)}
+            >
+              Copy sensor URL
+            </button>
+          </div>
+          <div className="row">
+            <code className="mcp-url">{`${window.location.origin}/api/webhooks/digest?token=${digest.webhook_token}`}</code>
+            <button
+              className="btn btn-small"
+              onClick={() => copy(`${window.location.origin}/api/webhooks/digest?token=${digest.webhook_token}`)}
+            >
+              Copy trigger URL
+            </button>
+          </div>
+          <p className="muted">Sensor = GET. Digest trigger = POST.</p>
+        </>
+      )}
     </div>
   );
 }

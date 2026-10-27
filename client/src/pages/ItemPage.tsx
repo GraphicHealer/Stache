@@ -210,6 +210,12 @@ export function ItemPage() {
         </label>
       )}
       {item.is_private && <span className="badge warn">private</span>}
+      {item.takeout_count > 0 && (
+        <p className="muted">
+          Taken out {item.takeout_count}×
+          {item.last_used ? ` · last ${new Date(item.last_used).toLocaleDateString()}` : ''}
+        </p>
+      )}
 
       <div className="row">
         <button className="btn" onClick={() => setScanning(true)}>Move…</button>

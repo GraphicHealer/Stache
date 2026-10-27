@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
@@ -20,8 +20,20 @@ export function Home() {
   const [scanning, setScanning] = useState(false);
   const [hint, setHint] = useState('Scan an area label');
   const [codePrompt, setCodePrompt] = useState<{ itemId: string; text: string; product: string | null } | null>(null);
+  const [backPrompt, setBackPrompt] = useState<{ items: { id: string; name: string | null }[] } | null>(null);
+  const [outSum, setOutSum] = useState<{ total: number; items: { id: string; name: string | null; thumb: string | null }[] } | null>(null);
   const qc = useQueryClient();
   const nav = useNavigate();
+
+  const refreshOut = () => api.get('/api/out/summary').then(setOutSum).catch(() => {});
+  useEffect(() => { refreshOut(); }, []);
+
+  const putBack = async (ids: string[]) => {
+    const r = await api.post('/api/items/put-back', { ids }).catch(() => null);
+    if (r?.put_back) toast(`Put back ${r.put_back}`, r.event_ids?.[0]);
+    setBackPrompt(null);
+    refreshOut();
+  };
 
   const filePhoto = async (blob: Blob, areaId: string) => {
     try {
@@ -76,6 +88,10 @@ export function Home() {
           setCurrentArea({ id: r.area.id, name: r.area.name, thumb: null });
           toast(`Filing into ${r.area.name ?? 'area'}`);
         }
+        // Scanned a container that expects things back - offer to clear them.
+        api.get(`/api/areas/${r.area.id}/out`)
+          .then((o) => { if (o.items?.length) setBackPrompt({ items: o.items }); })
+          .catch(() => {});
       }
     } catch (e) {
       toast(`Scan failed: ${(e as Error).message}`);
@@ -104,6 +120,22 @@ export function Home() {
         {pending > 0 && <span className="badge warn">{pending} queued</span>}
       </div>
 
+      {outSum && outSum.total > 0 && (
+        <div className="still-out">
+          <div className="still-out-row">
+            {outSum.items.map((i) => (
+              <button key={i.id} className="still-out-thumb" title={i.name ?? 'put back'} onClick={() => putBack([i.id])}>
+                {i.thumb ? <img src={i.thumb} alt="" /> : <span>{i.name ?? 'item'}</span>}
+              </button>
+            ))}
+            {outSum.total > 6 && (
+              <Link className="still-out-more" to="/out">+{outSum.total - 6} more</Link>
+            )}
+          </div>
+          <span className="muted">Still out - tap to put back</span>
+        </div>
+      )}
+
       <CameraView onCapture={onCapture} label="Take photo" />
 
       <div className="home-actions">
@@ -113,6 +145,19 @@ export function Home() {
       </div>
 
       {scanning && <Scanner formats={ALL_FORMATS} onResult={onScan} onClose={() => setScanning(false)} hint={hint} />}
+
+      {backPrompt && (
+        <div className="code-prompt card">
+          <div>
+            <b>{backPrompt.items.length} thing(s) belong back here</b>
+            <div className="muted">Mark them returned?</div>
+          </div>
+          <div className="code-prompt-actions">
+            <button className="btn" onClick={() => putBack(backPrompt.items.map((i) => i.id))}>Yes</button>
+            <button className="btn btn-ghost" onClick={() => setBackPrompt(null)}>No</button>
+          </div>
+        </div>
+      )}
 
       {codePrompt && (
         <div className="code-prompt card">

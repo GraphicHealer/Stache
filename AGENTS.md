@@ -35,7 +35,8 @@ curl localhost:8080/api/health
 
 | What | Where |
 |------|-------|
-| API routes | `server/src/routes/{areas,items,labels,search,settings,printers}.ts` |
+| API routes | `server/src/routes/{areas,items,labels,search,settings,printers,out}.ts` |
+| Out/missing | `server/src/lib/digest.ts` (statuses, digest, webhooks) |
 | MCP endpoint | `server/src/mcp.ts` - `/mcp/<slug>` + separate bearer token |
 | In-process CLIP | `server/src/lib/ml.ts` (transformers.js, cache in `/data/models`) |
 | VLM suggestions | `server/src/lib/ai.ts` (OpenAI-compatible endpoint, optional) |
@@ -75,6 +76,15 @@ curl localhost:8080/api/health
   in raw SQL. `req.user` is set by the guard. MCP sees shared items only.
   Drizzle export names `user`/`session`/`account`/`verification` are fixed -
   Better Auth's adapter looks them up by key.
+- **Out/missing**: `status` is `home|out|lent|unaccounted|gone` (`gone` also
+  sets `hidden_at`). `area_id` is always the home area - put-back is just
+  `status='home'`, no move. Out for 30+ days displays as unaccounted.
+  Timestamps crossing JSONB (event payloads, PATCH bodies) arrive as strings -
+  coerce to `Date` before drizzle `.set()` or you'll hit
+  `value.toISOString is not a function`.
+- **Digest/webhooks**: `/api/webhooks/*` are session-exempt but require the
+  `settings.webhook_token` query param. Digest config lives in
+  `settings.digest`; scheduler compares against container `TZ`.
 
 ## Feature boundaries
 

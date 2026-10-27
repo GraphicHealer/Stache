@@ -5,6 +5,7 @@ import { ensurePhotoDir } from './lib/photos';
 import { buildApp } from './app';
 import { startAiWorker } from './lib/ai';
 import { preloadClip } from './lib/ml';
+import { startDigestScheduler } from './lib/digest';
 import { env } from './env';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -26,6 +27,7 @@ async function main() {
   await runMigrations((msg) => console.log(`[migrate] ${msg}`));
   await initAuth();
   startAiWorker();
+  startDigestScheduler();
   preloadClip();
 
   const app = buildApp();
