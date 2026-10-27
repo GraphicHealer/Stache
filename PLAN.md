@@ -1,10 +1,10 @@
-# Stash *(working title)*
+# Stash
 
 A self-hosted home inventory that's built for people who won't fill in forms.
 
 Stash answers one question: **"Where is my stuff?"** It does that without asking you to name, categorize, or organize anything at the moment you're holding an object and want to put it down.
 
-> This document describes the idea and the user experience. It deliberately says nothing about the backend, database, or language. Those are open decisions.
+*This document describes the idea, the user experience, and the decisions taken. Status markers: **[done]**, **[partial]**, **[todo]**, or covered by MCP/another feature instead.*
 
 ---
 
@@ -34,34 +34,45 @@ Stash is designed around those failures.
 
 ## The model, in plain terms
 
-### Areas
+### Areas **[done]**
 An **area** is anywhere stuff lives: a room, a closet, a shelf, a bin, a drawer. Areas nest, so a hallway closet can contain a shelf, which contains a grey bin.
 
 - Every area can have a **QR label**.
 - Every area can have a **cover photo**, so you can recognize it at a glance.
 - Names are optional. A bin can be "Grey bin" or just its photo.
 
-### Items
+### Items **[done]**
 An **item** is a thing you own.
 
-- It lives in **exactly one area** at a time.
+- It lives in **exactly one area** at a time - its home area, which never changes when it's taken out.
 - It is identified by its **photo(s)**. A name or description is optional.
 - It has no label of its own. Where it lives is the only thing that has to be true.
 - Multiple identical things can be one entry with a quantity ("6 screwdrivers").
 - Store-bought items can optionally carry a **product barcode** so you can recognize them later.
+- Optional details, set later on the item page only, never asked for at capture: **warranty until**, **restock when below**, **private** (visible only to you).
 
-### Breadcrumbs
-Every item shows where it is as a path with pictures:
+### Where is it? **[done]**
+An item is either **home** (in its area) or not. Not-home splits into:
+
+- **out** - you took it deliberately, it comes back.
+- **lent** - out, but to a person.
+- **unaccounted for** - reported "not here" or out 30+ days; location unknown.
+- **gone** - given away or lost for good; hidden from view.
+
+"Put back" is a single tap - the item remembers its home, no scan needed. Taking an item out silently records a last-used date and a take-out count.
+
+### Breadcrumbs **[done, text-only]**
+Every item shows where it is as a path:
 
 `Hallway Closet › Shelf 2 › Grey Bin`
 
-Tapping any step opens that area and shows what's in it.
+Tapping any step opens that area and shows what's in it. (Picture-in-path breadcrumbs were considered and dropped - too much UI for the gain.)
 
 ---
 
 ## Using it
 
-### 1. Putting things away
+### 1. Putting things away **[done]**
 This is the most important moment, because it's when the information exists.
 
 1. Scan the QR on the area you're putting things in. It becomes the **current area** (shown as a banner with its photo).
@@ -73,9 +84,9 @@ Or go the other way for a one-off:
 1. Take a photo of the item.
 2. Scan the QR of where you put it.
 
-The app decides what a scan means based on what you're doing. There are no modes to pick. Descriptions are optional: type a few words, use the microphone, or let the AI fill it in later. A "filed" confirmation and a short **undo** are all you see.
+The app decides what a scan means based on what you're doing. There are no modes to pick. A "filed" confirmation and a short **undo** are all you see. If a barcode is detected in the photo, it asks "same item?" - yes attaches it for lookup and AI context. Scanning a container that has things out of it offers to mark them returned.
 
-### 2. Looking inside something
+### 2. Looking inside something **[done]**
 Scan an area's QR (or tap it) to see:
 
 - a photo grid of everything in it
@@ -83,7 +94,7 @@ Scan an area's QR (or tap it) to see:
 
 That's the "what's in this bin?" answer without opening the bin.
 
-### 3. Finding something
+### 3. Finding something **[done]**
 Search accepts whatever you remember:
 
 - exact words ("label maker")
@@ -91,69 +102,71 @@ Search accepts whatever you remember:
 - a model number printed on the item
 - **a photo** of something similar, to find what you already have
 
-Results show the item photo and its breadcrumb. If the item isn't where it says, one tap marks it "not here," and Stash lowers its confidence and suggests where else to look.
+Results show the item photo and its breadcrumb. If the item isn't where it says, one tap marks it "not here," and Stash lowers its confidence, marks it unaccounted for, and suggests where else to look.
 
-### 4. Moving things
+### 4. Moving things **[done]**
 - Select items from an area's photo grid, then scan the destination.
 - Move a whole bin or shelf by scanning its QR and then its new parent. Everything inside comes with it.
+- On an item page, "Similar things live in X" suggests where look-alikes already live (CLIP embeddings) - one tap moves it there.
 
-### 5. Taking things out and lending
-Mark an item as "out" or "lent to [person]" with one tap. After a while, it gently asks whether it's still out. It never nags.
+### 5. Taking things out and lending **[done]**
+Mark an item "out" or "lent to [person]" with one tap. The home screen shows a quiet "Still out" row of photo thumbnails - tap to put back, hidden when empty, no red and no counts. The `/out` page lists everything out of place in two sections (out vs. unaccounted), grouped by home area, with bulk put-back and per-item put-back / mark gone / snooze.
 
-### 6. Buying things
-Scan a product barcode in a store to see whether you already own it and where it is. Receipts forwarded by email can create items automatically (optional).
+Reminders are optional and bundled: a single digest listing what's still out (with photos, plus low stock and warranties ending soon), sent to any webhook on a daily schedule or triggered externally - e.g. a Home Assistant automation. The out count and item names are exposed as an HA sensor endpoint. It never nags per item.
 
-### 7. Tidying up (optional, never required)
-New or unnamed items collect in an **Inbox**. When you feel like it, you can swipe through a handful at a time:
+### 6. Buying things **[done + MCP]**
+Scan a product barcode in a store to see whether you already own it and where it is. Confirmed barcodes get a free product lookup (Open*Facts) and feed the AI prompt.
 
-> *Cordless drill → Garage › Bench Drawer 2. ✓ Right / ✎ Fix / ⏭ Later*
+Receipts are **handled through MCP** instead of in-app: an external assistant can read email, decide whether a purchase was in-person or shipped, and file delivered items via `add_item` - the app never polls your inbox.
 
-Skipping it for a month changes nothing and loses nothing.
+### 7. Tidying up (optional, never required) **[done]**
+New or unnamed items collect in an **Inbox**. When you feel like it, swipe through one card at a time - photo, where it lives, the AI's guess:
+
+> *✓ Right / ✎ Fix / ⏭ Later*
+
+Skipping it for a month changes nothing and loses nothing. The same page quietly lists low stock, warranties ending soon, and things still out.
 
 ---
 
-## Labels
+## Labels **[done]**
 
 - QR codes encode a short URL, so any phone camera can open them, not just the dedicated scanner.
-- Labels are **pre-printed in sequential batches**. Scanning a blank one starts a "claim this label" flow: take a photo, optionally scan its parent area, done. You never have to create an area and then go print its label.
+- Labels are **pre-printed in sequential batches**. Scanning a blank one starts a "claim this label" flow: take a photo, optionally scan its parent area, done.
 - Labels are meant to be **large and in a consistent spot** (for example, the front-left of each shelf or bin) so you can scan standing up, without opening doors.
 - If an area is thrown out, its label still resolves and points to wherever its contents went, instead of dead-ending.
+- Printing: Zebra/ZPL over the network, CUPS queues, or DYMO via the DYMO Connect web service.
 
 ---
 
-## The device
+## The device **[done]**
 
-The primary scanning device is a **Zebra handheld** with a hardware scan trigger and a camera. The trigger button is the point: scanning becomes a physical action, not a camera app you have to aim.
+The primary scanning device is a **Zebra handheld** with a hardware scan trigger and a camera (keyboard-wedge input). It also works on an ordinary phone with the camera, since the labels are standard QR codes.
 
-It should also work on an ordinary phone with the camera, since the labels are standard QR codes.
-
-Requirements for the client, regardless of how it's built:
-
-- Works **offline**. Garages and attics have bad signal, so photos and scans queue locally and sync later.
+- Works **offline**. Photos and scans queue locally and sync later.
 - **Instant**: the UI never waits on the network.
-- **One-handed**, with large tap targets, readable in a dim garage.
-- Camera-first home screen: the first thing you see is ready to take a photo.
+- **One-handed**, with large tap targets.
+- Camera-first home screen.
 
 ---
 
 ## Optional AI layer
 
-Everything above works without AI. When it's enabled, it makes searching painless, because scrolling thumbnails is just a slower way of opening boxes.
+Everything works without AI. When it's enabled, it makes searching painless, because scrolling thumbnails is just a slower way of opening boxes.
 
-What it can do, as **suggestions** you accept, edit, or ignore:
+What it does, as **suggestions** you accept, edit, or ignore:
 
-- Give each photo a short name and a longer description.
-- Add tags and synonyms the way you'd really search ("power tool, driver, cordless").
-- Read text in the image: brand names, model numbers, packaging labels.
-- Split a photo of a pile into separate items.
-- Suggest which area a new photo belongs in, based on where similar things already live.
-- Power photo and fuzzy-language search.
+- Give each photo a short name and a longer description. **[done]**
+- Add tags and synonyms the way you'd really search ("power tool, driver, cordless"). **[done]**
+- Read text in the image: brand names, model numbers, packaging labels. **[done - VLM OCR]**
+- Split a photo of a pile into separate items. **[todo]**
+- Suggest which area a new photo belongs in, based on where similar things already live. **[done]**
+- Power photo and fuzzy-language search. **[done - CLIP + pg_trgm/levenshtein]**
 
-Design rules:
+Design rules - all implemented:
 
 - **Suggest, never overwrite.** Your own text always wins.
-- **Works with multiple providers.** Local models first (so photos of your belongings stay home), with the option of hosted ones. Swapping is configuration.
-- **MCP support.** The inventory can expose search, area contents, and move operations to any MCP-capable assistant, so you can ask "where are my soldering supplies?" by voice or chat.
+- **Works with multiple providers.** Any OpenAI-compatible vision endpoint (Ollama, LM Studio, llama.cpp, hosted). CLIP runs in-process for embeddings.
+- **MCP support.** Per-connection URL + bearer tokens expose search, areas, contents, details, move, label resolution, and the `add_item`/`update_item` write tools - so receipt ingestion, voice descriptions, and "where are my soldering supplies?" all work through external assistants.
 - **Honest about uncertainty.** If it isn't sure, it leaves the name blank rather than guessing.
 - **Runs in the background.** Items are filed and usable instantly. AI-generated names and tags fill in afterward.
 
@@ -166,26 +179,34 @@ Design rules:
 - Reward streaks.
 - Assume every item needs a label.
 - Lock you into one AI provider, or require AI at all.
+- Nag: reminders are bundled, snoozable, and opt-in only.
 
 ---
 
-## Roadmap (user-facing)
+## Roadmap status
 
-1. **Core loop:** areas with QR codes, photo capture, filing, looking inside, basic search.
-2. **Offline client** for the Zebra handheld and phones.
-3. **Label generator:** printable sheets of sequential QR labels.
-4. **Move, take-out, and lend** flows.
-5. **Optional AI:** naming, tagging, OCR, photo and fuzzy search.
-6. **MCP interface** for assistants.
-7. **Extras:** barcode "do I own this?" scan, receipt ingestion, warranties, low-stock alerts for consumables.
+1. **Core loop:** areas with QR codes, photo capture, filing, looking inside, basic search. **[done]**
+2. **Offline client** for the Zebra handheld and phones. **[done]**
+3. **Label generator:** printable sheets of sequential QR labels. **[done + printer integrations]**
+4. **Move, take-out, and lend** flows. **[done - full out/unaccounted model]**
+5. **Optional AI:** naming, tagging, OCR, photo and fuzzy search. **[done]**
+6. **MCP interface** for assistants. **[done - incl. write tools]**
+7. **Extras:** barcode "do I own this?" **[done]**, receipt ingestion **[via MCP]**, warranties **[done]**, low-stock alerts **[done]**.
+8. **Household:** shared-by-default inventory, per-item private, accounts. **[done]**
 
-## Open questions
+## Remaining ideas
 
-- Backend, storage, and search technology (undecided)
-- Client technology: PWA vs. native for the Zebra
-- Label printer: thermal vs. standard sticker sheets
-- How to handle bulk or tiny items (screws, cables): group photos with quantities, or something else
-- Single user vs. household sharing
+- **Pile-splitting** - photo of a pile → separate item suggestions. Needs real object segmentation; the only significant AI feature still open.
+- **Voice descriptions in-app** - intentionally via MCP instead (an assistant can hear you and `update_item`).
+
+## Decisions taken (was "open questions")
+
+- **Backend:** Node.js, Fastify, Drizzle ORM.
+- **Storage/search:** Postgres + `pgvector` (CLIP embeddings), `pg_trgm`/`fuzzystrmatch` fuzzy, full-text search.
+- **Client:** PWA (React + Vite), IndexedDB outbox, service worker - no native app needed.
+- **Label printer:** all of them - ZPL network, CUPS, DYMO Connect.
+- **Bulk/tiny items:** one entry + quantity field; consumables get an optional restock threshold.
+- **Household:** Better Auth accounts; shared by default, per-item private.
 
 ---
 
