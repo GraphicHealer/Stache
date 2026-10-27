@@ -37,6 +37,12 @@ Visual search runs in-process via CLIP (transformers.js/ONNX, ~580MB model cache
 
 Barcodes/QRs in item photos are detected both at capture (browser BarcodeDetector/zxing) and on the server (zxing-wasm). When one is spotted you're asked "same item?" — yes attaches it as the item's `barcode`. Confirmed codes get a free product lookup (OpenFoodFacts → OpenProductsFacts → OpenBeautyFacts, no key; misses are silently skipped) and the result feeds the AI prompt as context. `GET /api/codes/:code/lookup` exposes the lookup directly.
 
+## Accounts & privacy
+
+Auth is [Better Auth](https://better-auth.com) (email + password, secure session cookies). First visit asks you to create the first household account; after that, sign-up is closed and logged-in members add people from Settings → Household.
+
+Items are **shared with the household by default**. Toggle "Private" on an item to make it visible only to you — hidden from other users' lists, search, and API, and invisible to MCP connections entirely.
+
 ## MCP
 
 The MCP endpoint is off by default. Settings → "MCP connections" creates a named connection with its **own URL** (`<host>/mcp/<slug>`) **and a separate bearer token** — paste both into a ChatGPT/Claude connector (URL field + auth field), revoke either independently. Tools: `search_items`, `list_areas`, `area_contents`, `item_details`, `move_item`, `resolve_label`. Hosted connectors require public HTTPS — front it with a reverse proxy, Tailscale Funnel, or Cloudflare Tunnel.

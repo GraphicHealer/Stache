@@ -97,20 +97,23 @@ export async function analyzeItemPhoto(itemId: string, photoPath: string): Promi
 
 const vecLiteral = (v: number[]) => `[${v.join(',')}]`;
 
-export async function nearestByVector(vec: number[], limit = 25): Promise<{ id: string; dist: number }[]> {
+/** `viewerId` null → shared items only (e.g. MCP); a user id → shared + their private. */
+export async function nearestByVector(vec: number[], limit = 25, viewerId: string | null = null): Promise<{ id: string; dist: number }[]> {
   return sql<{ id: string; dist: number }[]>`
     SELECT id, embedding <=> ${vecLiteral(vec)}::vector AS dist
     FROM items
     WHERE embedding IS NOT NULL AND hidden_at IS NULL
+      AND (is_private = false OR owner_id = ${viewerId})
     ORDER BY embedding <=> ${vecLiteral(vec)}::vector
     LIMIT ${limit}`;
 }
 
-export async function nearestToItem(itemId: string, limit = 12): Promise<{ id: string; dist: number }[]> {
+export async function nearestToItem(itemId: string, limit = 12, viewerId: string | null = null): Promise<{ id: string; dist: number }[]> {
   return sql<{ id: string; dist: number }[]>`
     SELECT i.id, i.embedding <=> (SELECT embedding FROM items WHERE id = ${itemId}) AS dist
     FROM items i
     WHERE i.embedding IS NOT NULL AND i.hidden_at IS NULL AND i.id <> ${itemId}
+      AND (i.is_private = false OR i.owner_id = ${viewerId})
     ORDER BY dist
     LIMIT ${limit}`;
 }

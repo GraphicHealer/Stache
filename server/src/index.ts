@@ -1,5 +1,6 @@
 import { sql } from './db';
 import { runMigrations } from './migrate';
+import { initAuth } from './auth';
 import { ensurePhotoDir } from './lib/photos';
 import { buildApp } from './app';
 import { startAiWorker } from './lib/ai';
@@ -23,6 +24,7 @@ async function main() {
   }
 
   await runMigrations((msg) => console.log(`[migrate] ${msg}`));
+  await initAuth();
   startAiWorker();
   preloadClip();
 

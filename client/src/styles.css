@@ -170,6 +170,10 @@ textarea.input { resize: vertical; }
 }
 .code-prompt-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
+.login { max-width: 420px; margin: 0 auto; padding-top: 15vh; }
+.login h1 { margin-bottom: 4px; }
+.error { color: var(--danger, #e5534b); }
+
 .mcp-url {
   flex: 1;
   font-size: 12px;

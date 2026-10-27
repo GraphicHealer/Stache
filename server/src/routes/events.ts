@@ -3,6 +3,7 @@ import { and, asc, desc, isNull, ne } from 'drizzle-orm';
 import { db } from '../db';
 import { events, items } from '../db/schema';
 import { undoEvent } from '../lib/events';
+import { itemVisible } from '../lib/visibility';
 import { thumbsForItems, thumbUrl } from '../lib/photos';
 import { breadcrumb } from '../lib/breadcrumb';
 
@@ -36,11 +37,11 @@ export async function miscRoutes(app: FastifyInstance) {
   });
 
   // Unnamed items awaiting optional triage. Skipping it forever is fine.
-  app.get('/api/inbox', async () => {
+  app.get('/api/inbox', async (req) => {
     const rows = await db
       .select()
       .from(items)
-      .where(and(isNull(items.name), isNull(items.hiddenAt)))
+      .where(and(isNull(items.name), isNull(items.hiddenAt), itemVisible(req.user?.id ?? null)))
       .orderBy(desc(items.createdAt))
       .limit(60);
     const thumbs = await thumbsForItems(rows.map((i) => i.id));
@@ -55,7 +56,7 @@ export async function miscRoutes(app: FastifyInstance) {
     const out = await db
       .select()
       .from(items)
-      .where(and(ne(items.status, 'home'), isNull(items.hiddenAt)))
+      .where(and(ne(items.status, 'home'), isNull(items.hiddenAt), itemVisible(req.user?.id ?? null)))
       .orderBy(asc(items.outSince));
     const outThumbs = await thumbsForItems(out.map((i) => i.id));
     for (const i of out) {

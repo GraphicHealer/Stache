@@ -7,12 +7,14 @@ const copy = (text: string) => navigator.clipboard?.writeText(text).catch(() => 
 
 /** AI provider settings + MCP connections — any OpenAI-compatible endpoint. */
 export function SettingsPage() {
-  const { toast } = useApp();
+  const { toast, user, signOut } = useApp();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['settings-ai'], queryFn: () => api.get('/api/settings/ai') });
   const { data: mcp } = useQuery({ queryKey: ['settings-mcp'], queryFn: () => api.get('/api/settings/mcp') });
+  const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const [form, setForm] = useState({ enabled: false, base_url: '', model: '', api_key: '' });
   const [connName, setConnName] = useState('');
+  const [member, setMember] = useState({ name: '', email: '', password: '' });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -45,6 +47,55 @@ export function SettingsPage() {
   return (
     <div className="page">
       <h1>Settings</h1>
+      <h2>Household</h2>
+      <p className="muted">
+        Signed in as <b>{user?.name}</b> ({user?.email}). Items are shared with the
+        household unless marked private on the item.
+      </p>
+      {(users?.users ?? []).map((u: any) => (
+        <div key={u.id} className="row">
+          <span>{u.name} <span className="muted">{u.email}</span></span>
+        </div>
+      ))}
+      <input
+        className="input"
+        placeholder="Name"
+        value={member.name}
+        onChange={(e) => setMember({ ...member, name: e.target.value })}
+      />
+      <input
+        className="input"
+        type="email"
+        placeholder="Email"
+        value={member.email}
+        onChange={(e) => setMember({ ...member, email: e.target.value })}
+      />
+      <input
+        className="input"
+        type="password"
+        placeholder="Temporary password (8+ chars)"
+        value={member.password}
+        onChange={(e) => setMember({ ...member, password: e.target.value })}
+      />
+      <div className="row">
+        <button
+          className="btn"
+          onClick={async () => {
+            try {
+              await api.post('/api/users', member);
+              setMember({ name: '', email: '', password: '' });
+              qc.invalidateQueries({ queryKey: ['users'] });
+              toast('Member added');
+            } catch (e) {
+              toast(`Failed: ${(e as Error).message}`);
+            }
+          }}
+        >
+          Add member
+        </button>
+        <button className="btn btn-ghost" onClick={signOut}>Sign out</button>
+      </div>
+
       <h2>AI suggestions</h2>
       <p className="muted">
         Optional. Point at any OpenAI-compatible vision endpoint — Ollama, LM Studio, llama.cpp, or a

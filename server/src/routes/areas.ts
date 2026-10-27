@@ -13,6 +13,7 @@ import {
   thumbsForItems,
 } from '../lib/photos';
 import { items } from '../db/schema';
+import { itemVisible } from '../lib/visibility';
 
 interface CreateAreaBody {
   name?: string | null;
@@ -104,7 +105,7 @@ export async function areaRoutes(app: FastifyInstance) {
       db
         .select()
         .from(items)
-        .where(and(eq(items.areaId, id), isNull(items.hiddenAt)))
+        .where(and(eq(items.areaId, id), isNull(items.hiddenAt), itemVisible(req.user?.id ?? null)))
         .orderBy(asc(items.createdAt)),
       db.select().from(photos).where(eq(photos.areaId, id)),
     ]);
@@ -135,6 +136,7 @@ export async function areaRoutes(app: FastifyInstance) {
           status: i.status,
           lent_to: i.lentTo,
           not_here_count: i.notHereCount,
+          is_private: i.isPrivate,
           thumb: t ? thumbUrl(t) : null,
           photo: t ? photoUrl(t) : null,
         };

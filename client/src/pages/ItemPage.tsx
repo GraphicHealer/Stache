@@ -11,7 +11,7 @@ export function ItemPage() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const { toast } = useApp();
+  const { toast, user } = useApp();
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -198,6 +198,18 @@ export function ItemPage() {
         {item.status === 'lent' && <span className="badge warn">→ {item.lent_to ?? '?'}</span>}
         {item.status === 'out' && <span className="badge warn">out</span>}
       </div>
+
+      {(!item.owner_id || item.owner_id === user?.id) && (
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={item.is_private}
+            onChange={(e) => patch({ is_private: e.target.checked }, e.target.checked ? 'Private' : 'Shared')}
+          />
+          Private — only you can see this
+        </label>
+      )}
+      {item.is_private && <span className="badge warn">private</span>}
 
       <div className="row">
         <button className="btn" onClick={() => setScanning(true)}>Move…</button>

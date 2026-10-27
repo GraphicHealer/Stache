@@ -65,6 +65,17 @@ curl localhost:8080/api/health
 - DB may warn about collation version mismatch (pgvector image vs older
   DB) — cosmetic; `ALTER DATABASE stash REFRESH COLLATION VERSION` clears it.
 
+- **Auth**: Better Auth at `/api/auth/*` (`server/src/auth.ts`). First signup is
+  open; afterward accounts are created by logged-in members via `POST /api/users`.
+  Guard: `onRequest` hook in `app.ts` 401s `/api/*` + `/photos/*` without a
+  session; `/api/auth`, `/api/health`, `/api/setup`, `/mcp` are open. Secret
+  persists in `settings.auth_secret` (env `BETTER_AUTH_SECRET` overrides).
+- **Privacy**: `items.is_private` + `items.owner_id`. Filter via
+  `itemVisible(userId)` (drizzle) or `AND (is_private=false OR owner_id=$uid)`
+  in raw SQL. `req.user` is set by the guard. MCP sees shared items only.
+  Drizzle export names `user`/`session`/`account`/`verification` are fixed —
+  Better Auth's adapter looks them up by key.
+
 ## Feature boundaries
 
 - MCP is **off by default** — connections are created in Settings, each with

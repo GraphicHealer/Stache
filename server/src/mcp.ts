@@ -29,7 +29,7 @@ function buildMcpServer(): McpServer {
     async ({ query }) => {
       const rows = await sql<{ id: string; name: string | null; description: string | null; area_id: string; status: string }[]>`
         SELECT id, name, description, area_id, status FROM items
-        WHERE hidden_at IS NULL AND (
+        WHERE hidden_at IS NULL AND is_private = false AND (
           search_vector @@ websearch_to_tsquery('english', ${query})
           OR name ILIKE ${'%' + query + '%'}
           OR word_similarity(${query}, coalesce(name, '')) > 0.3
@@ -72,7 +72,7 @@ function buildMcpServer(): McpServer {
       const contents = await db
         .select()
         .from(items)
-        .where(and(eq(items.areaId, area_id), isNull(items.hiddenAt)))
+        .where(and(eq(items.areaId, area_id), isNull(items.hiddenAt), eq(items.isPrivate, false)))
         .orderBy(asc(items.createdAt));
       return text({
         path: crumb.map((c) => c.name ?? 'unnamed').join(' › '),
@@ -92,7 +92,7 @@ function buildMcpServer(): McpServer {
     },
     async ({ item_id }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i) return text({ error: 'item not found' });
+      if (!i || i.isPrivate) return text({ error: 'item not found' });
       const pics = await db.select().from(photos).where(eq(photos.itemId, item_id));
       return text({
         item: {
@@ -113,7 +113,7 @@ function buildMcpServer(): McpServer {
     },
     async ({ item_id, area_id }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i) return text({ error: 'item not found' });
+      if (!i || i.isPrivate) return text({ error: 'item not found' });
       const [a] = await db.select().from(areas).where(eq(areas.id, area_id));
       if (!a || a.archivedAt) return text({ error: 'area not found' });
       await recordEvent('item.moved', 'item', item_id, {

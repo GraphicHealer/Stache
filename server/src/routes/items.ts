@@ -38,12 +38,18 @@ function itemJson(i: typeof items.$inferSelect) {
     hidden: !!i.hiddenAt,
     created_at: i.createdAt,
     detected_codes: i.detectedCodes,
+    owner_id: i.ownerId,
+    is_private: i.isPrivate,
     ai_name: i.aiName,
     ai_description: i.aiDescription,
     ai_tags: i.aiTags,
     ai_status: i.aiStatus,
   };
 }
+
+/** Private items are visible to their owner only — everyone else gets a 404. */
+const hiddenFrom = (i: typeof items.$inferSelect, req: { user: { id: string } | null }) =>
+  i.isPrivate && i.ownerId !== req.user?.id;
 
 export async function itemRoutes(app: FastifyInstance) {
   // File an item. Accepts multipart (photo files + fields) — the normal path —
@@ -74,6 +80,8 @@ export async function itemRoutes(app: FastifyInstance) {
         description: fields.description || null,
         quantity: Math.max(1, parseInt(fields.quantity ?? '1', 10) || 1),
         barcode: fields.barcode || null,
+        ownerId: req.user?.id ?? null,
+        isPrivate: fields.is_private === 'true',
       })
       .returning();
 
@@ -97,7 +105,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item) return reply.notFound('item not found');
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
     const [crumb, itemPhotos] = await Promise.all([
       breadcrumb(item.areaId),
       db.select().from(photos).where(eq(photos.itemId, id)).orderBy(asc(photos.createdAt)),
@@ -113,7 +121,7 @@ export async function itemRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, any>;
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item) return reply.notFound('item not found');
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
     const eventIds: string[] = [];
 
     // Move to another area.
@@ -148,6 +156,7 @@ export async function itemRoutes(app: FastifyInstance) {
       quantity: 'quantity',
       barcode: 'barcode',
       detected_codes: 'detectedCodes',
+      is_private: 'isPrivate',
     } as const;
     const prev: Record<string, unknown> = {};
     const next: Record<string, unknown> = {};
@@ -175,6 +184,7 @@ export async function itemRoutes(app: FastifyInstance) {
         quantity: item.quantity,
         barcode: item.barcode,
         detectedCodes: item.detectedCodes,
+        isPrivate: item.isPrivate,
       })
       .where(eq(items.id, id))
       .returning();
@@ -184,7 +194,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/photos', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item) return reply.notFound('item not found');
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
     const saved = [];
     const bufs: Buffer[] = [];
     for await (const part of req.parts()) {
@@ -207,7 +217,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/not-here', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item) return reply.notFound('item not found');
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
 
     const ev = await recordEvent('item.not_here', 'item', id, {
       count_before: item.notHereCount,
@@ -242,9 +252,9 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id/similar', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item) return reply.notFound('item not found');
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
     if (!(await mlHealthy())) return { items: [], ml: false };
-    const neighbors = await nearestToItem(id, 12);
+    const neighbors = await nearestToItem(id, 12, req.user?.id ?? null);
     const thumbs = await thumbsForItems(neighbors.map((n) => n.id));
     const meta = neighbors.length
       ? await pg`SELECT id, name, area_id, quantity, status FROM items WHERE id IN ${pg(neighbors.map((n) => n.id))}`
@@ -280,7 +290,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.delete('/api/items/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item) return reply.notFound('item not found');
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
     await db.update(items).set({ hiddenAt: new Date() }).where(eq(items.id, id));
     const ev = await recordEvent('item.hidden', 'item', id, { name: item.name });
     return { ok: true, event_id: ev.id };

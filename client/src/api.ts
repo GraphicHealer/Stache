@@ -6,6 +6,9 @@ export class ApiError extends Error {
 
 async function req(path: string, init?: RequestInit) {
   const res = await fetch(path, init);
+  if (res.status === 401 && !path.startsWith('/api/auth')) {
+    window.dispatchEvent(new Event('stash:unauth'));
+  }
   if (!res.ok) {
     let msg = `${res.status}`;
     try {

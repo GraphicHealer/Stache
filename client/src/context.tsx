@@ -14,7 +14,17 @@ interface Toast {
   eventId?: string;
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
 interface AppCtx {
+  /** undefined = still checking, null = signed out. */
+  user: User | null | undefined;
+  setUser: (u: User | null) => void;
+  signOut: () => Promise<void>;
   currentArea: AreaRef | null;
   setCurrentArea: (a: AreaRef | null) => void;
   /** A captured photo waiting for a destination scan (item-first flow). */
@@ -41,7 +51,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [stagedPhoto, setStagedPhoto] = useState<Blob | null>(null);
   const [pending, setPending] = useState(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [user, setUser] = useState<User | null | undefined>(undefined);
   const toastId = useRef(0);
+
+  const signOut = useCallback(async () => {
+    await api.post('/api/auth/sign-out').catch(() => {});
+    setUser(null);
+  }, []);
+
+  // Session check on boot; any 401 elsewhere bounces back to login.
+  useEffect(() => {
+    api.get('/api/me')
+      .then((r) => setUser(r.user))
+      .catch(() => setUser(null));
+    const unauth = () => setUser(null);
+    window.addEventListener('stash:unauth', unauth);
+    return () => window.removeEventListener('stash:unauth', unauth);
+  }, []);
 
   const setCurrentArea = useCallback((a: AreaRef | null) => {
     setArea(a);
@@ -87,7 +113,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ currentArea, setCurrentArea, stagedPhoto, setStagedPhoto, pending, refreshPending, toast }}
+      value={{ user, setUser, signOut, currentArea, setCurrentArea, stagedPhoto, setStagedPhoto, pending, refreshPending, toast }}
     >
       {children}
       <div className="toasts">

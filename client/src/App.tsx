@@ -11,6 +11,7 @@ import { SearchPage } from './pages/SearchPage';
 import { InboxPage } from './pages/InboxPage';
 import { LabelsPage } from './pages/LabelsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { LoginPage } from './pages/LoginPage';
 
 /**
  * Hardware scanners act as keyboard wedges: they "type" the scan fast and
@@ -68,7 +69,9 @@ const NAV = [
 
 export function App() {
   useWedgeScan();
-  const { pending } = useApp();
+  const { pending, user } = useApp();
+  if (user === undefined) return <div className="page"><p className="muted">…</p></div>;
+  if (user === null) return <LoginPage />;
   return (
     <div className="shell">
       <main className="content">

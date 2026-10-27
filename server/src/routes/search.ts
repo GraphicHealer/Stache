@@ -8,13 +8,15 @@ export async function searchRoutes(app: FastifyInstance) {
   // ?q= fuzzy/full-text  ·  ?barcode= exact product match ("do I own this?")
   app.get('/api/search', async (req, reply) => {
     const { q, barcode } = req.query as { q?: string; barcode?: string };
+    const uid = req.user?.id ?? null;
 
     if (barcode) {
       const rows = await sql<{ id: string }[]>`
         SELECT id FROM items
         WHERE barcode = ${barcode} AND hidden_at IS NULL
+          AND (is_private = false OR owner_id = ${uid})
         LIMIT 50`;
-      return { items: await hydrateItems(rows.map((r) => r.id)), areas: [] };
+      return { items: await hydrateItems(rows.map((r) => r.id), uid), areas: [] };
     }
 
     const query = (q ?? '').trim();
@@ -28,6 +30,7 @@ export async function searchRoutes(app: FastifyInstance) {
                           word_similarity(${query}, coalesce(i.description, ''))) AS score
       FROM items i
       WHERE i.hidden_at IS NULL
+        AND (i.is_private = false OR i.owner_id = ${uid})
         AND (i.search_vector @@ websearch_to_tsquery('english', ${query})
              OR i.name ILIKE ${'%' + query + '%'}
              OR i.description ILIKE ${'%' + query + '%'}
@@ -66,7 +69,7 @@ export async function searchRoutes(app: FastifyInstance) {
     if (await mlHealthy()) {
       try {
         const vec = await embedText(query);
-        const similar = (await nearestByVector(vec, 12)).filter((n) => 1 - n.dist > 0.22);
+        const similar = (await nearestByVector(vec, 12, uid)).filter((n) => 1 - n.dist > 0.22);
         const seen = new Set(itemIds);
         itemIds = itemIds.concat(similar.filter((n) => !seen.has(n.id)).map((n) => n.id));
       } catch {
@@ -75,7 +78,7 @@ export async function searchRoutes(app: FastifyInstance) {
     }
 
     return {
-      items: await hydrateItems(itemIds),
+      items: await hydrateItems(itemIds, uid),
       areas: areaList.map((a) => {
         const c = covers.get(a.id);
         return { id: a.id, name: a.name, cover_thumb: c ? thumbUrl(c) : null };
@@ -92,20 +95,22 @@ export async function searchRoutes(app: FastifyInstance) {
     }
     if (!buf) return reply.badRequest('no photo uploaded');
     const vec = await embedImage(buf);
-    const neighbors = (await nearestByVector(vec, 25)).filter((n) => 1 - n.dist > 0.2);
-    return { items: await hydrateItems(neighbors.map((n) => n.id)), areas: [] };
+    const neighbors = (await nearestByVector(vec, 25, req.user?.id ?? null)).filter((n) => 1 - n.dist > 0.2);
+    return { items: await hydrateItems(neighbors.map((n) => n.id), req.user?.id ?? null), areas: [] };
   });
 }
 
-async function hydrateItems(ids: string[]) {
+async function hydrateItems(ids: string[], userId: string | null = null) {
   if (!ids.length) return [];
   const rows = await sql<
     {
       id: string; area_id: string; name: string | null; description: string | null;
       quantity: number; status: string; lent_to: string | null; not_here_count: number;
+      is_private: boolean;
     }[]
-  >`SELECT id, area_id, name, description, quantity, status, lent_to, not_here_count
-    FROM items WHERE id IN ${sql(ids)}`;
+  >`SELECT id, area_id, name, description, quantity, status, lent_to, not_here_count, is_private
+    FROM items WHERE id IN ${sql(ids)}
+    AND (is_private = false OR owner_id = ${userId})`;
   const order = new Map(ids.map((id, i) => [id, i]));
   rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   const thumbs = await thumbsForItems(ids);
@@ -121,6 +126,7 @@ async function hydrateItems(ids: string[]) {
         status: i.status,
         lent_to: i.lent_to,
         not_here_count: i.not_here_count,
+        is_private: i.is_private,
         thumb: t ? thumbUrl(t) : null,
         photo: t ? photoUrl(t) : null,
         breadcrumb: await breadcrumb(i.area_id),
