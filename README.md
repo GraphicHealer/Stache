@@ -1,102 +1,81 @@
 # Stash
 
-Self-hosted home inventory for people who won't fill in forms. See `PLAN.md` for the concept.
+Self-hosted, photo-first home inventory for people who won't fill in forms.
 
-## Stack
+**"Where is my stuff?"** - snap a photo, drop the thing in a bin, scan the bin's QR label. No names required, no categories, no forms. Finding it later is search, photo similarity, or just looking inside the bin from your couch.
 
-- **Server:** Node.js (TypeScript), Fastify, Drizzle ORM on Postgres (node: `postgres.js`)
-- **Client:** React + Vite PWA (offline outbox, camera QR scan, hardware-scanner keyboard-wedge support)
-- **DB:** `postgres:18` (full-text search + `pg_trgm`/`fuzzystrmatch` fuzzy matching)
-- **Deploy:** one app container + one Postgres container via `docker compose`
+Everything runs in one app container plus Postgres. Works offline, works on phones, works on Zebra handhelds with a scan trigger.
 
-## Run
+## Features
+
+- **Capture-first filing** - a photo is a complete record. Name it later, or never.
+- **QR-labeled areas** - rooms, closets, shelves, bins nest arbitrarily. Print sequential labels, claim them by scanning.
+- **Find anything** - exact, fuzzy, and typo-tolerant text search, barcode lookup, and search-by-photo via local CLIP embeddings.
+- **Out tracking** - "out" vs "unaccounted for" states, one-tap put-back, a quiet Still-out widget, and an optional bundled digest. No badges, no overdue red.
+- **Undo everything** - filing, moving, deleting, status changes. Nothing is destroyed, only hidden.
+- **Optional AI** - any OpenAI-compatible vision model (Ollama, LM Studio, hosted) suggests names/descriptions/tags, reads text in photos, splits pile photos into items - always as suggestions you confirm.
+- **Household accounts** - shared inventory by default, per-item private toggle, email/password auth.
+- **Label printers** - Zebra/ZPL over the network, CUPS queues, or DYMO Connect.
+- **MCP + webhooks** - per-connection MCP endpoints for ChatGPT/Claude, a Home Assistant sensor, and a digest webhook for reminders.
+- **Offline PWA** - photos and scans queue locally in bad signal and sync when you're back.
+
+## Quick start
 
 ```sh
-docker compose up --build      # build from source
-# or use the prebuilt release image:
-docker compose pull && docker compose up -d
+docker compose pull && docker compose up -d   # prebuilt image
+# or build from source:
+docker compose up -d --build
 ```
 
-App is at http://localhost:8080. Migrations run automatically on boot. Photos live in the `stash_data` volume.
+Open `http://<host>:8080`, create the first household account, then head to `/labels` to print your first batch.
 
-Publishing a GitHub Release builds `ghcr.io/graphichealer/stash:<version>` + `:latest` (amd64 + arm64) via Actions and bakes the tag into the UI (Settings footer) and `/api/health`.
+Requirements: Docker + Docker Compose. The app is one container (`ghcr.io/graphichealer/stash`) plus `pgvector/pgvector:pg18`. Photos and the AI model cache live in the `stash_data` volume at `/data`.
 
-Print labels from `/labels` - QR codes encode `<origin>/l/<code>`, so print them from the URL you'll actually scan against.
+## How it works
 
-## Label printers
+1. **Print labels** (`/labels`) - sequential QRs like `ST-000001`. Stick them on bins, shelves, drawers.
+2. **Claim a label** - scan an unclaimed one, take a photo of the area, done. It becomes a scannable container.
+3. **Put things away** - scan a label to set the current area, then snap photos. Or snap first, scan after.
+4. **Find things** - search by name, description, barcode, or photo; or scan a bin to see inside it.
 
-Add printers on the `/labels` page. Three connection types:
+## Optional pieces
 
-- **Zebra / ZPL (network)** - raw ZPL (native `^BQ` QR codes) sent to the printer's IP on port 9100. No drivers needed; works with Zebra and ZPL-compatible printers.
-- **CUPS queue** - prints a rendered PNG through `lp` to a named queue (e.g. a Dymo driver on a CUPS server). Set the queue name and optionally the CUPS server host.
-- **DYMO (DYMO Connect)** - prints from the browser via the DYMO Web Service; DYMO Connect must be running on the machine doing the printing. The printer name must match DYMO's.
+Everything below is off by default - the app is fully usable without any of it.
 
-## AI suggestions (optional)
+**AI** (Settings → Setup): point at any OpenAI-compatible `/chat/completions` endpoint (`http://host.docker.internal:11434/v1` for Ollama) with a vision model. New photos get suggested names/tags/descriptions in the background, CLIP powers visual search in-process, and "Split pile…" breaks a photo of many things into separate items you approve.
 
-Configure on the `/settings` (`Setup`) page: any OpenAI-compatible vision endpoint (`{base_url}/chat/completions`). Works with Ollama (`http://host.docker.internal:11434/v1`), LM Studio, llama.cpp, or hosted providers. New photos get a suggested name/description/tags in the background; accept, edit, or ignore - it never overwrites your text.
+**Out reminders** (Settings → Out reminders): one bundled digest POST to any webhook (ntfy, Discord, Home Assistant), daily at a time you pick or triggered externally. Snoozable per item, never per-item pings.
 
-Visual search runs in-process via CLIP (transformers.js/ONNX, ~580MB model cached in `/data/models`): every photo gets an embedding in pgvector, powering "similar items" on item pages and photo-based search - plus CLIP text-image matching blended into text search. No extra container.
+**Home Assistant**: Settings shows a ready-made sensor URL (`out`/`unaccounted` counts, item names, low stock, warranties) and a digest trigger URL for automations.
 
-## Barcode recognition
+**MCP** (Settings → MCP connections): each connection gets its own `/mcp/<slug>` URL plus a separate bearer token. Eight tools - search, areas, contents, details, move, resolve label, `add_item`, `update_item` - so assistants can answer "where is my soldering iron" or file receipts and voice descriptions for you. Front with HTTPS to expose externally.
 
-Barcodes/QRs in item photos are detected both at capture (browser BarcodeDetector/zxing) and on the server (zxing-wasm). When one is spotted you're asked "same item?" - yes attaches it as the item's `barcode`. Confirmed codes get a free product lookup (OpenFoodFacts → OpenProductsFacts → OpenBeautyFacts, no key; misses are silently skipped) and the result feeds the AI prompt as context. `GET /api/codes/:code/lookup` exposes the lookup directly.
+## Configuration
 
-## Out & missing items
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PORT` | `8080` | Web port |
+| `DATABASE_URL` | compose-managed | Postgres DSN |
+| `DATA_DIR` | `/data` | Photos + AI model cache |
+| `TZ` | `UTC` | Digest schedule timezone |
+| `BETTER_AUTH_SECRET` | auto-generated | Session secret (persisted in DB) |
 
-Items not in their home container are tracked in two states: **out** (you took it, it comes back) and **unaccounted for** (reported "not here", or out 30+ days). An item's `area_id` stays its home, so "put back" is one tap with no scan - scanning a container's QR while things are out of it offers to mark them returned.
+Everything else - AI provider, printers, MCP connections, digest webhooks - is configured in the app's Settings page.
 
-- **Home widget** - "Still out" row of big thumbnails (newest first, "+N more"), tap to put back. Hidden entirely when nothing is out. Neutral styling, no badges, no overdue language.
-- **`/out` page** - everything out of place, Out and Unaccounted as separate sections grouped by area, sorted by time out ("out 3 days"). Multi-select + bulk put-back, per-item put back / mark gone / snooze reminders.
-- **Usage data** - taking an item out silently records `last_used` and increments `takeout_count`; shown on the item page. No extra input.
-- **Reminders (optional)** - Settings → "Out reminders" posts **one bundled digest** (photos + names) to any webhook URL, at a daily time (container `TZ`) or when triggered. Snoozed items are skipped.
-- **Home Assistant** - `GET /api/webhooks/out-sensor?token=…` returns `{out_count, unaccounted_count, total, items:[{name, path, days}], low_stock, warranty_expiring}` for a REST sensor; `POST /api/webhooks/digest?token=…` fires the digest from an automation. Both URLs shown with copy buttons in Settings.
-
-## Optional details
-
-Two fields on the item page (under "Details"), both fully optional and never in the filing flow:
-
-- **Warranty until** - a date. Items with warranties ending within 30 days show quietly in the Inbox, digest, and sensor.
-- **Restock when below** - a number for consumables. When quantity drops to it, the item appears in a "Running low" Inbox section plus digest/sensor data. No alerts, no nagging.
-
-## Pile splitting
-
-Took a photo of a whole pile instead of one thing? "Split pile…" on the item page asks the VLM for the distinct objects, draws their regions on the photo, and lets you check the ones to file - each becomes its own item in the same area with a cropped photo. Strictly confirm-first: it only runs when you ask, and nothing is created until you pick. Background clutter never becomes phantom items.
-
-## AI area suggestions
-
-On an item page, if CLIP has seen enough similar photos, a "Similar things live in" card suggests the area those look-alikes already live in (nearest-embedding neighbors, similarity-weighted). One tap moves it there, undoable like every move. `GET /api/items/:id/suggested-area` exposes it.
-
-## Accounts & privacy
-
-Auth is [Better Auth](https://better-auth.com) (email + password, secure session cookies). First visit asks you to create the first household account; after that, sign-up is closed and logged-in members add people from Settings → Household.
-
-Items are **shared with the household by default**. Toggle "Private" on an item to make it visible only to you - hidden from other users' lists, search, and API, and invisible to MCP connections entirely.
-
-## MCP
-
-The MCP endpoint is off by default. Settings → "MCP connections" creates a named connection with its **own URL** (`<host>/mcp/<slug>`) **and a separate bearer token** - paste both into a ChatGPT/Claude connector (URL field + auth field), revoke either independently. Tools: `search_items`, `list_areas`, `area_contents`, `item_details`, `move_item`, `resolve_label`, `add_item`, `update_item`. The two write tools open integrations like receipt ingestion (an assistant files delivered purchases via `add_item`, with an `area_name` it finds or creates) and voice descriptions (`update_item` applies spoken names/notes/status). Hosted connectors require public HTTPS - front it with a reverse proxy, Tailscale Funnel, or Cloudflare Tunnel.
-
-## Develop
+## Development
 
 ```sh
-# Postgres only
-docker compose up db
-
+docker compose up db   # Postgres only
 npm install
-DATABASE_URL=postgres://stash:stash@localhost:5432/stash npm run dev
+npm run dev            # server on :8080, Vite dev server on :5173
 ```
 
-- Server: http://localhost:8080 (`server/`, `tsx` watch)
-- Client: http://localhost:5173 (`client/`, Vite dev server, proxies `/api` + `/photos`)
+Migrations live in `server/migrations/` and apply on boot. See `AGENTS.md` for architecture notes and conventions, `PLAN.md` for the design philosophy.
 
-## Layout
+## Releasing
 
-- `server/` - Fastify API, Drizzle schema, SQL migrations, photo storage
-- `client/` - React PWA
-- `data/` - local photo storage when running outside Docker (gitignored)
+Publish a GitHub Release and Actions builds + pushes `ghcr.io/graphichealer/stash:<version>` and `:latest` for amd64 and arm64, with the version baked into the Settings footer and `/api/health`.
 
-## Roadmap status
+## License
 
-Done: core loop (areas, labels, photo filing, browsing, search), move/lend/not-here, out-vs-unaccounted tracking with one-tap put-back, bundled digest reminders + Home Assistant sensor, household auth + per-item privacy, card-style inbox triage (Right/Fix/Later), optional warranty + low-stock tracking, AI area suggestions, undo, offline outbox, printable label sheets, Zebra/CUPS/DYMO label printing, AI name/description/tag suggestions, in-container CLIP visual search (similar items + photo search), barcode detection + free product lookup, confirm-first pile splitting via the VLM, per-connection MCP endpoints with write tools (add_item, update_item).
-
-Not yet: receipts parsed in-app (covered via MCP add_item instead), voice input in-app (covered via MCP update_item).
+TBD.
