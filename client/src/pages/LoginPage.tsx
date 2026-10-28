@@ -47,7 +47,11 @@ export function LoginPage() {
 
   return (
     <div className="page login">
-      <h1>Stash</h1>
+      <div className="login-brand">
+        <img className="login-logo" src="/icon.svg" alt="" />
+        <h1>Stash</h1>
+        <p className="login-tagline">Where is my stuff?</p>
+      </div>
       <p className="muted">
         {setup ? 'Create the first household account.' : 'Sign in to your household.'}
       </p>

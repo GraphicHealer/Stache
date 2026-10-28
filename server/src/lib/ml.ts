@@ -43,6 +43,16 @@ function l2norm(v: ArrayLike<number>): number[] {
 
 const mlDisabled = process.env.STASH_NO_ML === '1';
 
+async function rawImage(buf: Buffer) {
+  const hf = await import('@huggingface/transformers');
+  const { data, info } = await sharp(buf)
+    .rotate()
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return new hf.RawImage(new Uint8ClampedArray(data), info.width, info.height, info.channels);
+}
+
 async function loadClip(): Promise<Clip> {
   if (mlDisabled) throw new Error('ML disabled via STASH_NO_ML');
   const hf = await import('@huggingface/transformers');
@@ -81,14 +91,8 @@ export function mlHealthy(): boolean {
 }
 
 export async function embedImage(buf: Buffer): Promise<number[]> {
-  const hf = await import('@huggingface/transformers');
   const clip = await ensureClip();
-  const { data, info } = await sharp(buf)
-    .rotate()
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const image = new hf.RawImage(new Uint8ClampedArray(data), info.width, info.height, info.channels);
+  const image = await rawImage(buf);
   const inputs = await clip.processor(image);
   const { image_embeds } = await clip.vision(inputs);
   return l2norm(image_embeds.data as Float32Array);
@@ -161,4 +165,80 @@ export async function nearestToItem(itemId: string, limit = 12, viewerId: string
     limit,
     viewerId,
   ).filter((n) => n.id !== itemId);
+}
+
+// ---------------------------------------------------------------------------
+// Built-in VLM: Florence-2 for captioning / OCR / object detection. Same lazy
+// pattern as CLIP - downloads into DATA_DIR/models on first use only.
+// ---------------------------------------------------------------------------
+const VLM_MODEL = 'onnx-community/Florence-2-base-ft';
+const VLM_OPTS = {
+  dtype: {
+    embed_tokens: 'fp32',
+    vision_encoder: 'fp32',
+    encoder_model: 'fp32',
+    decoder_model_merged: 'q4',
+  } as const,
+  session_options: SESSION_OPTS,
+};
+
+type Vlm = { model: any; processor: any; tokenizer: any };
+let vlmPromise: Promise<Vlm> | null = null;
+
+async function loadVlm(): Promise<Vlm> {
+  if (mlDisabled) throw new Error('ML disabled via STASH_NO_ML');
+  const hf = await import('@huggingface/transformers');
+  hf.env.cacheDir = path.join(env.dataDir, 'models');
+  const [model, processor, tokenizer] = await Promise.all([
+    hf.AutoModelForImageTextToText.from_pretrained(VLM_MODEL, VLM_OPTS),
+    hf.AutoProcessor.from_pretrained(VLM_MODEL),
+    hf.AutoTokenizer.from_pretrained(VLM_MODEL),
+  ]);
+  return { model, processor, tokenizer };
+}
+
+export function ensureVlm(): Promise<Vlm> {
+  if (!vlmPromise) {
+    vlmPromise = loadVlm().catch((e) => {
+      vlmPromise = null;
+      throw e;
+    });
+  }
+  return vlmPromise;
+}
+
+/** Run one Florence-2 task (`<CAPTION>`, `<OCR>`, `<OD>`, ...) on a photo. */
+export async function vlmGenerate(buf: Buffer, task: string, maxNewTokens = 100): Promise<any> {
+  const vlm = await ensureVlm();
+  const image = await rawImage(buf);
+  const prompts = vlm.processor.construct_prompts(task);
+  const textInputs = vlm.tokenizer(prompts);
+  const visionInputs = await vlm.processor(image);
+  const ids = await vlm.model.generate({
+    ...textInputs,
+    ...visionInputs,
+    max_new_tokens: maxNewTokens,
+  });
+  const text = vlm.tokenizer.batch_decode(ids, { skip_special_tokens: false })[0];
+  return {
+    result: vlm.processor.post_process_generation(text, task, image.size),
+    size: { width: image.width, height: image.height },
+  };
+}
+
+/** True once Florence-2 weights are on disk (Settings can show "downloaded"). */
+export async function vlmDownloaded(): Promise<boolean> {
+  try {
+    const dir = path.join(env.dataDir, 'models');
+    const walk = async (d: string, depth: number): Promise<boolean> => {
+      for (const e of await fs.readdir(d, { withFileTypes: true })) {
+        if (/florence/i.test(e.name)) return true;
+        if (e.isDirectory() && depth < 3 && (await walk(path.join(d, e.name), depth + 1))) return true;
+      }
+      return false;
+    };
+    return await walk(dir, 0);
+  } catch {
+    return false;
+  }
 }

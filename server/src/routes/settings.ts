@@ -4,6 +4,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '../db';
 import { items, mcpTokens } from '../db/schema';
 import { getAiConfig, kickAi, setAiConfig } from '../lib/ai';
+import { vlmDownloaded } from '../lib/ml';
 import { getDigestConfig, setDigestConfig, webhookToken } from '../lib/digest';
 
 export async function settingsRoutes(app: FastifyInstance) {
@@ -12,6 +13,8 @@ export async function settingsRoutes(app: FastifyInstance) {
     return {
       configured: !!cfg,
       enabled: cfg?.enabled ?? false,
+      provider: cfg?.provider ?? 'remote',
+      local_ready: await vlmDownloaded(),
       base_url: cfg?.base_url ?? '',
       model: cfg?.model ?? '',
       has_api_key: !!cfg?.api_key,
@@ -23,6 +26,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const prev = await getAiConfig();
     await setAiConfig({
       enabled: !!body.enabled,
+      provider: body.provider === 'local' ? 'local' : 'remote',
       base_url: body.base_url ?? prev?.base_url ?? '',
       model: body.model ?? prev?.model ?? '',
       api_key: body.api_key !== undefined ? body.api_key : prev?.api_key,

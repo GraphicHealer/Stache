@@ -47,7 +47,7 @@ curl localhost:8080/api/health
 | MCP endpoint | `server/src/mcp.ts` - `/mcp/<slug>` + separate bearer token |
 | In-process CLIP | `server/src/lib/ml.ts` (transformers.js q8, lazy, `/data/models`) |
 | Raw SQL helpers | `query`/`queryOne`/`placeholders` from `server/src/db/index.ts` |
-| VLM suggestions | `server/src/lib/ai.ts` (OpenAI-compatible endpoint, optional) |
+| VLM suggestions | `server/src/lib/ai.ts` (provider: `local` = built-in Florence-2 in ml.ts, `remote` = OpenAI-compatible endpoint; both optional) |
 | Barcode detect/lookup | `server/src/lib/barcodes.ts` (zxing-wasm + Open*Facts) |
 | Photo pipeline | `server/src/lib/photos.ts` (sharp: EXIF-rotate → webp + thumb) |
 | Undo | `server/src/lib/events.ts` (`recordEvent` + inverse payloads) |

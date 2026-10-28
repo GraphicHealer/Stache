@@ -59,14 +59,44 @@ function useWedgeScan() {
   }, [nav, toast]);
 }
 
+const ICON_PROPS = {
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
 const NAV = [
-  { to: '/', label: 'Scan', end: true },
-  { to: '/browse', label: 'Browse' },
-  { to: '/search', label: 'Find' },
-  { to: '/inbox', label: 'Inbox' },
-  { to: '/out', label: 'Out' },
-  { to: '/labels', label: 'Labels' },
-  { to: '/settings', label: 'Setup' },
+  {
+    to: '/', label: 'Scan', end: true,
+    icon: <svg {...ICON_PROPS}><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="3" /></svg>,
+  },
+  {
+    to: '/browse', label: 'Browse',
+    icon: <svg {...ICON_PROPS}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>,
+  },
+  {
+    to: '/search', label: 'Find',
+    icon: <svg {...ICON_PROPS}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>,
+  },
+  {
+    to: '/inbox', label: 'Inbox',
+    icon: <svg {...ICON_PROPS}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.5 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.5A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.5z" /></svg>,
+  },
+  {
+    to: '/out', label: 'Out',
+    icon: <svg {...ICON_PROPS}><path d="M12 3v10" /><path d="m8.5 6.5 3.5-3.5 3.5 3.5" /><path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" /></svg>,
+  },
+  {
+    to: '/labels', label: 'Labels',
+    icon: <svg {...ICON_PROPS}><path d="M20.59 13.41 13.41 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.83z" /><circle cx="7" cy="7" r="1.5" /></svg>,
+  },
+  {
+    to: '/settings', label: 'Setup',
+    icon: <svg {...ICON_PROPS}><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" /></svg>,
+  },
 ];
 
 export function App() {
@@ -102,7 +132,8 @@ export function App() {
       <nav className="nav">
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">
-            {n.label}
+            {n.icon}
+            <span>{n.label}</span>
             {n.to === '/' && pending > 0 && <span className="nav-badge">{pending}</span>}
           </NavLink>
         ))}

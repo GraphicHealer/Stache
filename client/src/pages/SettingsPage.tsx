@@ -13,7 +13,7 @@ export function SettingsPage() {
   const { data: mcp } = useQuery({ queryKey: ['settings-mcp'], queryFn: () => api.get('/api/settings/mcp') });
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const { data: digest } = useQuery({ queryKey: ['settings-digest'], queryFn: () => api.get('/api/settings/digest') });
-  const [form, setForm] = useState({ enabled: false, base_url: '', model: '', api_key: '' });
+  const [form, setForm] = useState({ provider: 'off', base_url: '', model: '', api_key: '' });
   const [dg, setDg] = useState({ enabled: false, webhook_url: '', time: '09:00', base_url: '' });
   const [dgLoaded, setDgLoaded] = useState(false);
   const [connName, setConnName] = useState('');
@@ -23,7 +23,7 @@ export function SettingsPage() {
   useEffect(() => {
     if (data && !loaded) {
       setForm({
-        enabled: data.enabled,
+        provider: !data.enabled ? 'off' : data.provider ?? 'remote',
         base_url: data.base_url,
         model: data.model,
         api_key: '',
@@ -44,12 +44,14 @@ export function SettingsPage() {
   const save = async () => {
     try {
       const body: Record<string, unknown> = {
-        enabled: form.enabled,
+        enabled: form.provider !== 'off',
+        provider: form.provider === 'local' ? 'local' : 'remote',
         base_url: form.base_url,
         model: form.model,
       };
       if (form.api_key) body.api_key = form.api_key;
       await api.put('/api/settings/ai', body);
+      qc.invalidateQueries({ queryKey: ['settings-ai'] });
       toast('AI settings saved');
     } catch (e) {
       toast(`Failed: ${(e as Error).message}`);
@@ -110,36 +112,48 @@ export function SettingsPage() {
 
       <h2>AI suggestions</h2>
       <p className="muted">
-        Optional. Point at any OpenAI-compatible vision endpoint - Ollama, LM Studio, llama.cpp, or a
-        hosted provider. It only ever <i>suggests</i>; your text always wins.
+        Optional. Runs the built-in model, or point at any OpenAI-compatible vision endpoint -
+        Ollama, LM Studio, llama.cpp, or a hosted provider. It only ever <i>suggests</i>;
+        your text always wins.
       </p>
-      <label className="row">
-        <input
-          type="checkbox"
-          checked={form.enabled}
-          onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-        />
-        Enabled
-      </label>
-      <input
+      <select
         className="input"
-        placeholder="Base URL, e.g. http://host.docker.internal:11434/v1"
-        value={form.base_url}
-        onChange={(e) => setForm({ ...form, base_url: e.target.value })}
-      />
-      <input
-        className="input"
-        placeholder="Model, e.g. llava, qwen2.5vl, gpt-4o-mini"
-        value={form.model}
-        onChange={(e) => setForm({ ...form, model: e.target.value })}
-      />
-      <input
-        className="input"
-        type="password"
-        placeholder={data?.has_api_key ? 'API key (set - enter to replace)' : 'API key (optional)'}
-        value={form.api_key}
-        onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-      />
+        value={form.provider}
+        onChange={(e) => setForm({ ...form, provider: e.target.value })}
+      >
+        <option value="off">Off</option>
+        <option value="local">Built-in model (this device)</option>
+        <option value="remote">External endpoint</option>
+      </select>
+      {form.provider === 'local' && (
+        <p className="muted">
+          Florence-2 downloads into your data folder on first use (~400MB) and runs offline
+          after that.{data?.local_ready ? ' Model downloaded.' : ''}
+        </p>
+      )}
+      {form.provider === 'remote' && (
+        <>
+          <input
+            className="input"
+            placeholder="Base URL, e.g. http://host.docker.internal:11434/v1"
+            value={form.base_url}
+            onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+          />
+          <input
+            className="input"
+            placeholder="Model, e.g. llava, qwen2.5vl, gpt-4o-mini"
+            value={form.model}
+            onChange={(e) => setForm({ ...form, model: e.target.value })}
+          />
+          <input
+            className="input"
+            type="password"
+            placeholder={data?.has_api_key ? 'API key (set - enter to replace)' : 'API key (optional)'}
+            value={form.api_key}
+            onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+          />
+        </>
+      )}
       <button className="btn" onClick={save}>Save</button>
 
       <h2>MCP connections</h2>

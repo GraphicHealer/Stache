@@ -5,9 +5,12 @@ import { db } from '../db';
 import { items, photos, settings } from '../db/schema';
 import { env } from '../env';
 import { lookupBarcode, type DetectedCode } from './barcodes';
+import { vlmGenerate } from './ml';
 
 export interface AiConfig {
   enabled: boolean;
+  /** 'local' = built-in Florence-2; 'remote' = OpenAI-compatible endpoint. */
+  provider?: 'local' | 'remote';
   base_url: string; // OpenAI-compatible, e.g. http://ollama:11434/v1
   model: string;
   api_key?: string;
@@ -84,34 +87,51 @@ async function suggestOne(itemId: string): Promise<void> {
   }
 
   const file = path.join(env.dataDir, 'photos', photo.path);
-  const dataUrl = `data:image/webp;base64,${(await fs.readFile(file)).toString('base64')}`;
+  const buf = await fs.readFile(file);
 
-  // Product context: confirmed barcode wins; detected-but-unconfirmed codes
-  // are passed as hints only.
-  const context: string[] = [];
-  const codeToLookup = item.barcode ?? (item.detectedCodes as DetectedCode[] | null)?.[0]?.text;
-  if (codeToLookup) {
-    const product = await lookupBarcode(codeToLookup).catch(() => null);
-    context.push(
-      `Barcode ${codeToLookup} was seen on or with this item` +
-        (product ? ` - it resolves to "${product.name}"${product.brand ? ` by ${product.brand}` : ''}` : '') +
-        '.',
-    );
-  }
-  if (item.name) context.push(`The owner called it "${item.name}".`);
-
-  const userContent: any[] = [];
-  if (context.length) userContent.push({ type: 'text', text: context.join(' ') });
-  userContent.push({ type: 'image_url', image_url: { url: dataUrl } });
-
-  const content = await callVlm(cfg, PROMPT, userContent);
-  const jsonText = content.replace(/```(?:json)?/g, '').trim();
-  const parsed = JSON.parse(jsonText.match(/\{[\s\S]*\}/)?.[0] ?? '{}') as {
+  let parsed: {
     name?: string | null;
     description?: string | null;
     tags?: string[];
     ocr_text?: string | null;
-  };
+  } = {};
+
+  if (cfg.provider === 'local') {
+    const short = await vlmGenerate(buf, '<CAPTION>', 40);
+    const detailed = await vlmGenerate(buf, '<MORE_DETAILED_CAPTION>', 100);
+    const ocr = await vlmGenerate(buf, '<OCR>', 128).catch(() => null);
+    const name = String(short.result?.['<CAPTION>'] ?? '').replace(/^(a|an|the)\s+/i, '').trim() || null;
+    parsed = {
+      name,
+      description: String(detailed.result?.['<MORE_DETAILED_CAPTION>'] ?? '').trim() || null,
+      tags: [],
+      ocr_text: String(ocr?.result?.['<OCR>'] ?? '').trim() || null,
+    };
+  } else {
+    const dataUrl = `data:image/webp;base64,${buf.toString('base64')}`;
+
+    // Product context: confirmed barcode wins; detected-but-unconfirmed codes
+    // are passed as hints only.
+    const context: string[] = [];
+    const codeToLookup = item.barcode ?? (item.detectedCodes as DetectedCode[] | null)?.[0]?.text;
+    if (codeToLookup) {
+      const product = await lookupBarcode(codeToLookup).catch(() => null);
+      context.push(
+        `Barcode ${codeToLookup} was seen on or with this item` +
+          (product ? ` - it resolves to "${product.name}"${product.brand ? ` by ${product.brand}` : ''}` : '') +
+          '.',
+      );
+    }
+    if (item.name) context.push(`The owner called it "${item.name}".`);
+
+    const userContent: any[] = [];
+    if (context.length) userContent.push({ type: 'text', text: context.join(' ') });
+    userContent.push({ type: 'image_url', image_url: { url: dataUrl } });
+
+    const content = await callVlm(cfg, PROMPT, userContent);
+    const jsonText = content.replace(/```(?:json)?/g, '').trim();
+    parsed = JSON.parse(jsonText.match(/\{[\s\S]*\}/)?.[0] ?? '{}') as typeof parsed;
+  }
 
   // Suggest, never overwrite - user-entered fields always win.
   await db
@@ -146,7 +166,27 @@ No markdown, no explanation.`;
 export async function detectObjects(photoFile: string): Promise<DetectedObject[]> {
   const cfg = await getAiConfig();
   if (!cfg?.enabled) throw new Error('AI provider is not configured');
-  const dataUrl = `data:image/webp;base64,${(await fs.readFile(photoFile)).toString('base64')}`;
+  const buf = await fs.readFile(photoFile);
+
+  if (cfg.provider === 'local') {
+    // Florence-2 <OD> returns pixel-space [x1,y1,x2,y2] boxes + real labels.
+    const { result, size } = await vlmGenerate(buf, '<OD>', 256);
+    const od = result?.['<OD>'] as { bboxes?: number[][]; labels?: string[] } | undefined;
+    return (od?.bboxes ?? [])
+      .map((b, i): DetectedObject => ({
+        label: String(od?.labels?.[i] ?? 'object').slice(0, 120),
+        box: [
+          (b[1] / size.height) * 1000,
+          (b[0] / size.width) * 1000,
+          (b[3] / size.height) * 1000,
+          (b[2] / size.width) * 1000,
+        ],
+      }))
+      .filter((o) => o.box[2] - o.box[0] > 15 && o.box[3] - o.box[1] > 15)
+      .slice(0, 12);
+  }
+
+  const dataUrl = `data:image/webp;base64,${buf.toString('base64')}`;
   const content = await callVlm(cfg, SPLIT_PROMPT, [
     { type: 'image_url', image_url: { url: dataUrl } },
   ]);
