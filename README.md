@@ -1,6 +1,14 @@
-# Stache
-
-Self-hosted, photo-first home inventory for people who won't fill in forms.
+<p align="center">
+  <img src="client/public/icon.svg" alt="Stache logo" width="128">
+</p>
+<h1 align="center">Stache</h1>
+<p align="center">
+  Self-hosted, photo-first home inventory for people who won't fill in forms.
+</p>
+<p align="center">
+  <a href="https://github.com/GraphicHealer/Stache/releases"><img src="https://img.shields.io/github/v/release/GraphicHealer/Stache" alt="Latest release"></a>
+  <a href="https://github.com/GraphicHealer/Stache/actions/workflows/release.yml"><img src="https://github.com/GraphicHealer/Stache/actions/workflows/release.yml/badge.svg" alt="Release build"></a>
+</p>
 
 **"Where is my stuff?"** - snap a photo, drop the thing in a bin, scan the bin's QR label. No names required, no categories, no forms. Finding it later is search, photo similarity, or just looking inside the bin from your couch.
 
