@@ -22,7 +22,18 @@ import { registerMcp } from './mcp';
 
 export function buildApp() {
   const app = Fastify({
-    logger: { level: env.isProd ? 'info' : 'debug' },
+    logger: {
+      level: env.isProd ? 'info' : 'debug',
+      serializers: {
+        // Webhook tokens travel as ?token= - keep them out of the logs.
+        req: (req) => ({
+          method: req.method,
+          url: (req.url ?? '').replace(/([?&]token=)[^&]+/g, '$1<redacted>'),
+          host: req.headers?.host,
+          remoteAddress: req.ip,
+        }),
+      },
+    },
     bodyLimit: 30 * 1024 * 1024,
   });
 

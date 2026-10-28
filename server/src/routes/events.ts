@@ -1,9 +1,24 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, desc, isNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm';
 import { db } from '../db';
 import { events, items } from '../db/schema';
 import { undoEvent } from '../lib/events';
 import { itemVisible } from '../lib/visibility';
+
+/** Item events on other users' private items must not leak names/payloads. */
+async function eventVisibleToUser(
+  entityType: string | null,
+  entityId: string | null,
+  userId: string | null,
+): Promise<boolean> {
+  if (entityType !== 'item' || !entityId) return true;
+  const [it] = await db
+    .select({ isPrivate: items.isPrivate, ownerId: items.ownerId })
+    .from(items)
+    .where(eq(items.id, entityId));
+  if (!it) return true;
+  return !it.isPrivate || it.ownerId === userId;
+}
 import { thumbsForItems, thumbUrl } from '../lib/photos';
 import { breadcrumb } from '../lib/breadcrumb';
 import { fetchLowStock, fetchWarrantyExpiring } from '../lib/digest';
@@ -12,13 +27,18 @@ export async function miscRoutes(app: FastifyInstance) {
   // Recent undoable actions (also powers the "what just happened" history).
   app.get('/api/events', async (req) => {
     const { limit } = req.query as { limit?: string };
+    const uid = req.user?.id ?? null;
     const rows = await db
       .select()
       .from(events)
       .orderBy(desc(events.createdAt))
       .limit(Math.min(100, parseInt(limit ?? '30', 10) || 30));
+    const visible = [];
+    for (const e of rows) {
+      if (await eventVisibleToUser(e.entityType, e.entityId, uid)) visible.push(e);
+    }
     return {
-      events: rows.map((e) => ({
+      events: visible.map((e) => ({
         id: e.id,
         type: e.type,
         entity_type: e.entityType,
@@ -32,6 +52,9 @@ export async function miscRoutes(app: FastifyInstance) {
 
   app.post('/api/events/:id/undo', async (req, reply) => {
     const { id } = req.params as { id: string };
+    const [ev] = await db.select().from(events).where(eq(events.id, id));
+    if (!ev || !(await eventVisibleToUser(ev.entityType, ev.entityId, req.user?.id ?? null)))
+      return reply.notFound('event not found');
     const result = await undoEvent(id);
     if (!result.ok) return reply.badRequest(result.message ?? 'cannot undo');
     return { ok: true };

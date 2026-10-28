@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, queryOne } from '../db';
 import { items } from '../db/schema';
@@ -14,6 +14,14 @@ import {
   verifyWebhookToken,
   webhookToken,
 } from '../lib/digest';
+
+// Webhook auth: prefer the Authorization header so tokens stay out of URLs
+// (and out of request logs); ?token= still works for existing setups.
+function requestToken(req: FastifyRequest): string | undefined {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith('Bearer ')) return auth.slice(7);
+  return (req.query as { token?: string }).token;
+}
 
 export async function outRoutes(app: FastifyInstance) {
   // Everything removed from its space, split "out" vs "unaccounted for".
@@ -107,8 +115,8 @@ export async function outRoutes(app: FastifyInstance) {
 
   // HA sensor: out count + names. GET /api/webhooks/out-sensor?token=...
   app.get('/api/webhooks/out-sensor', async (req, reply) => {
-    const { token } = req.query as { token?: string };
-    if (!(await verifyWebhookToken(token))) return reply.code(401).send({ error: 'bad token' });
+    if (!(await verifyWebhookToken(requestToken(req))))
+      return reply.code(401).send({ error: 'bad token' });
     const { out, unaccounted } = await fetchMissing(null);
     const list = [...out, ...unaccounted];
     const thumbs = await outJson(list);
@@ -127,8 +135,8 @@ export async function outRoutes(app: FastifyInstance) {
 
   // HA automation trigger: POST /api/webhooks/digest?token=...
   app.post('/api/webhooks/digest', async (req, reply) => {
-    const { token } = req.query as { token?: string };
-    if (!(await verifyWebhookToken(token))) return reply.code(401).send({ error: 'bad token' });
+    if (!(await verifyWebhookToken(requestToken(req))))
+      return reply.code(401).send({ error: 'bad token' });
     return sendDigest();
   });
 

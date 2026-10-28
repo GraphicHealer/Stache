@@ -10,7 +10,7 @@ COPY client/package.json client/
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/* \
-  && npm install
+  && npm ci
 
 FROM deps AS build
 # Release workflow bakes the tag in; shows in the UI via Vite.
@@ -34,7 +34,7 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 COPY server/package.json server/
 COPY client/package.json client/
-RUN npm install --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/server/migrations server/migrations
@@ -50,6 +50,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
 
 VOLUME /data
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Stays root only for the chown, then drops to node (entrypoint handles it;
 # required because Home Assistant mounts /data root-owned).

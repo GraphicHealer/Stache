@@ -1,8 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db';
-import { printers } from '../db/schema';
+import { labels, printers } from '../db/schema';
 import { printLabels } from '../lib/print';
+
+// Codes become filenames and are interpolated into ZPL/SVG - strict shape only.
+const CODE_RE = /^ST-\d{6}$/;
 
 function originOf(req: FastifyRequest): string {
   const proto = (req.headers['x-forwarded-proto'] as string) ?? 'http';
@@ -50,6 +53,8 @@ export async function printerRoutes(app: FastifyInstance) {
         updates[key] = body[f] === '' || body[f] === null ? null : body[f];
       }
     }
+    if ((updates.name !== undefined && !updates.name) || (updates.type !== undefined && !updates.type))
+      return reply.badRequest('name and type cannot be empty');
     const [updated] = await db.update(printers).set(updates).where(eq(printers.id, id)).returning();
     return { printer: updated };
   });
@@ -82,9 +87,17 @@ export async function printerRoutes(app: FastifyInstance) {
     if (!p) return reply.notFound('printer not found');
     if (p.type === 'dymo')
       return reply.badRequest('dymo printers print from the browser (DYMO Web Service)');
+    const codes = body.codes.slice(0, 200);
+    if (!codes.every((c) => typeof c === 'string' && CODE_RE.test(c)))
+      return reply.badRequest('invalid label code');
+    const existing = new Set(
+      (await db.select({ code: labels.code }).from(labels).where(inArray(labels.code, codes))).map(
+        (r) => r.code,
+      ),
+    );
     try {
-      await printLabels(p, body.codes.slice(0, 200), originOf(req));
-      return { ok: true, printed: Math.min(body.codes.length, 200) };
+      await printLabels(p, codes.filter((c) => existing.has(c)), originOf(req));
+      return { ok: true, printed: codes.filter((c) => existing.has(c)).length };
     } catch (e) {
       return reply.badRequest(`print failed: ${(e as Error).message}`);
     }

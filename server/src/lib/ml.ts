@@ -71,6 +71,7 @@ function ensureClip(): Promise<Clip> {
     clipPromise = loadClip()
       .then((c) => {
         clipReady = true;
+        clipFailed = false;
         return c;
       })
       .catch((e) => {
@@ -88,6 +89,12 @@ function ensureClip(): Promise<Clip> {
  */
 export function mlHealthy(): boolean {
   return clipReady && !clipFailed;
+}
+
+/** Kick a background CLIP load - callers get text-only results until it lands. */
+export function warmClip(): void {
+  if (mlDisabled) return;
+  ensureClip().catch(() => {});
 }
 
 export async function embedImage(buf: Buffer): Promise<number[]> {

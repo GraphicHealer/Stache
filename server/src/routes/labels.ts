@@ -26,7 +26,7 @@ export async function labelRoutes(app: FastifyInstance) {
   // Pre-print a batch of sequential labels.
   app.post('/api/labels/batch', async (req, reply) => {
     const body = (req.body ?? {}) as { count?: number };
-    const count = Math.min(500, Math.max(1, body.count ?? 24));
+    const count = Math.min(500, Math.max(1, Math.floor(Number(body.count)) || 24));
 
     const { max } = queryOne<{ max: number | null }>(
       `SELECT max(CAST(substr(code, ?) AS INTEGER)) AS max
@@ -49,7 +49,8 @@ export async function labelRoutes(app: FastifyInstance) {
 
   // What a scanned label resolves to.
   app.get('/api/labels/:code', async (req, reply) => {
-    const { code } = req.params as { code: string };
+    const { code: raw } = req.params as { code: string };
+    const code = raw.toUpperCase();
     const [label] = await db.select().from(labels).where(eq(labels.code, code));
     if (!label) return reply.notFound('unknown label');
     if (!label.areaId) return { status: 'unclaimed', code: label.code };

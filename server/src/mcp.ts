@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -299,7 +300,12 @@ export function registerMcp(app: FastifyInstance) {
       const { slug } = req.params as { slug: string };
       const [conn] = await db.select().from(mcpTokens).where(eq(mcpTokens.slug, slug));
       if (!conn) return reply.notFound();
-      if (req.headers.authorization !== `Bearer ${conn.token}`) {
+      const provided = req.headers.authorization ?? '';
+      const expected = `Bearer ${conn.token}`;
+      if (
+        provided.length !== expected.length ||
+        !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
+      ) {
         return reply.code(401).send({ error: 'unauthorized' });
       }
       db.update(mcpTokens)

@@ -34,8 +34,9 @@ export default defineConfig({
             },
           },
           {
-            // Auth must never be cached - a stale session check would lie.
-            urlPattern: /\/api\/(auth|me|setup|users)\b.*/,
+            // Auth + settings must never be cached - a stale session check
+            // would lie, and settings responses contain tokens.
+            urlPattern: /\/api\/(auth|me|setup|users|settings)\b.*/,
             handler: 'NetworkOnly',
           },
           {

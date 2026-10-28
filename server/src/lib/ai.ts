@@ -63,6 +63,7 @@ async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promi
         { role: 'user', content: userContent },
       ],
     }),
+    signal: AbortSignal.timeout(90_000),
   });
   if (!res.ok) throw new Error(`AI provider ${res.status}: ${await res.text()}`);
   const body: any = await res.json();
@@ -225,7 +226,18 @@ async function tick(): Promise<void> {
       .from(items)
       .where(eq(items.aiStatus, 'pending'))
       .limit(1);
-    if (next) await suggestOne(next.id);
+    if (next) {
+      try {
+        await suggestOne(next.id);
+      } catch (e) {
+        console.error('[ai] suggest failed:', (e as Error).message);
+        await db
+          .update(items)
+          .set({ aiStatus: 'failed' })
+          .where(eq(items.id, next.id))
+          .catch(() => {});
+      }
+    }
   } finally {
     running = false;
   }

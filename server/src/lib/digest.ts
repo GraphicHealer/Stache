@@ -242,5 +242,7 @@ export function startDigestScheduler(): void {
 }
 
 export async function verifyWebhookToken(token: string | undefined): Promise<boolean> {
-  return !!token && token === (await webhookToken());
+  const expected = await webhookToken();
+  if (!token || token.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
 }

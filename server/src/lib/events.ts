@@ -51,7 +51,13 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
     case 'item.not_here':
       await db
         .update(items)
-        .set({ notHereCount: p.count_before ?? 0, status: p.status_before ?? 'home' })
+        .set({
+          notHereCount: p.count_before ?? 0,
+          status: p.status_before ?? 'home',
+          ...(p.out_since_before !== undefined
+            ? { outSince: p.out_since_before ? new Date(p.out_since_before) : null }
+            : {}),
+        })
         .where(eq(items.id, entityId));
       break;
     case 'item.status': {

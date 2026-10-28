@@ -4,8 +4,8 @@ import { db, query, placeholders } from '../db';
 import { items } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
 import { thumbsForItems, thumbUrl, photoUrl, coverThumbsForAreas } from '../lib/photos';
-import { embedImage, embedText, mlHealthy, nearestByVector } from '../lib/ml';
-import { searchItemIds, fuzzyItemScore, wordSim, trigramSim, levenshtein, soundex } from '../lib/textsearch';
+import { embedImage, embedText, mlHealthy, nearestByVector, warmClip } from '../lib/ml';
+import { searchItemIds, wordSim, trigramSim, levenshtein, soundex } from '../lib/textsearch';
 
 export async function searchRoutes(app: FastifyInstance) {
   // ?q= fuzzy/full-text  ·  ?barcode= exact product match ("do I own this?")
@@ -56,9 +56,10 @@ export async function searchRoutes(app: FastifyInstance) {
       areaRows.map((a) => ({ id: a.id, coverPhotoId: a.cover_photo_id })),
     );
 
-    // CLIP text embedding - catches "looks like" queries text can't.
+    // CLIP text embedding - catches "looks like" queries text can't. Lazy:
+    // the first search kicks a background load instead of blocking on it.
     let itemIds = itemRows.map((r) => r.id);
-    if (await mlHealthy()) {
+    if (mlHealthy()) {
       try {
         const vec = await embedText(q2);
         const similar = (await nearestByVector(vec, 12, uid)).filter((n) => 1 - n.dist > 0.22);
@@ -67,6 +68,8 @@ export async function searchRoutes(app: FastifyInstance) {
       } catch {
         /* embeddings unavailable - text matches still returned */
       }
+    } else {
+      warmClip();
     }
 
     return {

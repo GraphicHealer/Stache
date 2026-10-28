@@ -182,6 +182,13 @@ export async function itemRoutes(app: FastifyInstance) {
       if (body.status === 'gone') item.hiddenAt = new Date();
     }
 
+    if (
+      body.remind_snoozed_until !== undefined &&
+      body.remind_snoozed_until !== null &&
+      isNaN(new Date(body.remind_snoozed_until).getTime())
+    )
+      return reply.badRequest('remind_snoozed_until must be a valid date');
+
     const editable = {
       name: 'name',
       description: 'description',
@@ -214,6 +221,9 @@ export async function itemRoutes(app: FastifyInstance) {
       eventIds.push(ev.id);
     }
 
+    // A private item with no owner would be invisible to everyone.
+    if (item.isPrivate && !item.ownerId) item.ownerId = req.user?.id ?? null;
+
     const [updated] = await db
       .update(items)
       .set({
@@ -229,6 +239,7 @@ export async function itemRoutes(app: FastifyInstance) {
         isPrivate: item.isPrivate,
         hiddenAt: item.hiddenAt,
         takeoutCount: item.takeoutCount,
+        ownerId: item.ownerId,
         lastUsedAt: item.lastUsedAt,
         remindSnoozedUntil: item.remindSnoozedUntil,
         warrantyUntil: item.warrantyUntil,
@@ -271,6 +282,7 @@ export async function itemRoutes(app: FastifyInstance) {
       count_before: item.notHereCount,
       area_id: item.areaId,
       status_before: item.status,
+      out_since_before: item.outSince,
     });
     const [updated] = await db
       .update(items)

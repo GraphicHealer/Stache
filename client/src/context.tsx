@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import { drainOutbox, outboxCount } from './outbox';
 
@@ -54,10 +55,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const toastId = useRef(0);
 
+  const qc = useQueryClient();
   const signOut = useCallback(async () => {
     await api.post('/api/auth/sign-out').catch(() => {});
+    qc.clear();
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.filter((n) => n.startsWith('stache-')).map((n) => caches.delete(n)));
+    } catch {}
     setUser(null);
-  }, []);
+  }, [qc]);
 
   // Session check on boot; any 401 elsewhere bounces back to login.
   useEffect(() => {
