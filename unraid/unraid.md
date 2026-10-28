@@ -14,14 +14,15 @@ folder, so backups are just backing up `/mnt/user/appdata/stash`.
 
 ### Manual install (template not in CA yet)
 
-Copy `stash.xml` onto your flash drive's user-template folder, then install
-from the Docker tab:
+Copy `my-stash.xml` onto your flash drive's user-template folder, then
+install from the Docker tab:
 
-1. Copy `unraid/stash.xml` to
-   `/boot/config/plugins/dockerMan/templates-user/stash.xml`
-   (e.g. `cp stash.xml /boot/config/plugins/dockerMan/templates-user/`
+1. Copy `unraid/my-stash.xml` to
+   `/boot/config/plugins/dockerMan/templates-user/my-stash.xml`
+   (e.g. `cp my-stash.xml /boot/config/plugins/dockerMan/templates-user/`
    over SSH, or drop it on the `flash` share at
    `config/plugins/dockerMan/templates-user/`).
+   Keep the `my-` prefix - dockerMan treats user templates without it badly.
 2. Docker tab -> **Add Container** -> the **Template** dropdown now lists
    **Stash**. Pick it, adjust the port/appdata if needed, Apply.
 3. Open the WebUI on port 8080.
