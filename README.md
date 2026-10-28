@@ -37,7 +37,7 @@ docker compose up -d --build
 
 Open `http://<host>:8080`, create the first household account, then head to `/labels` to print your first batch.
 
-Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/stache`) - the embedded SQLite database, photos, and AI model cache all live in the `stache_data` volume at `/data`. Backup is copying that volume.
+Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/stache`) - the embedded SQLite database, photos, and AI model cache all live in the `data` volume (Docker names it `stache_data`) at `/data`. Backup is copying that volume.
 
 **Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or search, not at boot - once warm the app sits around 450-550MB. On very small hosts, set `STACHE_NO_ML=1` to disable embeddings entirely; everything else keeps working.
 

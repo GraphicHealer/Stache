@@ -10,7 +10,7 @@ services:
       DATA_DIR: /data
       TZ: ${TZ:-UTC}   # digest "time" setting uses this timezone
     volumes:
-      - stache_data:/data   # SQLite db + photos + model cache all live here
+      - data:/data   # SQLite db + photos + model cache all live here
     ports:
       - "8080:8080"
     # Lets the AI provider URL reach services on the Docker host
@@ -19,4 +19,4 @@ services:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  stache_data:
+  data:
