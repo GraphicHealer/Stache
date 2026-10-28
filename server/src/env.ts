@@ -3,12 +3,15 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+const dataDir = process.env.DATA_DIR ?? path.resolve(here, '../../data');
+
 export const env = {
   port: Number(process.env.PORT ?? 8080),
   host: process.env.HOST ?? '0.0.0.0',
-  databaseUrl: process.env.DATABASE_URL ?? 'postgres://stash:stash@localhost:5432/stash',
+  // Embedded SQLite lives in DATA_DIR next to the photos.
+  dbPath: process.env.DB_PATH ?? path.join(dataDir, 'stash.db'),
+  dataDir,
   // Photos on disk. In Docker: /data volume. Locally: <repo>/data.
-  dataDir: process.env.DATA_DIR ?? path.resolve(here, '../../data'),
   // Built PWA. In Docker: /app/client/dist. In dev the Vite server serves it.
   clientDist: process.env.CLIENT_DIST ?? path.resolve(here, '../../client/dist'),
   migrationsDir: process.env.MIGRATIONS_DIR ?? path.resolve(here, '../migrations'),

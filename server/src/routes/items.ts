@@ -1,15 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import path from 'node:path';
 import sharp from 'sharp';
-import { asc, eq } from 'drizzle-orm';
-import { db, sql as pg } from '../db';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { db, query, placeholders } from '../db';
 import { env } from '../env';
-import { items, photos } from '../db/schema';
+import { areas, items, photos } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
 import { recordEvent } from '../lib/events';
 import { insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
 import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
-import { analyzeItemPhoto, mlHealthy, nearestToItem } from '../lib/ml';
+import { analyzeItemPhoto, hasEmbedding, mlHealthy, nearestToItem } from '../lib/ml';
 import { detectCodes, lookupBarcode, type DetectedCode } from '../lib/barcodes';
 
 /** Scan an item's photos for codes; merge new finds into detected_codes. */
@@ -77,7 +77,10 @@ export async function itemRoutes(app: FastifyInstance) {
 
     const areaId = fields.area_id;
     if (!areaId) return reply.badRequest('area_id is required');
-    const [area] = await pg`SELECT id FROM areas WHERE id = ${areaId} AND archived_at IS NULL`;
+    const [area] = await db
+      .select({ id: areas.id })
+      .from(areas)
+      .where(and(eq(areas.id, areaId), isNull(areas.archivedAt)));
     if (!area) return reply.badRequest('area not found');
 
     const [item] = await db
@@ -134,7 +137,10 @@ export async function itemRoutes(app: FastifyInstance) {
 
     // Move to another area.
     if (body.area_id !== undefined && body.area_id !== item.areaId) {
-      const [area] = await pg`SELECT id FROM areas WHERE id = ${body.area_id} AND archived_at IS NULL`;
+      const [area] = await db
+        .select({ id: areas.id })
+        .from(areas)
+        .where(and(eq(areas.id, body.area_id), isNull(areas.archivedAt)));
       if (!area) return reply.badRequest('destination area not found');
       const ev = await recordEvent('item.moved', 'item', id, {
         from_area_id: item.areaId,
@@ -278,19 +284,27 @@ export async function itemRoutes(app: FastifyInstance) {
       .returning();
 
     // Suggest: areas it lived in before (from move events) + siblings of current area.
-    const prevAreas = await pg<{ area_id: string }[]>`
-      SELECT DISTINCT payload->>'from_area_id' AS area_id
-      FROM events
-      WHERE type = 'item.moved' AND entity_id = ${id} AND undone_at IS NULL`;
-    const siblings = await pg<{ area_id: string }[]>`
-      SELECT id AS area_id FROM areas
-      WHERE archived_at IS NULL AND parent_id IS NOT DISTINCT FROM
-        (SELECT parent_id FROM areas WHERE id = ${item.areaId})
-        AND id <> ${item.areaId}
-      LIMIT 6`;
+    const prevAreas = query<{ area_id: string }>(
+      `SELECT DISTINCT json_extract(payload, '$.from_area_id') AS area_id
+       FROM events
+       WHERE type = 'item.moved' AND entity_id = ? AND undone_at IS NULL`,
+      id,
+    );
+    const siblings = query<{ area_id: string }>(
+      `SELECT id AS area_id FROM areas
+       WHERE archived_at IS NULL AND parent_id IS
+         (SELECT parent_id FROM areas WHERE id = ?)
+         AND id <> ?
+       LIMIT 6`,
+      item.areaId,
+      item.areaId,
+    );
     const ids = [...new Set([...prevAreas, ...siblings].map((r) => r.area_id).filter(Boolean))];
     const suggested = ids.length
-      ? await pg`SELECT id, name FROM areas WHERE id IN ${pg(ids)} AND archived_at IS NULL`
+      ? query<{ id: string; name: string | null }>(
+          `SELECT id, name FROM areas WHERE id IN (${placeholders(ids.length)}) AND archived_at IS NULL`,
+          ...ids,
+        )
       : [];
 
     return { item: itemJson(updated), suggested_areas: suggested, event_id: ev.id };
@@ -305,7 +319,10 @@ export async function itemRoutes(app: FastifyInstance) {
     const neighbors = await nearestToItem(id, 12, req.user?.id ?? null);
     const thumbs = await thumbsForItems(neighbors.map((n) => n.id));
     const meta = neighbors.length
-      ? await pg`SELECT id, name, area_id, quantity, status FROM items WHERE id IN ${pg(neighbors.map((n) => n.id))}`
+      ? query<{ id: string; name: string | null; area_id: string; quantity: number; status: string }>(
+          `SELECT id, name, area_id, quantity, status FROM items WHERE id IN (${placeholders(neighbors.length)})`,
+          ...neighbors.map((n) => n.id),
+        )
       : [];
     const byId = new Map(meta.map((m: any) => [m.id, m]));
     return {
@@ -333,12 +350,14 @@ export async function itemRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
-    if (!mlHealthy() || !item.embedding) return { suggestions: [] };
+    if (!mlHealthy() || !hasEmbedding(id)) return { suggestions: [] };
 
     const neighbors = await nearestToItem(id, 12, req.user?.id ?? null);
     if (!neighbors.length) return { suggestions: [] };
-    const meta = await pg<{ id: string; area_id: string }[]>`
-      SELECT id, area_id FROM items WHERE id IN ${pg(neighbors.map((n) => n.id))}`;
+    const meta = query<{ id: string; area_id: string }>(
+      `SELECT id, area_id FROM items WHERE id IN (${placeholders(neighbors.length)})`,
+      ...neighbors.map((n) => n.id),
+    );
     const areaOf = new Map(meta.map((m) => [m.id, m.area_id]));
 
     const score = new Map<string, number>();

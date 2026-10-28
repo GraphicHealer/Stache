@@ -4,7 +4,7 @@ Self-hosted, photo-first home inventory for people who won't fill in forms.
 
 **"Where is my stuff?"** - snap a photo, drop the thing in a bin, scan the bin's QR label. No names required, no categories, no forms. Finding it later is search, photo similarity, or just looking inside the bin from your couch.
 
-Everything runs in one app container plus Postgres. Works offline, works on phones, works on Zebra handhelds with a scan trigger.
+Everything runs in a single container - no database service, no external anything. Works offline, works on phones, works on Zebra handhelds with a scan trigger.
 
 ## Features
 
@@ -29,7 +29,9 @@ docker compose up -d --build
 
 Open `http://<host>:8080`, create the first household account, then head to `/labels` to print your first batch.
 
-Requirements: Docker + Docker Compose. The app is one container (`ghcr.io/graphichealer/stash`) plus `pgvector/pgvector:pg18`. Photos and the AI model cache live in the `stash_data` volume at `/data`.
+Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/stash`) - the embedded SQLite database, photos, and AI model cache all live in the `stash_data` volume at `/data`. Backup is copying that volume.
+
+**Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or photo search, not at boot - once warm the app sits around 450-550MB. On very small hosts, set `STASH_NO_ML=1` to disable embeddings entirely; everything else keeps working.
 
 ## How it works
 
@@ -55,19 +57,19 @@ Everything below is off by default - the app is fully usable without any of it.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `8080` | Web port |
-| `DATABASE_URL` | compose-managed | Postgres DSN |
-| `DATA_DIR` | `/data` | Photos + AI model cache |
+| `DATA_DIR` | `/data` | SQLite db + photos + AI model cache |
+| `DB_PATH` | `$DATA_DIR/stash.db` | SQLite file location |
 | `TZ` | `UTC` | Digest schedule timezone |
 | `BETTER_AUTH_SECRET` | auto-generated | Session secret (persisted in DB) |
+| `STASH_NO_ML` | unset | `1` disables CLIP embeddings/photo similarity |
 
 Everything else - AI provider, printers, MCP connections, digest webhooks - is configured in the app's Settings page.
 
 ## Development
 
 ```sh
-docker compose up db   # Postgres only
 npm install
-npm run dev            # server on :8080, Vite dev server on :5173
+npm run dev            # server on :8080, Vite dev server on :5173; db file in ./data
 ```
 
 Migrations live in `server/migrations/` and apply on boot. See `AGENTS.md` for architecture notes and conventions, `PLAN.md` for the design philosophy.

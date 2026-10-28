@@ -1,36 +1,16 @@
 services:
-  db:
-    # Official postgres:18 base + pgvector (CLIP embeddings for similar-item search)
-    image: pgvector/pgvector:pg18
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: stash
-      POSTGRES_PASSWORD: stash
-      POSTGRES_DB: stash
-    volumes:
-      - db_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stash -d stash"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
   app:
     # Prebuilt release image - `docker compose pull` grabs it; `build` still
     # works for local development from source.
     image: ghcr.io/graphichealer/stash:latest
     build: .
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgres://stash:stash@db:5432/stash
       PORT: 8080
       DATA_DIR: /data
       TZ: ${TZ:-UTC}   # digest "time" setting uses this timezone
     volumes:
-      - stash_data:/data
+      - stash_data:/data   # SQLite db + photos + model cache all live here
     ports:
       - "8080:8080"
     # Lets the AI provider URL reach services on the Docker host
@@ -39,5 +19,4 @@ services:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  db_data:
   stash_data:

@@ -2,10 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { and, asc, eq, isNull } from 'drizzle-orm';
-import { db, sql } from './db';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { db, queryOne } from './db';
 import { areas, items, labels, mcpTokens, photos } from './db/schema';
 import { breadcrumb } from './lib/breadcrumb';
+import { searchItemIds } from './lib/textsearch';
 import { recordEvent } from './lib/events';
 import { photoUrl, thumbUrl } from './lib/photos';
 
@@ -27,14 +28,20 @@ function buildMcpServer(): McpServer {
       inputSchema: { query: z.string() },
     },
     async ({ query }) => {
-      const rows = await sql<{ id: string; name: string | null; description: string | null; area_id: string; status: string }[]>`
-        SELECT id, name, description, area_id, status FROM items
-        WHERE hidden_at IS NULL AND is_private = false AND (
-          search_vector @@ websearch_to_tsquery('english', ${query})
-          OR name ILIKE ${'%' + query + '%'}
-          OR word_similarity(${query}, coalesce(name, '')) > 0.3
-          OR barcode = ${query})
-        LIMIT 25`;
+      const ids = searchItemIds(query, null, 25).map((r) => r.id);
+      if (!ids.length) return text({ results: [] });
+      const rows = await db
+        .select({
+          id: items.id,
+          name: items.name,
+          description: items.description,
+          area_id: items.areaId,
+          status: items.status,
+        })
+        .from(items)
+        .where(and(inArray(items.id, ids), eq(items.isPrivate, false)));
+      const order = new Map(ids.map((id, i) => [id, i]));
+      rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
       const results = await Promise.all(
         rows.map(async (r) => ({ ...r, path: await pathOf(r.area_id) })),
       );
@@ -151,8 +158,10 @@ function buildMcpServer(): McpServer {
         if (l?.areaId) areaId = l.areaId;
       }
       if (!areaId && area_name) {
-        const [a] = await sql<{ id: string }[]>`
-          SELECT id FROM areas WHERE archived_at IS NULL AND name ILIKE ${area_name} LIMIT 1`;
+        const a = queryOne<{ id: string }>(
+          `SELECT id FROM areas WHERE archived_at IS NULL AND lower(name) = lower(?) LIMIT 1`,
+          area_name,
+        );
         if (a) {
           areaId = a.id;
         } else {

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
-import { db, sql as pg } from '../db';
+import { db, queryOne } from '../db';
 import { items } from '../db/schema';
 import { recordEvent } from '../lib/events';
 import { thumbsForItems, thumbUrl } from '../lib/photos';
@@ -40,10 +40,12 @@ export async function outRoutes(app: FastifyInstance) {
       )
       .orderBy(desc(items.outSince))
       .limit(7);
-    const [{ n }] = await pg<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM items
-      WHERE hidden_at IS NULL AND status IN ('out','lent','unaccounted')
-        AND (is_private = false OR owner_id = ${uid})`;
+    const { n } = queryOne<{ n: number }>(
+      `SELECT count(*) AS n FROM items
+       WHERE hidden_at IS NULL AND status IN ('out','lent','unaccounted')
+         AND (is_private = 0 OR owner_id = ?)`,
+      uid,
+    ) ?? { n: 0 };
     const thumbs = await thumbsForItems(rows.map((r) => r.id));
     return {
       total: n,

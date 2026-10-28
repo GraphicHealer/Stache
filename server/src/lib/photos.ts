@@ -9,6 +9,9 @@ import { env } from '../env';
 
 const PHOTO_DIR = () => path.join(env.dataDir, 'photos');
 
+// Keep libvips off all cores during bursts - small hosts stay responsive.
+sharp.concurrency(2);
+
 export async function ensurePhotoDir() {
   await fs.mkdir(PHOTO_DIR(), { recursive: true });
 }

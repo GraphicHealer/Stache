@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql as dsql } from 'drizzle-orm';
-import { db, sql } from '../db';
+import { db } from '../db';
 import { items, settings } from '../db/schema';
 import { breadcrumb } from './breadcrumb';
 import { thumbsForItems, thumbUrl } from './photos';
@@ -158,7 +158,7 @@ export async function fetchWarrantyExpiring(userId: string | null = null, days =
         isNull(items.hiddenAt),
         visibleTo(userId),
         isNotNull(items.warrantyUntil),
-        dsql`warranty_until >= current_date AND warranty_until <= current_date + make_interval(days => ${days})`,
+        dsql`warranty_until >= date('now') AND warranty_until <= date('now', '+' || ${days} || ' days')`,
       ),
     );
 }

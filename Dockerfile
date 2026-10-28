@@ -1,11 +1,16 @@
-# Stash - single-container build (app only; Postgres runs separately)
+# Stash - single container: app + embedded SQLite, no external services.
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY server/package.json server/
 COPY client/package.json client/
-RUN npm install
+# better-sqlite3/sqlite-vec ship prebuilt binaries; toolchain is a fallback
+# for platforms without one.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/* \
+  && npm install
 
 FROM deps AS build
 # Release workflow bakes the tag in; shows in the UI via Vite.

@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { eq } from 'drizzle-orm';
-import { db, sql } from './db';
+import { db, queryOne } from './db';
 import { settings } from './db/schema';
 
 /**
@@ -22,7 +22,7 @@ function makeAuth(secret: string) {
   return betterAuth({
     appName: 'Stash',
     secret,
-    database: drizzleAdapter(db, { provider: 'pg' }),
+    database: drizzleAdapter(db, { provider: 'sqlite' }),
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
   });
 }
@@ -55,8 +55,7 @@ export function getAuth() {
 }
 
 export async function userCount(): Promise<number> {
-  const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM "user"`;
-  return n;
+  return queryOne<{ n: number }>(`SELECT count(*) AS n FROM user`)?.n ?? 0;
 }
 
 function headersOf(req: FastifyRequest): Headers {

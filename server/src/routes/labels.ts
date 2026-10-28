@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { asc, eq } from 'drizzle-orm';
-import { db, sql } from '../db';
+import { db, queryOne } from '../db';
 import { areas, labels } from '../db/schema';
 
 const PREFIX = 'ST-';
@@ -28,12 +28,16 @@ export async function labelRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as { count?: number };
     const count = Math.min(500, Math.max(1, body.count ?? 24));
 
-    const [{ max }] = await sql<{ max: number | null }[]>`
-      SELECT max(CAST(substring(code from ${PREFIX.length + 1}) AS int)) AS max
-      FROM labels WHERE code LIKE ${PREFIX + '%'}`;
+    const { max } = queryOne<{ max: number | null }>(
+      `SELECT max(CAST(substr(code, ?) AS INTEGER)) AS max
+       FROM labels WHERE code LIKE ?`,
+      PREFIX.length + 1,
+      PREFIX + '%',
+    ) ?? { max: null };
     const start = (max ?? 0) + 1;
-    const [batchRow] = await sql<{ batch: number }[]>`
-      SELECT coalesce(max(batch), 0) + 1 AS batch FROM labels`;
+    const batchRow = queryOne<{ batch: number }>(
+      `SELECT coalesce(max(batch), 0) + 1 AS batch FROM labels`,
+    )!;
 
     const codes = Array.from({ length: count }, (_, i) => ({
       code: `${PREFIX}${String(start + i).padStart(PAD, '0')}`,

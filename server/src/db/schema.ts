@@ -1,80 +1,88 @@
+import crypto from 'node:crypto';
 import {
-  pgTable, uuid, text, integer, real, boolean, timestamp, date, jsonb, index, uniqueIndex, vector,
-} from 'drizzle-orm/pg-core';
+  sqliteTable, text, integer, real, index, uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
-export const labels = pgTable('labels', {
+// SQLite port: uuids are app-generated text; timestamps are INTEGER ms
+// (drizzle `timestamp_ms` mode, Date objects both ways); booleans are
+// INTEGER; jsonb became TEXT with drizzle `json` mode. CLIP embeddings live
+// in the `item_embeddings` vec0 virtual table (migration SQL), not here.
+
+const newId = () => crypto.randomUUID();
+const ts = (name: string) => integer(name, { mode: 'timestamp_ms' });
+
+export const labels = sqliteTable('labels', {
   code: text('code').primaryKey(),
   batch: integer('batch').notNull().default(1),
-  areaId: uuid('area_id'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  areaId: text('area_id'),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 });
 
-export const areas = pgTable('areas', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  parentId: uuid('parent_id'),
+export const areas = sqliteTable('areas', {
+  id: text('id').primaryKey().$defaultFn(newId),
+  parentId: text('parent_id'),
   name: text('name'),
-  coverPhotoId: uuid('cover_photo_id'),
+  coverPhotoId: text('cover_photo_id'),
   labelCode: text('label_code').unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+  archivedAt: ts('archived_at'),
 }, (t) => [index('areas_parent_idx').on(t.parentId)]);
 
-export const items = pgTable('items', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  areaId: uuid('area_id').notNull(),
+export const items = sqliteTable('items', {
+  id: text('id').primaryKey().$defaultFn(newId),
+  areaId: text('area_id').notNull(),
   name: text('name'),
   description: text('description'),
   quantity: integer('quantity').notNull().default(1),
   barcode: text('barcode'),
   status: text('status').notNull().default('home'), // home | out | lent | unaccounted | gone
   lentTo: text('lent_to'),
-  outSince: timestamp('out_since', { withTimezone: true }),
-  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  outSince: ts('out_since'),
+  lastUsedAt: ts('last_used_at'),
   takeoutCount: integer('takeout_count').notNull().default(0),
-  remindSnoozedUntil: timestamp('remind_snoozed_until', { withTimezone: true }),
-  warrantyUntil: date('warranty_until', { mode: 'string' }), // optional "covered until"
+  remindSnoozedUntil: ts('remind_snoozed_until'),
+  warrantyUntil: text('warranty_until'), // optional "covered until" date, YYYY-MM-DD
   restockBelow: integer('restock_below'), // optional "alert when qty <= this"
   notHereCount: integer('not_here_count').notNull().default(0),
-  hiddenAt: timestamp('hidden_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  hiddenAt: ts('hidden_at'),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
   aiName: text('ai_name'),
   aiDescription: text('ai_description'),
-  aiTags: jsonb('ai_tags'),
+  aiTags: text('ai_tags', { mode: 'json' }),
   aiStatus: text('ai_status').notNull().default('off'), // off | pending | done | failed
-  embedding: vector('embedding', { dimensions: 512 }),
   ocrText: text('ocr_text'),
-  detectedCodes: jsonb('detected_codes'), // [{format, text}] found in photos, unconfirmed
+  detectedCodes: text('detected_codes', { mode: 'json' }), // [{format, text}] found in photos, unconfirmed
   // Household sharing: shared by default; private items are owner-only.
   ownerId: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
-  isPrivate: boolean('is_private').notNull().default(false),
+  isPrivate: integer('is_private', { mode: 'boolean' }).notNull().default(false),
 }, (t) => [index('items_area_idx').on(t.areaId)]);
 
-export const photos = pgTable('photos', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  itemId: uuid('item_id'),
-  areaId: uuid('area_id'),
+export const photos = sqliteTable('photos', {
+  id: text('id').primaryKey().$defaultFn(newId),
+  itemId: text('item_id'),
+  areaId: text('area_id'),
   path: text('path').notNull(),      // filename under DATA_DIR/photos
   thumbPath: text('thumb_path'),
   width: integer('width'),
   height: integer('height'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 }, (t) => [
   index('photos_item_idx').on(t.itemId),
   index('photos_area_idx').on(t.areaId),
 ]);
 
-export const events = pgTable('events', {
-  id: uuid('id').primaryKey().defaultRandom(),
+export const events = sqliteTable('events', {
+  id: text('id').primaryKey().$defaultFn(newId),
   type: text('type').notNull(),
   entityType: text('entity_type'),
-  entityId: uuid('entity_id'),
-  payload: jsonb('payload'),
-  undoneAt: timestamp('undone_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  entityId: text('entity_id'),
+  payload: text('payload', { mode: 'json' }),
+  undoneAt: ts('undone_at'),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 }, (t) => [index('events_created_idx').on(t.createdAt)]);
 
-export const printers = pgTable('printers', {
-  id: uuid('id').primaryKey().defaultRandom(),
+export const printers = sqliteTable('printers', {
+  id: text('id').primaryKey().$defaultFn(newId),
   name: text('name').notNull(),
   type: text('type').notNull(), // zpl | cups | dymo
   host: text('host'),
@@ -83,38 +91,38 @@ export const printers = pgTable('printers', {
   dpi: integer('dpi').notNull().default(203),
   labelWmm: real('label_w_mm').notNull().default(57),
   labelHmm: real('label_h_mm').notNull().default(32),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 });
 
-export const settings = pgTable('settings', {
+export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
-  value: jsonb('value').notNull(),
+  value: text('value', { mode: 'json' }).notNull(),
 });
 
 // --- Better Auth tables (export names must match its model names) ------------
 
-export const user = pgTable('user', {
+export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
-  emailVerified: boolean('email_verified').notNull().default(false),
+  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
   image: text('image'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: ts('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-export const session = pgTable('session', {
+export const session = sqliteTable('session', {
   id: text('id').primaryKey(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  expiresAt: ts('expires_at').notNull(),
   token: text('token').notNull().unique(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: ts('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-export const account = pgTable('account', {
+export const account = sqliteTable('account', {
   id: text('id').primaryKey(),
   accountId: text('account_id').notNull(),
   providerId: text('provider_id').notNull(),
@@ -122,30 +130,30 @@ export const account = pgTable('account', {
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
   idToken: text('id_token'),
-  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
-  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+  accessTokenExpiresAt: ts('access_token_expires_at'),
+  refreshTokenExpiresAt: ts('refresh_token_expires_at'),
   scope: text('scope'),
   password: text('password'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: ts('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-export const verification = pgTable('verification', {
+export const verification = sqliteTable('verification', {
   id: text('id').primaryKey(),
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  expiresAt: ts('expires_at').notNull(),
+  createdAt: ts('created_at').$defaultFn(() => new Date()),
+  updatedAt: ts('updated_at').$defaultFn(() => new Date()),
 });
 
-export const mcpTokens = pgTable('mcp_tokens', {
-  id: uuid('id').primaryKey().defaultRandom(),
+export const mcpTokens = sqliteTable('mcp_tokens', {
+  id: text('id').primaryKey().$defaultFn(newId),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   token: text('token').notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+  lastUsedAt: ts('last_used_at'),
 });
 
 export type Label = typeof labels.$inferSelect;

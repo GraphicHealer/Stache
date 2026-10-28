@@ -7,14 +7,16 @@ overwrites.
 
 ## Stack
 
-- `server/` - Fastify + TypeScript + Drizzle ORM on Postgres (pgvector).
+- `server/` - Fastify + TypeScript + Drizzle ORM on **embedded SQLite**
+  (better-sqlite3). Vectors in `sqlite-vec` (vec0, cosine), full-text in
+  FTS5 `items_fts` (trigger-synced), fuzzy ranking in `lib/textsearch.ts`.
   Bundled with esbuild (`--packages=external`); `tsc --noEmit` for typecheck.
 - `client/` - React + Vite PWA (offline outbox in IndexedDB, service worker
   caching, camera-first UX, Zebra wedge-scanner input).
 - `Dockerfile` - multi-stage: deps → build → runtime (`node:22-bookworm-slim`,
   non-root `node` user, `cups-client` for label printing).
-- `docker-compose.yml` - `app` + `db` (`pgvector/pgvector:pg18`). One app
-  container only - no separate ML/AI service; CLIP runs in-process.
+- `docker-compose.yml` - a single `app` service, no DB container. Everything
+  persists under `/data` (stash.db + photos + model cache).
 
 ## Build & verify
 
@@ -29,7 +31,7 @@ curl localhost:8080/api/health
   Add new ones as the next sequential file; never edit applied migrations.
 - Server build: `npm run build -w server` (esbuild bundle + tsc typecheck).
 - Client build: `npm run build -w client` (tsc --noEmit + vite build + PWA).
-- Dev loop (needs local Node): `docker compose up db`, then `npm run dev`.
+- Dev loop (needs local Node): `npm run dev` - SQLite file lands in `data/`.
 
 ## Key paths
 
@@ -38,7 +40,8 @@ curl localhost:8080/api/health
 | API routes | `server/src/routes/{areas,items,labels,search,settings,printers,out}.ts` |
 | Out/missing | `server/src/lib/digest.ts` (statuses, digest, webhooks) |
 | MCP endpoint | `server/src/mcp.ts` - `/mcp/<slug>` + separate bearer token |
-| In-process CLIP | `server/src/lib/ml.ts` (transformers.js, cache in `/data/models`) |
+| In-process CLIP | `server/src/lib/ml.ts` (transformers.js q8, lazy, `/data/models`) |
+| Raw SQL helpers | `query`/`queryOne`/`placeholders` from `server/src/db/index.ts` |
 | VLM suggestions | `server/src/lib/ai.ts` (OpenAI-compatible endpoint, optional) |
 | Barcode detect/lookup | `server/src/lib/barcodes.ts` (zxing-wasm + Open*Facts) |
 | Photo pipeline | `server/src/lib/photos.ts` (sharp: EXIF-rotate → webp + thumb) |
@@ -52,19 +55,23 @@ curl localhost:8080/api/health
   reverse it; handlers return `event_id`/`event_ids` for the undo toast.
 - **AI fields**: write `ai_*`/`detected_codes`/`embedding` only - never
   `name`/`description`. Blank/null beats guessing.
-- **jsonb columns** come back `unknown` from Drizzle - cast before iterating.
+- **json columns** (`mode: 'json'`) come back `unknown` from Drizzle - cast
+  before iterating. Timestamps are `timestamp_ms` INTEGER columns: always
+  coerce JSON payload strings back to `Date` before `.set()`.
 - **Multipart** parts are a union type - narrow on `part.type === 'file'`
   before `toBuffer()`.
 - **sharp**: never reuse a pipeline; call `.metadata()` on a fresh instance.
+  `sharp.concurrency(2)` caps libvips threads (small hosts stay responsive).
 - **SPA fallback** serves index.html for unknown GETs - register API/special
   routes (like `/mcp`) explicitly or they'll 200 HTML.
-- **pg_trgm**: use explicit `word_similarity(...) > 0.3`, not the default
-  `%` threshold; `fuzzystrmatch` gives levenshtein/soundex fallback.
+- **SQLite notes**: uuids are app-side text (`$defaultFn`); no `ILIKE` (use
+  `lower()` or `LIKE`); recursive CTEs and `json_extract` work; vec0 KNN is
+  `embedding MATCH ? AND k = ?`; FTS5 query strings come from `ftsQuery()`.
+- **Memory**: CLIP loads lazily on first embed (~200MB boot, ~450-500MB warm,
+  q8 + 2 threads). `STASH_NO_ML=1` disables ML entirely for tiny hosts.
 - **Zebra wedge scans** = rapid keystrokes ending in Enter (`parseScan`).
-- `/data` must stay writable by the `node` user (photos + model cache).
+- `/data` must stay writable by the `node` user (db + photos + model cache).
 - Docker daemon access may need `sg docker -c "..."` in a stale shell.
-- DB may warn about collation version mismatch (pgvector image vs older
-  DB) - cosmetic; `ALTER DATABASE stash REFRESH COLLATION VERSION` clears it.
 
 - **Auth**: Better Auth at `/api/auth/*` (`server/src/auth.ts`). First signup is
   open; afterward accounts are created by logged-in members via `POST /api/users`.
@@ -72,21 +79,21 @@ curl localhost:8080/api/health
   session; `/api/auth`, `/api/health`, `/api/setup`, `/mcp` are open. Secret
   persists in `settings.auth_secret` (env `BETTER_AUTH_SECRET` overrides).
 - **Privacy**: `items.is_private` + `items.owner_id`. Filter via
-  `itemVisible(userId)` (drizzle) or `AND (is_private=false OR owner_id=$uid)`
+  `itemVisible(userId)` (drizzle) or `AND (is_private = 0 OR owner_id = ?)`
   in raw SQL. `req.user` is set by the guard. MCP sees shared items only.
   Drizzle export names `user`/`session`/`account`/`verification` are fixed -
   Better Auth's adapter looks them up by key.
 - **Out/missing**: `status` is `home|out|lent|unaccounted|gone` (`gone` also
   sets `hidden_at`). `area_id` is always the home area - put-back is just
   `status='home'`, no move. Out for 30+ days displays as unaccounted.
-  Timestamps crossing JSONB (event payloads, PATCH bodies) arrive as strings -
+  Timestamps crossing JSON (event payloads, PATCH bodies) arrive as strings -
   coerce to `Date` before drizzle `.set()` or you'll hit
   `value.toISOString is not a function`.
 - **Digest/webhooks**: `/api/webhooks/*` are session-exempt but require the
   `settings.webhook_token` query param. Digest config lives in
   `settings.digest`; scheduler compares against container `TZ`.
-- **Optional item fields**: `warranty_until` (date, mode 'string' so no Date
-  coercion) and `restock_below` (int). Low stock = `quantity <= restock_below`;
+- **Optional item fields**: `warranty_until` (TEXT 'YYYY-MM-DD') and
+  `restock_below` (int). Low stock = `quantity <= restock_below`;
   surfaces in `/api/inbox`, the digest payload, and `out-sensor` - never alerts.
 - **MCP writes**: `add_item` (files an item; resolves area by id/label/name,
   find-or-create on name) and `update_item` (fields + status, same event
@@ -99,4 +106,4 @@ curl localhost:8080/api/health
 - External barcode lookup is free-tier only (Open*Facts); misses return
   `product: null` - never error, never block filing.
 - AI/ML is optional and non-blocking: filing works with no models loaded;
-  embeddings degrade quietly until CLIP finishes caching.
+  CLIP embeds lazily in the background, `STASH_NO_ML=1` disables it fully.
