@@ -56,6 +56,10 @@ Click the badge to add this repo to your add-on store, then install **Stash** an
 
 **MCP** (Settings → MCP connections): each connection gets its own `/mcp/<slug>` URL plus a separate bearer token. Eight tools - search, areas, contents, details, move, resolve label, `add_item`, `update_item` - so assistants can answer "where is my soldering iron" or file receipts and voice descriptions for you. Front with HTTPS to expose externally.
 
+## Unraid
+
+Single container, no database service - the appdata folder holds everything. A ready-made Community Applications template and full install guide live in [`unraid/`](unraid/unraid.md).
+
 ## Configuration
 
 | Variable | Default | Purpose |

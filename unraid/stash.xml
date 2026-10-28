@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Stash</Name>
+  <Repository>ghcr.io/graphichealer/stash:latest</Repository>
+  <Registry>https://github.com/GraphicHealer/Stash/pkgs/container/stash</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/GraphicHealer/Stash/issues</Support>
+  <Project>https://github.com/GraphicHealer/Stash</Project>
+  <Overview>Self-hosted, photo-first home inventory. "Where is my stuff?" - snap a photo, drop the thing in a bin, scan the bin's QR label. No names required, no categories, no forms. Search by text, barcode, or photo; out/missing tracking; QR area labels; offline PWA; optional AI.</Overview>
+  <Category>HomeAutomation: Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]</WebUI>
+  <Icon>https://raw.githubusercontent.com/GraphicHealer/Stash/main/stash/icon.png</Icon>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
+  <Config Name="WebUI" Target="8080" Default="8080" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/stash" Mode="rw" Description="SQLite database + photos + AI model cache. Back up this folder." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/stash</Config>
+  <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Timezone used by the digest schedule" Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
+  <Config Name="BETTER_AUTH_SECRET" Target="BETTER_AUTH_SECRET" Default="" Mode="" Description="Session secret. Optional - auto-generated and persisted if left blank." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="STASH_NO_ML" Target="STASH_NO_ML" Default="" Mode="" Description="Set to 1 to disable CLIP embeddings (very low-RAM hosts)" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+</Container>
