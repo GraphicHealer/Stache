@@ -50,10 +50,15 @@ export function buildApp() {
   }
 
   // Photo storage (separate mount so it can't clash with the SPA wildcard).
+  // UUID filenames never change - long private cache, no shared-proxy cache.
   app.register(fastifyStatic, {
     root: path.join(env.dataDir, 'photos'),
     prefix: '/photos/',
     decorateReply: false,
+    cacheControl: false,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    },
   });
 
   app.get('/api/health', async () => ({ ok: true, version: env.appVersion }));
@@ -73,13 +78,14 @@ export function buildApp() {
   app.addHook('onRequest', async (req, reply) => {
     const url = req.raw.url ?? '';
     const protectedPath = url.startsWith('/api') || url.startsWith('/photos');
+    // Static assets don't need a session lookup at all.
+    if (!protectedPath) return;
     const open =
       url === '/api/health' ||
       url === '/api/setup' ||
       url.startsWith('/api/auth') ||
-      url.startsWith('/api/webhooks/') ||
-      url.startsWith('/mcp');
-    if (!protectedPath || open) {
+      url.startsWith('/api/webhooks/');
+    if (open) {
       req.user = await sessionUser(req).catch(() => null);
       return;
     }

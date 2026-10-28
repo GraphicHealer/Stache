@@ -37,27 +37,19 @@ const LOOKUP_BASES = [
   'https://world.openbeautyfacts.org',
 ];
 
-/** Free product lookup - Open*Facts APIs, first hit wins. */
+/** Free product lookup - Open*Facts APIs raced, first hit wins. */
 export async function lookupBarcode(code: string): Promise<ProductInfo | null> {
-  for (const base of LOOKUP_BASES) {
-    try {
-      const res = await fetch(`${base}/api/v2/product/${encodeURIComponent(code)}.json`, {
-        signal: AbortSignal.timeout(5000),
-        headers: { 'User-Agent': 'StacheInventory/0.1 (self-hosted)' },
-      });
-      if (!res.ok) continue;
-      const data: any = await res.json();
-      const name = data?.product?.product_name ?? data?.product?.product_name_en;
-      if (name) {
-        return {
-          name,
-          brand: data.product.brands ?? null,
-          source: new URL(base).hostname,
-        };
-      }
-    } catch {
-      /* try next provider */
-    }
-  }
-  return null;
+  const attempts = LOOKUP_BASES.map(async (base): Promise<ProductInfo> => {
+    const res = await fetch(`${base}/api/v2/product/${encodeURIComponent(code)}.json`, {
+      signal: AbortSignal.timeout(5000),
+      headers: { 'User-Agent': 'StacheInventory/0.1 (self-hosted)' },
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data: any = await res.json();
+    const name = data?.product?.product_name ?? data?.product?.product_name_en;
+    if (!name) throw new Error('no product');
+    return { name, brand: data.product.brands ?? null, source: new URL(base).hostname };
+  });
+  // All-miss resolves null; a hit returns as soon as the fastest provider has one.
+  return Promise.any(attempts).catch(() => null);
 }

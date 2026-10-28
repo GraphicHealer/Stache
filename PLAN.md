@@ -160,7 +160,7 @@ What it does, as **suggestions** you accept, edit, or ignore:
 - Read text in the image: brand names, model numbers, packaging labels. **[done - VLM OCR]**
 - Split a photo of a pile into separate items. **[done]** - explicit "Split pile…" action on the item page; the VLM proposes regions but nothing is filed until the user checks the ones they want, so background clutter never becomes phantom items.
 - Suggest which area a new photo belongs in, based on where similar things already live. **[done]**
-- Power photo and fuzzy-language search. **[done - CLIP + pg_trgm/levenshtein]**
+- Power photo and fuzzy-language search. **[done - CLIP + FTS5/fuzzy]**
 
 Design rules - all implemented:
 
@@ -201,7 +201,7 @@ Design rules - all implemented:
 ## Decisions taken (was "open questions")
 
 - **Backend:** Node.js, Fastify, Drizzle ORM.
-- **Storage/search:** Postgres + `pgvector` (CLIP embeddings), `pg_trgm`/`fuzzystrmatch` fuzzy, full-text search.
+- **Storage/search:** embedded SQLite (better-sqlite3) + `sqlite-vec` (CLIP embeddings), FTS5 + JS fuzzy ranking (trigram/levenshtein/soundex).
 - **Client:** PWA (React + Vite), IndexedDB outbox, service worker - no native app needed.
 - **Label printer:** all of them - ZPL network, CUPS, DYMO Connect.
 - **Bulk/tiny items:** one entry + quantity field; consumables get an optional restock threshold.

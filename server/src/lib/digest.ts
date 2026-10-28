@@ -98,17 +98,20 @@ export async function fetchMissing(userId: string | null = null) {
   return { out, unaccounted };
 }
 
-const areaPathCache = new Map<string, string>();
-async function areaPath(areaId: string): Promise<string> {
-  if (!areaPathCache.has(areaId)) {
+// Breadcrumb lookups are cached per call only - a module-level cache would
+// go stale on renames/moves and grow forever.
+type PathCache = Map<string, string>;
+async function areaPath(areaId: string, cache: PathCache): Promise<string> {
+  if (!cache.has(areaId)) {
     const c = await breadcrumb(areaId);
-    areaPathCache.set(areaId, c.map((x) => x.name ?? '?').join(' › '));
+    cache.set(areaId, c.map((x) => x.name ?? '?').join(' › '));
   }
-  return areaPathCache.get(areaId)!;
+  return cache.get(areaId)!;
 }
 
 export async function outJson(rows: OutRow[]) {
   const thumbs = await thumbsForItems(rows.map((r) => r.id));
+  const paths: PathCache = new Map();
   return Promise.all(
     rows.map(async (r) => {
       const t = thumbs.get(r.id);
@@ -120,7 +123,7 @@ export async function outJson(rows: OutRow[]) {
         out_since: r.outSince,
         days: daysOut(r.outSince),
         area_id: r.areaId,
-        area_path: await areaPath(r.areaId),
+        area_path: await areaPath(r.areaId, paths),
         snoozed: !!(r.remindSnoozedUntil && r.remindSnoozedUntil > new Date()),
         thumb: t ? thumbUrl(t) : null,
       };
@@ -176,6 +179,7 @@ export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
     return { sent: false, count: list.length };
   }
   const thumbs = await thumbsForItems(list.map((r) => r.id));
+  const paths: PathCache = new Map();
   const base = cfg.base_url.replace(/\/$/, '');
   const payload = {
     text:
@@ -187,7 +191,7 @@ export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
       list.map(async (r) => ({
         id: r.id,
         name: r.name,
-        path: await areaPath(r.areaId),
+        path: await areaPath(r.areaId, paths),
         out_since: r.outSince,
         days: daysOut(r.outSince),
         status: r.status === 'unaccounted' ? 'unaccounted' : 'out',
@@ -199,7 +203,7 @@ export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
         name: i.name,
         quantity: i.quantity,
         restock_below: i.restockBelow,
-        path: await areaPath(i.areaId),
+        path: await areaPath(i.areaId, paths),
       })),
     ),
     warranty_expiring: warranties.map((i) => ({
@@ -207,12 +211,13 @@ export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
       warranty_until: i.warrantyUntil,
     })),
   };
-  await fetch(cfg.webhook_url, {
+  const res = await fetch(cfg.webhook_url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(8000),
   });
+  if (!res.ok) throw new Error(`webhook returned ${res.status}`);
   return { sent: true, count: list.length };
 }
 
@@ -225,7 +230,8 @@ export function startDigestScheduler(): void {
       const now = new Date();
       const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       if (hhmm !== cfg.time) return;
-      const today = now.toISOString().slice(0, 10);
+      // Local date, not UTC - a toISOString() date can be "tomorrow" locally.
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const [row] = await db.select().from(settings).where(eq(settings.key, 'digest_last'));
       if (row?.value === today) return;
       const { sent } = await sendDigest();

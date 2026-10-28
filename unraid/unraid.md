@@ -46,9 +46,9 @@ optional AI provider URL reach services on the Unraid host, e.g. Ollama at
 
 ## Notes
 
-- **Memory:** ~150-200MB idle. Photo similarity (CLIP) loads lazily on the
-  first photo upload or photo search and adds ~300MB once warm - the model
-  downloads once (~150MB) into the appdata folder. `STACHE_NO_ML=1` skips it.
+- **Memory:** ~200MB idle. Photo similarity (CLIP) loads lazily on the first
+  photo upload or search - once warm the app sits around 450-550MB; the model
+  downloads once into the appdata folder. `STACHE_NO_ML=1` skips it entirely.
 - **Permissions:** the container fixes `/data` ownership itself at startup,
   so `nobody:users` appdata is fine.
 - **AI providers:** configure an OpenAI-compatible endpoint in Settings.

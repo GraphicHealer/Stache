@@ -39,7 +39,9 @@ Open `http://<host>:8080`, create the first household account, then head to `/la
 
 Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/stache`) - the embedded SQLite database, photos, and AI model cache all live in the `stache_data` volume at `/data`. Backup is copying that volume.
 
-**Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or photo search, not at boot - once warm the app sits around 450-550MB. On very small hosts, set `STACHE_NO_ML=1` to disable embeddings entirely; everything else keeps working.
+**Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or search, not at boot - once warm the app sits around 450-550MB. On very small hosts, set `STACHE_NO_ML=1` to disable embeddings entirely; everything else keeps working.
+
+**One caveat on plain HTTP:** the live camera viewfinder, clipboard copy buttons, and offline PWA features need a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts) - `localhost` counts, `http://192.168.x.x` does not. Over plain `http://<lan-ip>:8080` the app still works (photo capture falls back to the file picker), but for the full experience front it with HTTPS: a reverse proxy like Caddy/NPM, a Tailscale cert, or your Home Assistant ingress URL.
 
 ## How it works
 
@@ -52,7 +54,7 @@ Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/sta
 
 Everything below is off by default - the app is fully usable without any of it.
 
-**AI** (Settings → Setup): point at any OpenAI-compatible `/chat/completions` endpoint (`http://host.docker.internal:11434/v1` for Ollama) with a vision model. New photos get suggested names/tags/descriptions in the background, CLIP powers visual search in-process, and "Split pile…" breaks a photo of many things into separate items you approve.
+**AI** (Settings → AI suggestions): off, built-in (Florence-2 downloads ~700MB into `/data` on first use, runs offline after), or an external OpenAI-compatible `/chat/completions` endpoint (`http://host.docker.internal:11434/v1` for Ollama) with a vision model. New photos get suggested names/tags/descriptions in the background, CLIP powers visual search in-process, and "Split pile…" breaks a photo of many things into separate items you approve.
 
 **Out reminders** (Settings → Out reminders): one bundled digest POST to any webhook (ntfy, Discord, Home Assistant), daily at a time you pick or triggered externally. Snoozable per item, never per-item pings.
 
