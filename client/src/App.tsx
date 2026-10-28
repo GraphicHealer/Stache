@@ -12,6 +12,7 @@ import { InboxPage } from './pages/InboxPage';
 import { LabelsPage } from './pages/LabelsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OutPage } from './pages/OutPage';
+import { TrashPage } from './pages/TrashPage';
 import { LoginPage } from './pages/LoginPage';
 
 /**
@@ -94,6 +95,10 @@ const NAV = [
     icon: <svg {...ICON_PROPS}><path d="M20.59 13.41 13.41 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.83z" /><circle cx="7" cy="7" r="1.5" /></svg>,
   },
   {
+    to: '/trash', label: 'Trash',
+    icon: <svg {...ICON_PROPS}><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>,
+  },
+  {
     to: '/settings', label: 'Setup',
     icon: <svg {...ICON_PROPS}><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" /></svg>,
   },
@@ -117,6 +122,7 @@ export function App() {
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/out" element={<OutPage />} />
           <Route path="/labels" element={<LabelsPage />} />
+          <Route path="/trash" element={<TrashPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="*"

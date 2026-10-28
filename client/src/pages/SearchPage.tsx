@@ -3,26 +3,53 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { downscale } from '../image';
 import { CaptureInput, ItemGrid } from '../components/Bits';
 
 const path = (crumb: { name: string | null }[]) =>
-  crumb.map((c) => c.name ?? '?').join(' › ');
+  (crumb ?? []).map((c) => c.name ?? '?').join(' › ');
+
+const STATUSES = ['home', 'out', 'lent', 'unaccounted', 'gone'];
 
 export function SearchPage() {
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState(params.get('q') ?? '');
   const barcode = params.get('barcode') ?? '';
   const query = params.get('q') ?? '';
+  const status = params.get('status') ?? '';
+  const areaId = params.get('area_id') ?? '';
+  const priv = params.get('private') ?? '';
   const { toast } = useApp();
   const [photoResults, setPhotoResults] = useState<any[] | null>(null);
   const [photoSearching, setPhotoSearching] = useState(false);
 
+  const { data: areaList } = useQuery({
+    queryKey: ['areas'],
+    queryFn: () => api.get('/api/areas'),
+  });
+
+  const filterParams = () => {
+    const p = new URLSearchParams();
+    if (query) p.set('q', query);
+    if (status) p.set('status', status);
+    if (areaId) p.set('area_id', areaId);
+    if (priv) p.set('private', priv);
+    return p.toString();
+  };
+
   const { data, isFetching } = useQuery({
-    queryKey: ['search', query, barcode],
+    queryKey: ['search', query, barcode, status, areaId, priv],
     queryFn: () =>
       api.get(barcode ? `/api/search?barcode=${encodeURIComponent(barcode)}`
-                      : `/api/search?q=${encodeURIComponent(query)}`),
-    enabled: !!(query || barcode),
+                      : `/api/search?${filterParams()}`),
+    enabled: !!(query || barcode || status || areaId || priv),
+  });
+
+  // "Recently filed" feed when nothing is being searched.
+  const { data: recent } = useQuery({
+    queryKey: ['recent'],
+    queryFn: () => api.get('/api/recent'),
+    enabled: !(query || barcode || status || areaId || priv || photoResults),
   });
 
   const submit = (e: React.FormEvent) => {
@@ -31,11 +58,17 @@ export function SearchPage() {
     setParams(q ? { q } : {});
   };
 
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    value ? next.set(key, value) : next.delete(key);
+    setParams(next);
+  };
+
   const searchByPhoto = async (blob: Blob) => {
     setPhotoSearching(true);
     try {
       const form = new FormData();
-      form.append('photo', blob, 'photo.jpg');
+      form.append('photo', await downscale(blob), 'photo.jpg');
       const r = await api.upload('/api/search/photo', form);
       setPhotoResults(r.items);
       setParams({});
@@ -48,6 +81,7 @@ export function SearchPage() {
   };
 
   const displayItems = photoResults ?? data?.items;
+  const showRecent = !(query || barcode || status || areaId || priv || photoResults);
 
   return (
     <div className="page">
@@ -62,6 +96,38 @@ export function SearchPage() {
         />
         <CaptureInput onCapture={searchByPhoto}>By photo</CaptureInput>
       </form>
+      <div className="row">
+        <select
+          className="input"
+          style={{ width: 'auto', flex: 1 }}
+          value={status}
+          onChange={(e) => setFilter('status', e.target.value)}
+        >
+          <option value="">Any status</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select
+          className="input"
+          style={{ width: 'auto', flex: 1 }}
+          value={areaId}
+          onChange={(e) => setFilter('area_id', e.target.value)}
+        >
+          <option value="">Any area</option>
+          {(areaList?.areas ?? []).map((a: any) => (
+            <option key={a.id} value={a.id}>{a.name ?? 'unnamed'}</option>
+          ))}
+        </select>
+        <select
+          className="input"
+          style={{ width: 'auto', flex: 1 }}
+          value={priv}
+          onChange={(e) => setFilter('private', e.target.value)}
+        >
+          <option value="">Shared + private</option>
+          <option value="0">Shared only</option>
+          <option value="1">Private only</option>
+        </select>
+      </div>
       {photoSearching && <p className="muted">Looking for similar things…</p>}
       {photoResults && (
         <p className="muted">
@@ -95,6 +161,20 @@ export function SearchPage() {
               thumb: i.thumb,
               sub: path(i.breadcrumb),
               badge: i.not_here_count > 0 ? 'unsure' : undefined,
+            }))}
+            linkTo={(id) => `/items/${id}`}
+          />
+        </>
+      )}
+      {showRecent && recent?.items && (
+        <>
+          <h2>Recently filed</h2>
+          <ItemGrid
+            items={recent.items.map((i: any) => ({
+              id: i.id,
+              name: i.name,
+              thumb: i.thumb,
+              sub: path(i.breadcrumb),
             }))}
             linkTo={(id) => `/items/${id}`}
           />

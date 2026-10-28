@@ -50,6 +50,10 @@ jobs:
       # store's update prompt always points at a published image.
       - name: Sync add-on version
         run: |
+          # The release checkout sits on the tag - push must come from main or
+          # a non-fast-forward is possible (release tags aren't always HEAD).
+          git fetch origin main
+          git checkout main
           # Image tags are semver without the leading v (metadata-action pattern).
           sed -i "s/^version:.*/version: \"${GITHUB_REF_NAME#v}\"/" stache/config.yaml
           git config user.name "github-actions[bot]"

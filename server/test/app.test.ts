@@ -1,0 +1,117 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { eq } from 'drizzle-orm';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+// Fresh temp DATA_DIR before any src import - env.ts reads it at load time.
+process.env.DATA_DIR = mkdtempSync(path.join(tmpdir(), 'stache-test-'));
+
+let db: any, schema: any, itemVisible: any, undoEvent: any, recordEventTx: any;
+let app: any;
+
+beforeAll(async () => {
+  const { runMigrations } = await import('../src/migrate');
+  await runMigrations(() => {});
+  ({ db } = await import('../src/db'));
+  schema = await import('../src/db/schema');
+  ({ itemVisible } = await import('../src/lib/visibility'));
+  ({ undoEvent, recordEventTx } = await import('../src/lib/events'));
+  const { initAuth } = await import('../src/auth');
+  await initAuth();
+  const { buildApp } = await import('../src/app');
+  app = buildApp();
+  await app.ready();
+});
+
+async function mkArea(name = 'bin') {
+  const [a] = await db.insert(schema.areas).values({ name }).returning();
+  return a;
+}
+
+async function mkUser(id: string) {
+  await db.insert(schema.user)
+    .values({ id, name: id, email: `${id}@t.dev`, emailVerified: false })
+    .onConflictDoNothing();
+}
+
+describe('visibility rules', () => {
+  it('shared items are visible to everyone; private only to their owner', async () => {
+    await mkUser('u1');
+    await mkUser('u2');
+    const a = await mkArea();
+    const mk = (v: any) => db.insert(schema.items).values({ areaId: a.id, ...v }).returning();
+    const [shared] = await mk({});
+    const [mine] = await mk({ isPrivate: true, ownerId: 'u1' });
+    const [theirs] = await mk({ isPrivate: true, ownerId: 'u2' });
+
+    const ids = (uid: string | null) =>
+      new Set(
+        db.select({ id: schema.items.id }).from(schema.items)
+          .where(itemVisible(uid)).all().map((r: any) => r.id),
+      );
+
+    expect(ids('u1').has(shared.id)).toBe(true);
+    expect(ids('u1').has(mine.id)).toBe(true);
+    expect(ids('u1').has(theirs.id)).toBe(false);
+    expect(ids(null).has(mine.id)).toBe(false);
+    expect(ids(null).has(shared.id)).toBe(true);
+  });
+});
+
+describe('undoEvent', () => {
+  it('reverses an item.moved event recorded atomically with the update', async () => {
+    const a = await mkArea('a');
+    const b = await mkArea('b');
+    const [i] = await db.insert(schema.items).values({ areaId: a.id }).returning();
+
+    const ev = db.transaction((tx: any) => {
+      tx.update(schema.items).set({ areaId: b.id }).where(eq(schema.items.id, i.id)).run();
+      return recordEventTx(
+        tx, 'item.moved', 'item', i.id,
+        { from_area_id: a.id, to_area_id: b.id }, 'u1',
+      );
+    });
+
+    let [r] = await db.select().from(schema.items).where(eq(schema.items.id, i.id));
+    expect(r.areaId).toBe(b.id);
+
+    const res = await undoEvent(ev.id);
+    expect(res.ok).toBe(true);
+    [r] = await db.select().from(schema.items).where(eq(schema.items.id, i.id));
+    expect(r.areaId).toBe(a.id);
+  });
+
+  it('undo of item.hidden restores visibility, and double-undo fails', async () => {
+    const a = await mkArea();
+    const [i] = await db.insert(schema.items).values({ areaId: a.id }).returning();
+    const ev = db.transaction((tx: any) => {
+      tx.update(schema.items).set({ hiddenAt: new Date() })
+        .where(eq(schema.items.id, i.id)).run();
+      return recordEventTx(tx, 'item.hidden', 'item', i.id, { name: 'x' }, 'u1');
+    });
+    expect((await undoEvent(ev.id)).ok).toBe(true);
+    const [r] = await db.select().from(schema.items).where(eq(schema.items.id, i.id));
+    expect(r.hiddenAt).toBeNull();
+    expect((await undoEvent(ev.id)).ok).toBe(false);
+  });
+});
+
+describe('api (fastify.inject)', () => {
+  it('health is open', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+  });
+
+  it('protected routes 401 without a session', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/areas' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('setup is public (fixture users exist, so needs_setup is false)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/setup' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().needs_setup).toBe(false);
+  });
+});

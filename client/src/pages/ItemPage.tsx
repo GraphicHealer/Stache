@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
 import { Breadcrumb, CaptureInput } from '../components/Bits';
@@ -76,7 +77,7 @@ export function ItemPage() {
 
   const uploadPhoto = async (blob: Blob) => {
     const form = new FormData();
-    form.append('photo', blob, 'photo.jpg');
+    form.append('photo', await downscale(blob), 'photo.jpg');
     await api.upload(`/api/items/${id}/photos`, form).catch((e) => toast(e.message));
     refresh();
   };
@@ -283,6 +284,12 @@ export function ItemPage() {
         </label>
       )}
       {item.is_private && <span className="badge warn">private</span>}
+      {item.duplicate_of && (
+        <p className="muted">
+          This photo looks very similar to{' '}
+          <Link to={`/items/${item.duplicate_of}`}>another item</Link> - possible duplicate.
+        </p>
+      )}
       {item.takeout_count > 0 && (
         <p className="muted">
           Taken out {item.takeout_count}×

@@ -97,39 +97,65 @@ export function warmClip(): void {
   ensureClip().catch(() => {});
 }
 
+// Inference is serialized: ONNX calls are CPU-bound and unbounded bursts
+// would starve small hosts. One at a time, queued.
+let inferenceChain: Promise<unknown> = Promise.resolve();
+function serialize<T>(fn: () => Promise<T>): Promise<T> {
+  const p = inferenceChain.then(fn);
+  inferenceChain = p.catch(() => {});
+  return p;
+}
+
 export async function embedImage(buf: Buffer): Promise<number[]> {
-  const clip = await ensureClip();
-  const image = await rawImage(buf);
-  const inputs = await clip.processor(image);
-  const { image_embeds } = await clip.vision(inputs);
-  return l2norm(image_embeds.data as Float32Array);
+  return serialize(async () => {
+    const clip = await ensureClip();
+    const image = await rawImage(buf);
+    const inputs = await clip.processor(image);
+    const { image_embeds } = await clip.vision(inputs);
+    return l2norm(image_embeds.data as Float32Array);
+  });
 }
 
 export async function embedText(text: string): Promise<number[]> {
-  const clip = await ensureClip();
-  const inputs = clip.tokenizer([text], { padding: true, truncation: true });
-  const { text_embeds } = await clip.textModel(inputs);
-  return l2norm(text_embeds.data as Float32Array);
+  return serialize(async () => {
+    const clip = await ensureClip();
+    const inputs = clip.tokenizer([text], { padding: true, truncation: true });
+    const { text_embeds } = await clip.textModel(inputs);
+    return l2norm(text_embeds.data as Float32Array);
+  });
 }
 
-/** CLIP-embeds an item's photo and stores the vector in the vec0 table. */
-export async function analyzeItemPhoto(itemId: string, photoPath: string): Promise<void> {
+/**
+ * CLIP-embeds a photo and stores the vector keyed by photo_id (an item can
+ * have several photos; all of them get vectors). Then looks for a
+ * near-identical photo on a different item and flags it as a possible
+ * duplicate - a hint shown at filing time.
+ */
+export async function analyzeItemPhoto(itemId: string, photoId: string, photoPath: string): Promise<void> {
   const buf = await fs.readFile(path.join(env.dataDir, 'photos', photoPath));
   const embedding = await embedImage(buf);
   sqlite
-    .prepare('INSERT OR REPLACE INTO item_embeddings (item_id, embedding) VALUES (?, ?)')
-    .run(itemId, vecLiteral(embedding));
+    .prepare('INSERT OR REPLACE INTO photo_embeddings (photo_id, item_id, embedding) VALUES (?, ?, ?)')
+    .run(photoId, itemId, vecLiteral(embedding));
+
+  const dup = knnVisible('?', [vecLiteral(embedding)], 8, null).find(
+    (n) => n.id !== itemId && n.dist < 0.06,
+  );
+  sqlite
+    .prepare('UPDATE items SET duplicate_of = ? WHERE id = ?')
+    .run(dup?.id ?? null, itemId);
 }
 
 /** Does an item have a stored embedding? (was `item.embedding IS NOT NULL`). */
 export function hasEmbedding(itemId: string): boolean {
-  return !!queryOne('SELECT 1 AS x FROM item_embeddings WHERE item_id = ?', itemId);
+  return !!queryOne('SELECT 1 AS x FROM photo_embeddings WHERE item_id = ?', itemId);
 }
 
 const vecLiteral = (v: number[]) => `[${v.join(',')}]`;
 
 /**
- * KNN over item_embeddings (cosine distance, same metric pgvector's <=> used).
+ * KNN over photo_embeddings (cosine distance, same metric pgvector's <=> used).
+ * Multiple photos can map to one item - deduped to best distance per item.
  * Over-fetches, then applies visibility/hidden filtering against items.
  * `viewerId` null → shared items only (e.g. MCP); a user id → shared + their private.
  */
@@ -140,13 +166,19 @@ function knnVisible(
   viewerId: string | null,
 ): { id: string; dist: number }[] {
   const knn = query<{ item_id: string; distance: number }>(
-    `SELECT item_id, distance FROM item_embeddings
+    `SELECT item_id, distance FROM photo_embeddings
      WHERE embedding MATCH ${embeddingExpr} AND k = ?`,
     ...params,
-    limit + 40,
+    limit + 80,
   );
   if (!knn.length) return [];
-  const ids = knn.map((r) => r.item_id);
+  const best = new Map<string, number>();
+  for (const r of knn) {
+    if (!best.has(r.item_id) || r.distance < best.get(r.item_id)!) {
+      best.set(r.item_id, r.distance);
+    }
+  }
+  const ids = [...best.keys()];
   const visible = new Set(
     query<{ id: string }>(
       `SELECT id FROM items WHERE id IN (${placeholders(ids.length)})
@@ -155,10 +187,11 @@ function knnVisible(
       viewerId,
     ).map((r) => r.id),
   );
-  return knn
-    .filter((r) => visible.has(r.item_id))
-    .slice(0, limit)
-    .map((r) => ({ id: r.item_id, dist: r.distance }));
+  return ids
+    .filter((id) => visible.has(id))
+    .map((id) => ({ id, dist: best.get(id)! }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, limit);
 }
 
 export async function nearestByVector(vec: number[], limit = 25, viewerId: string | null = null): Promise<{ id: string; dist: number }[]> {
@@ -167,7 +200,7 @@ export async function nearestByVector(vec: number[], limit = 25, viewerId: strin
 
 export async function nearestToItem(itemId: string, limit = 12, viewerId: string | null = null): Promise<{ id: string; dist: number }[]> {
   return knnVisible(
-    `(SELECT embedding FROM item_embeddings WHERE item_id = ?)`,
+    `(SELECT embedding FROM photo_embeddings WHERE item_id = ? LIMIT 1)`,
     [itemId],
     limit,
     viewerId,
@@ -214,23 +247,26 @@ export function ensureVlm(): Promise<Vlm> {
   return vlmPromise;
 }
 
-/** Run one Florence-2 task (`<CAPTION>`, `<OCR>`, `<OD>`, ...) on a photo. */
+/** Run one Florence-2 task (`<CAPTION>`, `<OCR>`, `<OD>`, ...) on a photo.
+ * Shares the same serialized queue as CLIP inference. */
 export async function vlmGenerate(buf: Buffer, task: string, maxNewTokens = 100): Promise<any> {
-  const vlm = await ensureVlm();
-  const image = await rawImage(buf);
-  const prompts = vlm.processor.construct_prompts(task);
-  const textInputs = vlm.tokenizer(prompts);
-  const visionInputs = await vlm.processor(image);
-  const ids = await vlm.model.generate({
-    ...textInputs,
-    ...visionInputs,
-    max_new_tokens: maxNewTokens,
+  return serialize(async () => {
+    const vlm = await ensureVlm();
+    const image = await rawImage(buf);
+    const prompts = vlm.processor.construct_prompts(task);
+    const textInputs = vlm.tokenizer(prompts);
+    const visionInputs = await vlm.processor(image);
+    const ids = await vlm.model.generate({
+      ...textInputs,
+      ...visionInputs,
+      max_new_tokens: maxNewTokens,
+    });
+    const text = vlm.tokenizer.batch_decode(ids, { skip_special_tokens: false })[0];
+    return {
+      result: vlm.processor.post_process_generation(text, task, image.size),
+      size: { width: image.width, height: image.height },
+    };
   });
-  const text = vlm.tokenizer.batch_decode(ids, { skip_special_tokens: false })[0];
-  return {
-    result: vlm.processor.post_process_generation(text, task, image.size),
-    size: { width: image.width, height: image.height },
-  };
 }
 
 /** True once Florence-2 weights are on disk (Settings can show "downloaded"). */

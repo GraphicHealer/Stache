@@ -113,11 +113,17 @@ export function fuzzyItemScore(
   }
   score = Math.max(score, wordSim(lq, la) * 0.6);
   if (wordSim(lq, la) > 0.3) matched = true;
-  for (const w of ln.split(/[^a-z0-9]+/)) {
-    if (w && (levenshtein(w, lq) <= 2 || soundex(w) === soundex(lq))) {
-      matched = true;
-      score = Math.max(score, 0.45);
-      break;
+  // Multi-word queries used to compare each name word against the whole
+  // query string, so levenshtein/soundex never fired. Compare per-token.
+  const qTokens = lq.split(/[^a-z0-9]+/).filter(Boolean);
+  outer: for (const w of ln.split(/[^a-z0-9]+/)) {
+    if (!w) continue;
+    for (const t of qTokens) {
+      if (levenshtein(w, t, 2) <= 2 || soundex(w) === soundex(t)) {
+        matched = true;
+        score = Math.max(score, 0.45);
+        break outer;
+      }
     }
   }
   if (barcode === q) score = Math.max(score, 1);

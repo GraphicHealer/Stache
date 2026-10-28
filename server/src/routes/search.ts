@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, inArray, or, type InferSelectModel } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, query, placeholders } from '../db';
 import { items } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
@@ -9,9 +9,31 @@ import { searchItemIds, wordSim, trigramSim, levenshtein, soundex } from '../lib
 
 export async function searchRoutes(app: FastifyInstance) {
   // ?q= fuzzy/full-text  ·  ?barcode= exact product match ("do I own this?")
+  // Optional filters: &status= &area_id= &private=1
   app.get('/api/search', async (req, reply) => {
-    const { q, barcode } = req.query as { q?: string; barcode?: string };
+    const { q, barcode, status, area_id, private: priv } = req.query as {
+      q?: string;
+      barcode?: string;
+      status?: string;
+      area_id?: string;
+      private?: string;
+    };
     const uid = req.user?.id ?? null;
+    const hasFilters = !!(status || area_id || priv);
+
+    // Post-filter matched ids by SQL - keeps result ordering intact.
+    const applyFilters = async (ids: string[]) => {
+      if (!hasFilters || !ids.length) return ids;
+      const conds = [inArray(items.id, ids)];
+      if (status) conds.push(eq(items.status, status));
+      if (area_id) conds.push(eq(items.areaId, area_id));
+      if (priv === '1') conds.push(eq(items.isPrivate, true));
+      if (priv === '0') conds.push(eq(items.isPrivate, false));
+      const ok = new Set(
+        (await db.select({ id: items.id }).from(items).where(and(...conds))).map((r) => r.id),
+      );
+      return ids.filter((id) => ok.has(id));
+    };
 
     if (barcode) {
       const rows = query<{ id: string }>(
@@ -22,11 +44,28 @@ export async function searchRoutes(app: FastifyInstance) {
         barcode,
         uid,
       );
-      return { items: await hydrateItems(rows.map((r) => r.id), uid), areas: [] };
+      return { items: await hydrateItems(await applyFilters(rows.map((r) => r.id)), uid), areas: [] };
     }
 
     const q2 = (q ?? '').trim();
-    if (!q2) return reply.badRequest('q or barcode is required');
+    if (!q2 && !hasFilters) return reply.badRequest('q or barcode is required');
+    if (!q2) {
+      // Filters-only browse: newest matching items.
+      const conds = [
+        isNull(items.hiddenAt),
+        uid ? or(eq(items.isPrivate, false), eq(items.ownerId, uid))! : eq(items.isPrivate, false),
+      ];
+      if (status) conds.push(eq(items.status, status));
+      if (area_id) conds.push(eq(items.areaId, area_id));
+      if (priv === '1') conds.push(eq(items.isPrivate, true));
+      const rows = await db
+        .select({ id: items.id })
+        .from(items)
+        .where(and(...conds))
+        .orderBy(desc(items.createdAt))
+        .limit(50);
+      return { items: await hydrateItems(rows.map((r) => r.id), uid), areas: [] };
+    }
 
     const itemRows = searchItemIds(q2, uid);
 
@@ -73,7 +112,7 @@ export async function searchRoutes(app: FastifyInstance) {
     }
 
     return {
-      items: await hydrateItems(itemIds, uid),
+      items: await hydrateItems(await applyFilters(itemIds), uid),
       areas: areaRows.map((a) => {
         const c = covers.get(a.id);
         return { id: a.id, name: a.name, cover_thumb: c ? thumbUrl(c) : null };
@@ -96,6 +135,23 @@ export async function searchRoutes(app: FastifyInstance) {
     }
     const neighbors = (await nearestByVector(vec, 25, req.user?.id ?? null)).filter((n) => 1 - n.dist > 0.2);
     return { items: await hydrateItems(neighbors.map((n) => n.id), req.user?.id ?? null), areas: [] };
+  });
+
+  // "Recently filed" feed - newest items plus the areas they landed in.
+  app.get('/api/recent', async (req) => {
+    const uid = req.user?.id ?? null;
+    const rows = await db
+      .select({ id: items.id, areaId: items.areaId })
+      .from(items)
+      .where(
+        and(
+          isNull(items.hiddenAt),
+          uid ? or(eq(items.isPrivate, false), eq(items.ownerId, uid))! : eq(items.isPrivate, false),
+        ),
+      )
+      .orderBy(desc(items.createdAt))
+      .limit(24);
+    return { items: await hydrateItems(rows.map((r) => r.id), uid) };
   });
 }
 

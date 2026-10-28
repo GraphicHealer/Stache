@@ -3,14 +3,45 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { labels, printers } from '../db/schema';
 import { printLabels } from '../lib/print';
+import { requireAdmin } from '../lib/guards';
+import { getDigestConfig } from '../lib/digest';
+import { parseBody } from '../lib/validate';
+import { z } from 'zod';
+
+const PrinterCreateSchema = z.object({
+  name: z.string().min(1).max(100),
+  type: z.enum(['zpl', 'cups', 'dymo']),
+  host: z.string().max(255).nullish(),
+  port: z.union([z.number().int().min(1).max(65535), z.string()]).optional(),
+  queue: z.string().max(255).nullish(),
+  dpi: z.union([z.number(), z.string()]).optional(),
+  label_w_mm: z.union([z.number(), z.string()]).optional(),
+  label_h_mm: z.union([z.number(), z.string()]).optional(),
+}).passthrough();
+
+const PrinterPatchSchema = PrinterCreateSchema.partial();
+
+const PrintLabelsSchema = z.object({
+  printer_id: z.string(),
+  codes: z.array(z.string().regex(/^ST-\d{6}$/i, 'invalid label code')).min(1).max(200),
+}).passthrough();
 
 // Codes become filenames and are interpolated into ZPL/SVG - strict shape only.
 const CODE_RE = /^ST-\d{6}$/;
 
-function originOf(req: FastifyRequest): string {
+// Label QRs need an absolute origin. A configured public base URL wins -
+// printing from a localhost session otherwise makes dead labels.
+function originOf(req: FastifyRequest, configured?: string): string {
+  const conf = configured?.replace(/\/$/, '');
+  if (conf) return conf;
   const proto = (req.headers['x-forwarded-proto'] as string) ?? 'http';
   const host = req.headers['x-forwarded-host'] ?? req.headers.host ?? 'localhost';
   return `${proto}://${host}`;
+}
+
+async function publicBaseUrl(): Promise<string | undefined> {
+  const cfg = await getDigestConfig();
+  return cfg.base_url || undefined;
 }
 
 const FIELDS = ['name', 'type', 'host', 'port', 'queue', 'dpi', 'label_w_mm', 'label_h_mm'] as const;
@@ -33,19 +64,21 @@ export async function printerRoutes(app: FastifyInstance) {
     printers: await db.select().from(printers).orderBy(asc(printers.createdAt)),
   }));
 
-  app.post('/api/printers', async (req, reply) => {
-    const body = printerBody((req.body ?? {}) as Record<string, any>);
-    if (!body.name || !['zpl', 'cups', 'dymo'].includes(body.type))
-      return reply.badRequest('name and type (zpl|cups|dymo) are required');
+  // Adding/editing printers = raw TCP/CUPS targets - admin only.
+  app.post('/api/printers', { preHandler: requireAdmin }, async (req, reply) => {
+    const parsed = parseBody(PrinterCreateSchema, req.body, reply);
+    if (!parsed) return;
+    const body = printerBody(parsed);
     const [p] = await db.insert(printers).values(body).returning();
     return reply.code(201).send({ printer: p });
   });
 
-  app.patch('/api/printers/:id', async (req, reply) => {
+  app.patch('/api/printers/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const [p] = await db.select().from(printers).where(eq(printers.id, id));
     if (!p) return reply.notFound();
-    const body = (req.body ?? {}) as Record<string, any>;
+    const body = parseBody(PrinterPatchSchema, req.body, reply) as Record<string, any> | null;
+    if (!body) return;
     const updates: Record<string, unknown> = {};
     for (const f of FIELDS) {
       if (body[f] !== undefined) {
@@ -59,7 +92,7 @@ export async function printerRoutes(app: FastifyInstance) {
     return { printer: updated };
   });
 
-  app.delete('/api/printers/:id', async (req) => {
+  app.delete('/api/printers/:id', { preHandler: requireAdmin }, async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(printers).where(eq(printers.id, id));
     return { ok: true };
@@ -71,7 +104,7 @@ export async function printerRoutes(app: FastifyInstance) {
     const [p] = await db.select().from(printers).where(eq(printers.id, id));
     if (!p) return reply.notFound();
     try {
-      await printLabels(p, ['ST-000000'], originOf(req));
+      await printLabels(p, ['ST-000000'], originOf(req, await publicBaseUrl()));
       return { ok: true };
     } catch (e) {
       return reply.badRequest(`print failed: ${(e as Error).message}`);
@@ -80,9 +113,8 @@ export async function printerRoutes(app: FastifyInstance) {
 
   // Print specific label codes to a printer.
   app.post('/api/labels/print', async (req, reply) => {
-    const body = (req.body ?? {}) as { printer_id?: string; codes?: string[] };
-    if (!body.printer_id || !body.codes?.length)
-      return reply.badRequest('printer_id and codes[] are required');
+    const body = parseBody(PrintLabelsSchema, req.body, reply);
+    if (!body) return;
     const [p] = await db.select().from(printers).where(eq(printers.id, body.printer_id));
     if (!p) return reply.notFound('printer not found');
     if (p.type === 'dymo')
@@ -96,7 +128,7 @@ export async function printerRoutes(app: FastifyInstance) {
       ),
     );
     try {
-      await printLabels(p, codes.filter((c) => existing.has(c)), originOf(req));
+      await printLabels(p, codes.filter((c) => existing.has(c)), originOf(req, await publicBaseUrl()));
       return { ok: true, printed: codes.filter((c) => existing.has(c)).length };
     } catch (e) {
       return reply.badRequest(`print failed: ${(e as Error).message}`);

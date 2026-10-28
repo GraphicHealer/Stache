@@ -1,6 +1,6 @@
 {
   "name": "stache",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Self-hosted home inventory for people who won't fill in forms",
   "workspaces": [
@@ -13,10 +13,12 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w server && npm run build -w client",
     "start": "node server/dist/index.js",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "npm-run-all": "^4.1.5"
+    "npm-run-all": "^4.1.5",
+    "vitest": "^3.2.7"
   },
   "engines": {
     "node": ">=20"

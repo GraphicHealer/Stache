@@ -30,6 +30,7 @@ export function OutPage() {
   const { toast } = useApp();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['out'], queryFn: () => api.get('/api/out') });
+  const { data: shop } = useQuery({ queryKey: ['shopping-list'], queryFn: () => api.get('/api/shopping-list') });
   const [sel, setSel] = useState<Set<string> | null>(null);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['out'] });
@@ -139,6 +140,23 @@ export function OutPage() {
       )}
       {section('Out', data?.out ?? [])}
       {section('Unaccounted for', data?.unaccounted ?? [])}
+      {shop?.items?.length > 0 && (
+        <section>
+          <h2>Running low</h2>
+          <p className="muted">At or under their restock threshold - put on the list.</p>
+          {shop.items.map((i: any) => (
+            <div key={i.id} className="out-row">
+              <Link to={`/items/${i.id}`} className="out-thumb">
+                {i.thumb ? <img src={i.thumb} alt="" /> : <span>?</span>}
+              </Link>
+              <div className="out-info">
+                <Link to={`/items/${i.id}`}>{i.name ?? 'unnamed'}</Link>
+                <span className="muted">×{i.quantity} left · restock under {i.restock_below + 1}</span>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }

@@ -57,6 +57,8 @@ export const items = sqliteTable('items', {
   isPrivate: integer('is_private', { mode: 'boolean' }).notNull().default(false),
   // Client-generated idempotency key - offline replays dedupe on it.
   clientId: text('client_id'),
+  // Set when CLIP finds a near-identical photo of another item at filing time.
+  duplicateOf: text('duplicate_of'),
 }, (t) => [
   index('items_area_idx').on(t.areaId),
   uniqueIndex('items_client_id_idx').on(t.clientId),
@@ -84,6 +86,7 @@ export const events = sqliteTable('events', {
   entityType: text('entity_type'),
   entityId: text('entity_id'),
   payload: text('payload', { mode: 'json' }),
+  userId: text('user_id'),
   undoneAt: ts('undone_at'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 }, (t) => [
@@ -117,6 +120,8 @@ export const user = sqliteTable('user', {
   email: text('email').notNull().unique(),
   emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
   image: text('image'),
+  /** 'admin' (first account) | 'member'. Gates settings/users/printers. */
+  role: text('role').notNull().default('member'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
   updatedAt: ts('updated_at').notNull().$defaultFn(() => new Date()),
 });
@@ -161,7 +166,9 @@ export const mcpTokens = sqliteTable('mcp_tokens', {
   id: text('id').primaryKey().$defaultFn(newId),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
-  token: text('token').notNull().unique(),
+  /** Legacy plaintext column - nulled after hashing. Keep for migration. */
+  token: text('token'),
+  tokenHash: text('token_hash'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
   lastUsedAt: ts('last_used_at'),
 });

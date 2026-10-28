@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
 import { useApp } from '../context';
 import { outboxAdd } from '../outbox';
+import { downscale } from '../image';
 import { detectBarcodeInPhoto, parseScan } from '../scan';
 import { CameraView } from '../components/CameraView';
 import { ALL_FORMATS, Scanner } from '../components/Scanner';
@@ -36,16 +37,27 @@ export function Home() {
   };
 
   const filePhoto = async (blob: Blob, areaId: string) => {
-    // client_id makes the upload idempotent - a retried request (offline
-    // outbox, flaky network) dedupes server-side instead of double-filing.
+    // Downscale first: saves bandwidth and IndexedDB space; the server caps
+    // at 1600px anyway. client_id makes the upload idempotent - a retried
+    // request (offline outbox, flaky network) dedupes server-side.
+    const photo = await downscale(blob);
     const fields = { area_id: areaId, client_id: crypto.randomUUID() };
     try {
-      const r = await api.fileItem(fields, [blob]);
+      const r = await api.fileItem(fields, [photo]);
       toast('Filed', r.event_id);
       qc.invalidateQueries({ queryKey: ['area', areaId] });
       qc.invalidateQueries({ queryKey: ['inbox'] });
+      // The CLIP check runs in the background on the server - one delayed
+      // look surfaces a "this looks like something you already have" hint.
+      setTimeout(async () => {
+        const d = await api.get(`/api/items/${r.item.id}`).catch(() => null);
+        if (d?.item?.duplicate_of) {
+          const dup = await api.get(`/api/items/${d.item.duplicate_of}`).catch(() => null);
+          toast(`Looks like "${dup?.item?.name ?? 'an existing item'}" - filed anyway`);
+        }
+      }, 9000);
       // Filing stays fast - ask about a barcode found in the photo after the fact.
-      const code = await detectBarcodeInPhoto(blob);
+      const code = await detectBarcodeInPhoto(photo);
       if (code) {
         api.get(`/api/codes/${encodeURIComponent(code.text)}/lookup`)
           .then((l) => setCodePrompt({ itemId: r.item.id, text: code.text, product: l.product?.name ?? null }))
@@ -57,7 +69,7 @@ export function Home() {
         toast(`Not filed: ${e.message}`);
         return;
       }
-      await outboxAdd({ kind: 'file-item', fields, blobs: [blob], createdAt: Date.now() });
+      await outboxAdd({ kind: 'file-item', fields, blobs: [photo], createdAt: Date.now() });
       await refreshPending();
       toast('Offline - queued for sync');
     }

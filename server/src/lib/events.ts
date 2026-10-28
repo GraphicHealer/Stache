@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { db } from '../db';
+import { db, query } from '../db';
 import { areas, events, items } from '../db/schema';
 
 export type EventType =
@@ -7,22 +7,29 @@ export type EventType =
   | 'area.moved'
   | 'area.updated'
   | 'area.archived'
+  | 'area.restored'
   | 'item.filed'
   | 'item.moved'
   | 'item.updated'
   | 'item.status'
   | 'item.hidden'
-  | 'item.not_here';
+  | 'item.not_here'
+  | 'item.restored'
+  | 'stocktake';
+
+/** Audit trail: who did it. NULL = MCP/system action. */
+type UserId = string | null;
 
 export async function recordEvent(
   type: EventType,
-  entityType: 'area' | 'item',
+  entityType: 'area' | 'item' | 'multi',
   entityId: string,
   payload: Record<string, unknown> = {},
+  userId: UserId = null,
 ) {
   const [row] = await db
     .insert(events)
-    .values({ type, entityType, entityId, payload })
+    .values({ type, entityType, entityId, payload, userId })
     .returning();
   return row;
 }
@@ -36,11 +43,32 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export function recordEventTx(
   tx: Tx,
   type: EventType,
-  entityType: 'area' | 'item',
+  entityType: 'area' | 'item' | 'multi',
   entityId: string,
   payload: Record<string, unknown> = {},
+  userId: UserId = null,
 ) {
-  return tx.insert(events).values({ type, entityType, entityId, payload }).returning().all()[0];
+  return tx
+    .insert(events)
+    .values({ type, entityType, entityId, payload, userId })
+    .returning()
+    .all()[0];
+}
+
+/** Keep the events table bounded - older events can't be undone anyway. */
+export function pruneEvents(keepDays = 90, maxRows = 20_000): number {
+  const cutoff = new Date(Date.now() - keepDays * 86400_000).getTime();
+  const r1 = query<{ n: number }>(
+    `DELETE FROM events WHERE created_at < ? RETURNING 1 AS n`,
+    cutoff,
+  ).length;
+  const r2 = query<{ n: number }>(
+    `DELETE FROM events WHERE id NOT IN (
+       SELECT id FROM events ORDER BY created_at DESC LIMIT ?
+     ) RETURNING 1 AS n`,
+    maxRows,
+  ).length;
+  return r1 + r2;
 }
 
 /**
@@ -63,6 +91,9 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
       break;
     case 'item.hidden':
       await db.update(items).set({ hiddenAt: null }).where(eq(items.id, entityId));
+      break;
+    case 'item.restored':
+      await db.update(items).set({ hiddenAt: new Date() }).where(eq(items.id, entityId));
       break;
     case 'item.not_here':
       await db
@@ -92,6 +123,22 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
         .where(eq(items.id, entityId));
       break;
     }
+    case 'stocktake': {
+      const date = (v: unknown) => (v ? new Date(v as string) : null);
+      for (const c of (p.changes ?? []) as { id: string; prev: any }[]) {
+        await db
+          .update(items)
+          .set({
+            status: c.prev.status,
+            lentTo: c.prev.lent_to,
+            outSince: date(c.prev.out_since),
+            hiddenAt: date(c.prev.hidden_at),
+            notHereCount: c.prev.not_here_count ?? undefined,
+          })
+          .where(eq(items.id, c.id));
+      }
+      break;
+    }
     case 'item.updated': {
       // prev holds drizzle column keys for whatever fields changed.
       const prev = (p.prev ?? {}) as Record<string, unknown>;
@@ -116,6 +163,9 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
       break;
     case 'area.archived':
       await db.update(areas).set({ archivedAt: null }).where(eq(areas.id, entityId));
+      break;
+    case 'area.restored':
+      await db.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, entityId));
       break;
     case 'area.updated':
       await db

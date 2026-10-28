@@ -14,6 +14,13 @@ import {
   verifyWebhookToken,
   webhookToken,
 } from '../lib/digest';
+import { requireAdmin } from '../lib/guards';
+import { parseBody } from '../lib/validate';
+import { z } from 'zod';
+
+const PutBackSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+}).passthrough();
 
 // Webhook auth: prefer the Authorization header so tokens stay out of URLs
 // (and out of request logs); ?token= still works for existing setups.
@@ -90,8 +97,8 @@ export async function outRoutes(app: FastifyInstance) {
 
   // One-tap put-back, single or bulk. Home = wherever the item already lives.
   app.post('/api/items/put-back', async (req, reply) => {
-    const { ids } = (req.body ?? {}) as { ids?: string[] };
-    if (!ids?.length) return reply.badRequest('ids required');
+    const { ids } = parseBody(PutBackSchema, req.body, reply) ?? {};
+    if (!ids) return;
     const uid = req.user?.id ?? null;
     const eventIds: string[] = [];
     for (const id of ids) {
@@ -102,7 +109,7 @@ export async function outRoutes(app: FastifyInstance) {
         const e = recordEventTx(tx, 'item.status', 'item', id, {
           prev: { status: item.status, lent_to: item.lentTo, out_since: item.outSince, hidden_at: item.hiddenAt },
           next: { status: 'home' },
-        });
+        }, uid);
         tx.update(items)
           .set({ status: 'home', lentTo: null, outSince: null })
           .where(eq(items.id, id))
@@ -143,8 +150,28 @@ export async function outRoutes(app: FastifyInstance) {
     return sendDigest();
   });
 
-  // Manual "send now" from Settings.
-  app.post('/api/digest/test', async (req, reply) => {
+  // Shopping list: consumables at/under their restock threshold.
+  app.get('/api/shopping-list', async (req) => {
+    const uid = req.user?.id ?? null;
+    const low = await fetchLowStock(uid);
+    const thumbs = await thumbsForItems(low.map((i) => i.id));
+    return {
+      items: low.map((i) => {
+        const t = thumbs.get(i.id);
+        return {
+          id: i.id,
+          name: i.name,
+          quantity: i.quantity,
+          restock_below: i.restockBelow,
+          area_id: i.areaId,
+          thumb: t ? thumbUrl(t) : null,
+        };
+      }),
+    };
+  });
+
+  // Manual "send now" from Settings (admin - fires an outbound webhook).
+  app.post('/api/digest/test', { preHandler: requireAdmin }, async (req, reply) => {
     const cfg = await getDigestConfig();
     if (!cfg.webhook_url) return reply.badRequest('webhook_url not configured');
     try {

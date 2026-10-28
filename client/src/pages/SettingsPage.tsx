@@ -18,7 +18,11 @@ export function SettingsPage() {
   const [dgLoaded, setDgLoaded] = useState(false);
   const [connName, setConnName] = useState('');
   const [member, setMember] = useState({ name: '', email: '', password: '' });
+  const [pw, setPw] = useState({ current: '', next: '' });
+  // New MCP tokens are shown exactly once - the server only stores a hash.
+  const [newToken, setNewToken] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (data && !loaded) {
@@ -68,9 +72,27 @@ export function SettingsPage() {
       </p>
       {(users?.users ?? []).map((u: any) => (
         <div key={u.id} className="row">
-          <span>{u.name} <span className="muted">{u.email}</span></span>
+          <span>
+            {u.name} <span className="muted">{u.email}</span>
+            {u.role === 'admin' && <span className="badge warn">admin</span>}
+          </span>
+          {isAdmin && u.id !== user?.id && u.role !== 'admin' && (
+            <button
+              className="btn btn-small btn-ghost"
+              onClick={async () => {
+                if (!window.confirm(`Remove ${u.name}? Their private items become invisible to everyone.`)) return;
+                await api.del(`/api/users/${u.id}`).catch((e) => (toast(e.message), null));
+                qc.invalidateQueries({ queryKey: ['users'] });
+                toast('Member removed');
+              }}
+            >
+              Remove
+            </button>
+          )}
         </div>
       ))}
+      {isAdmin && (
+      <>
       <input
         className="input"
         placeholder="Name"
@@ -106,6 +128,44 @@ export function SettingsPage() {
           }}
         >
           Add member
+        </button>
+      </div>
+      </>
+      )}
+
+      <h2>Your password</h2>
+      <input
+        className="input"
+        type="password"
+        placeholder="Current password"
+        value={pw.current}
+        onChange={(e) => setPw({ ...pw, current: e.target.value })}
+      />
+      <input
+        className="input"
+        type="password"
+        placeholder="New password (8+ chars)"
+        value={pw.next}
+        onChange={(e) => setPw({ ...pw, next: e.target.value })}
+      />
+      <div className="row">
+        <button
+          className="btn"
+          onClick={async () => {
+            try {
+              await api.post('/api/auth/change-password', {
+                currentPassword: pw.current,
+                newPassword: pw.next,
+                revokeOtherSessions: true,
+              });
+              setPw({ current: '', next: '' });
+              toast('Password changed - other sessions signed out');
+            } catch (e) {
+              toast(`Failed: ${(e as Error).message}`);
+            }
+          }}
+        >
+          Change password
         </button>
         <button className="btn btn-ghost" onClick={signOut}>Sign out</button>
       </div>
@@ -183,10 +243,6 @@ export function SettingsPage() {
               Copy URL
             </button>
           </div>
-          <div className="row">
-            <code className="mcp-url">{c.token}</code>
-            <button className="btn btn-small" onClick={() => copy(c.token)}>Copy token</button>
-          </div>
           <p className="muted">
             {c.last_used_at ? `Last used ${new Date(c.last_used_at).toLocaleString()}` : 'Never used'}
           </p>
@@ -203,8 +259,9 @@ export function SettingsPage() {
           className="btn"
           onClick={async () => {
             if (!connName.trim()) return;
-            await api.post('/api/settings/mcp', { name: connName.trim() });
+            const r = await api.post('/api/settings/mcp', { name: connName.trim() });
             setConnName('');
+            setNewToken(r.token ?? null);
             qc.invalidateQueries({ queryKey: ['settings-mcp'] });
             toast('Connection created');
           }}
@@ -212,6 +269,18 @@ export function SettingsPage() {
           Add
         </button>
       </div>
+      {newToken && (
+        <div className="suggest">
+          <p>
+            <b>Token (shown once - store it now):</b>
+          </p>
+          <div className="row">
+            <code className="mcp-url">{newToken}</code>
+            <button className="btn btn-small" onClick={() => copy(newToken)}>Copy token</button>
+            <button className="btn btn-small btn-ghost" onClick={() => setNewToken(null)}>Done</button>
+          </div>
+        </div>
+      )}
 
       <h2>Out reminders</h2>
       <p className="muted">
@@ -297,6 +366,32 @@ export function SettingsPage() {
           <p className="muted">Sensor = GET. Digest trigger = POST.</p>
         </>
       )}
+
+      <h2>AI on existing items</h2>
+      <p className="muted">
+        Re-runs suggestions and CLIP embeddings for everything filed before AI
+        was switched on. Runs in the background - one photo at a time.
+      </p>
+      <button
+        className="btn"
+        onClick={async () => {
+          try {
+            const r = await api.post('/api/settings/backfill');
+            toast(`Queued ${r.ai_queued} AI + ${r.embeddings_queued} embeddings`);
+          } catch (e) {
+            toast(`Failed: ${(e as Error).message}`);
+          }
+        }}
+      >
+        Backfill AI/ML
+      </button>
+
+      <h2>Export</h2>
+      <p className="muted">Everything you can see - items and areas - as a file.</p>
+      <div className="row">
+        <a className="btn" href="/api/export?format=json" download="stache-export.json">JSON</a>
+        <a className="btn" href="/api/export?format=csv" download="stache-items.csv">CSV</a>
+      </div>
 
       <h2>Backup</h2>
       <p className="muted">

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
 import { Breadcrumb, CaptureInput, ItemGrid } from '../components/Bits';
@@ -13,6 +14,8 @@ export function AreaPage() {
   const qc = useQueryClient();
   const { setCurrentArea, toast } = useApp();
   const [selecting, setSelecting] = useState<Set<string> | null>(null);
+  // Stocktake mode: set of item ids confirmed physically present.
+  const [stocktake, setStocktake] = useState<Set<string> | null>(null);
   const [scanFor, setScanFor] = useState<null | 'set-current' | 'move-items' | 'move-area'>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -55,11 +58,18 @@ export function AreaPage() {
       refresh();
       return;
     }
-    // move-items
-    for (const itemId of selecting ?? []) {
-      const r = await api.patch(`/api/items/${itemId}`, { area_id: dest });
-      toast(`Moved ${selecting?.size ?? 0} item(s)`, r.event_ids?.[0]);
+    // move-items - one toast for the batch (undo only exists per item, so a
+    // multi-item move shows a plain confirmation).
+    const ids = [...(selecting ?? [])];
+    let failed = 0;
+    let lastEvent: string | undefined;
+    for (const itemId of ids) {
+      const r = await api.patch(`/api/items/${itemId}`, { area_id: dest }).catch(() => null);
+      if (r) lastEvent = r.event_ids?.[0];
+      else failed++;
     }
+    if (ids.length === 1 && !failed) toast('Moved', lastEvent);
+    else toast(`Moved ${ids.length - failed}/${ids.length} item(s)`);
     setSelecting(null);
     refresh();
     qc.invalidateQueries({ queryKey: ['area', dest] });
@@ -75,7 +85,7 @@ export function AreaPage() {
 
   const uploadPhoto = async (blob: Blob) => {
     const form = new FormData();
-    form.append('photo', blob, 'photo.jpg');
+    form.append('photo', await downscale(blob), 'photo.jpg');
     await api.upload(`/api/areas/${id}/photos`, form).catch((e) => toast(e.message));
     refresh();
   };
@@ -90,6 +100,23 @@ export function AreaPage() {
   const addSubarea = async () => {
     const name = window.prompt('Sub-area name (optional)') ?? '';
     await api.post('/api/areas', { parent_id: id, name: name || null }).then(() => refresh());
+  };
+
+  // Stocktake: everything starts ticked (assume it's all there), the user
+  // unticks what's missing, and the rest get flagged unaccounted in one go.
+  const startStocktake = () => {
+    setSelecting(null);
+    setStocktake(new Set(items.map((i: any) => i.id)));
+  };
+  const confirmStocktake = async () => {
+    const r = await api
+      .post(`/api/areas/${id}/stocktake`, { present_ids: [...(stocktake ?? [])] })
+      .catch((e) => { toast(`Stocktake failed: ${e.message}`); return null; });
+    setStocktake(null);
+    if (r) {
+      toast(r.changed ? `${r.changed} status change(s)` : 'All good - nothing changed', r.event_id ?? undefined);
+      refresh();
+    }
   };
 
   return (
@@ -119,6 +146,9 @@ export function AreaPage() {
       <div className="row">
         <button className="btn" onClick={() => setScanFor('move-area')}>Move area…</button>
         <button className="btn" onClick={addSubarea}>+ Sub-area</button>
+        {items.length > 0 && !stocktake && (
+          <button className="btn" onClick={startStocktake}>Stocktake</button>
+        )}
         <button className="btn danger" onClick={archive}>Hide</button>
       </div>
 
@@ -133,9 +163,16 @@ export function AreaPage() {
       )}
 
       <div className="row spread">
-        <h2>{items.length} item{items.length === 1 ? '' : 's'}</h2>
+        <h2>
+          {stocktake ? `${stocktake.size}/${items.length} present` : `${items.length} item${items.length === 1 ? '' : 's'}`}
+        </h2>
         {items.length > 0 &&
-          (selecting ? (
+          (stocktake ? (
+            <>
+              <button className="btn" onClick={confirmStocktake}>Confirm</button>
+              <button className="btn" onClick={() => setStocktake(null)}>Cancel</button>
+            </>
+          ) : selecting ? (
             <>
               <button className="btn" onClick={() => setScanFor('move-items')} disabled={!selecting.size}>
                 Move {selecting.size}…
@@ -146,6 +183,7 @@ export function AreaPage() {
             <button className="btn" onClick={() => setSelecting(new Set())}>Select</button>
           ))}
       </div>
+      {stocktake && <p className="muted">Untick anything that's missing - it gets flagged unaccounted.</p>}
       <ItemGrid
         items={items.map((i: any) => ({
           id: i.id,
@@ -155,12 +193,15 @@ export function AreaPage() {
           sub: i.quantity > 1 ? `×${i.quantity}` : undefined,
         }))}
         linkTo={(iid) => `/items/${iid}`}
-        selected={selecting ?? undefined}
-        onToggle={selecting ? (iid) => setSelecting((s) => {
-          const n = new Set(s);
-          n.has(iid) ? n.delete(iid) : n.add(iid);
-          return n;
-        }) : undefined}
+        selected={stocktake ?? selecting ?? undefined}
+        onToggle={(stocktake ?? selecting) ? (iid) => {
+          const set = stocktake ? setStocktake : setSelecting;
+          set((s) => {
+            const n = new Set(s);
+            n.has(iid) ? n.delete(iid) : n.add(iid);
+            return n;
+          });
+        } : undefined}
       />
 
       {scanFor && (

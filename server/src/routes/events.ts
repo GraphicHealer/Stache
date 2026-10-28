@@ -1,12 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne } from 'drizzle-orm';
 import { db, sqlite } from '../db';
 import { env } from '../env';
-import { events, items } from '../db/schema';
+import { areas, events, items, user } from '../db/schema';
 import { undoEvent } from '../lib/events';
 import { itemVisible } from '../lib/visibility';
+import { requireAdmin } from '../lib/guards';
+import { thumbsForItems, thumbUrl } from '../lib/photos';
+import { breadcrumb } from '../lib/breadcrumb';
+import { fetchLowStock, fetchWarrantyExpiring } from '../lib/digest';
 
 /** Item events on other users' private items must not leak names/payloads. */
 async function eventVisibleToUser(
@@ -22,9 +26,6 @@ async function eventVisibleToUser(
   if (!it) return true;
   return !it.isPrivate || it.ownerId === userId;
 }
-import { thumbsForItems, thumbUrl } from '../lib/photos';
-import { breadcrumb } from '../lib/breadcrumb';
-import { fetchLowStock, fetchWarrantyExpiring } from '../lib/digest';
 
 export async function miscRoutes(app: FastifyInstance) {
   // Recent undoable actions (also powers the "what just happened" history).
@@ -40,6 +41,9 @@ export async function miscRoutes(app: FastifyInstance) {
     for (const e of rows) {
       if (await eventVisibleToUser(e.entityType, e.entityId, uid)) visible.push(e);
     }
+    const names = new Map(
+      (await db.select({ id: user.id, name: user.name }).from(user)).map((u) => [u.id, u.name]),
+    );
     return {
       events: visible.map((e) => ({
         id: e.id,
@@ -47,6 +51,8 @@ export async function miscRoutes(app: FastifyInstance) {
         entity_type: e.entityType,
         entity_id: e.entityId,
         payload: e.payload,
+        user_id: e.userId,
+        user_name: e.userId ? (names.get(e.userId) ?? 'someone') : null,
         undone: !!e.undoneAt,
         created_at: e.createdAt,
       })),
@@ -150,9 +156,109 @@ export async function miscRoutes(app: FastifyInstance) {
     };
   });
 
+  // Trash: hidden items + archived areas, restorable or purgeable.
+  app.get('/api/trash', async (req) => {
+    const uid = req.user?.id ?? null;
+    const hidden = await db
+      .select()
+      .from(items)
+      .where(and(isNotNull(items.hiddenAt), itemVisible(uid)))
+      .orderBy(desc(items.hiddenAt));
+    const archived = await db
+      .select()
+      .from(areas)
+      .where(isNotNull(areas.archivedAt))
+      .orderBy(desc(areas.archivedAt));
+    const thumbs = await thumbsForItems(hidden.map((i) => i.id));
+    return {
+      items: hidden.map((i) => {
+        const t = thumbs.get(i.id);
+        return {
+          id: i.id,
+          name: i.name,
+          thumb: t ? thumbUrl(t) : null,
+          hidden_at: i.hiddenAt,
+        };
+      }),
+      areas: archived.map((a) => ({ id: a.id, name: a.name, archived_at: a.archivedAt })),
+    };
+  });
+
+  // Full inventory export - what you can see, as JSON or CSV.
+  app.get('/api/export', async (req, reply) => {
+    const { format } = req.query as { format?: string };
+    const uid = req.user?.id ?? null;
+    const vis = itemVisible(uid);
+    const allItems = await db.select().from(items).where(vis).orderBy(asc(items.createdAt));
+    const allAreas = await db.select().from(areas).orderBy(asc(areas.createdAt));
+    const pathCache = new Map<string, string>();
+    const areaPath = async (id: string) => {
+      if (!pathCache.has(id)) {
+        const c = await breadcrumb(id);
+        pathCache.set(id, c.map((x) => x.name ?? '?').join(' › '));
+      }
+      return pathCache.get(id)!;
+    };
+
+    if (format === 'csv') {
+      const cols = [
+        'id', 'name', 'description', 'quantity', 'barcode', 'status', 'lent_to',
+        'area_path', 'area_id', 'out_since', 'warranty_until', 'restock_below',
+        'is_private', 'hidden', 'created_at',
+      ];
+      const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const lines = [cols.join(',')];
+      for (const i of allItems) {
+        lines.push([
+          i.id, i.name, i.description, i.quantity, i.barcode, i.status, i.lentTo,
+          await areaPath(i.areaId), i.areaId,
+          i.outSince?.toISOString(), i.warrantyUntil, i.restockBelow,
+          i.isPrivate ? 1 : 0, i.hiddenAt ? 1 : 0, i.createdAt.toISOString(),
+        ].map(esc).join(','));
+      }
+      reply
+        .header('content-type', 'text/csv')
+        .header('content-disposition', 'attachment; filename="stache-items.csv"');
+      return reply.send(lines.join('\n'));
+    }
+
+    return {
+      exported_at: new Date().toISOString(),
+      areas: await Promise.all(
+        allAreas.map(async (a) => ({
+          id: a.id,
+          name: a.name,
+          parent_id: a.parentId,
+          label_code: a.labelCode,
+          path: await areaPath(a.id),
+          archived: !!a.archivedAt,
+        })),
+      ),
+      items: allItems.map((i) => ({
+        id: i.id,
+        name: i.name,
+        description: i.description,
+        quantity: i.quantity,
+        barcode: i.barcode,
+        status: i.status,
+        lent_to: i.lentTo,
+        area_id: i.areaId,
+        out_since: i.outSince,
+        warranty_until: i.warrantyUntil,
+        restock_below: i.restockBelow,
+        is_private: i.isPrivate,
+        hidden: !!i.hiddenAt,
+        ai_name: i.aiName,
+        ai_tags: i.aiTags,
+        ocr_text: i.ocrText,
+        created_at: i.createdAt,
+      })),
+    };
+  });
+
   // Consistent snapshot of the live database (SQLite backup API under the
   // hood - safe on a WAL database, unlike copying the files). Keeps 10.
-  app.post('/api/backup', async () => {
+  app.post('/api/backup', { preHandler: requireAdmin }, async () => {
     const dir = path.join(env.dataDir, 'backups');
     await fs.mkdir(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');

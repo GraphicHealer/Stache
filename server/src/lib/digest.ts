@@ -4,6 +4,7 @@ import { db } from '../db';
 import { items, settings } from '../db/schema';
 import { breadcrumb } from './breadcrumb';
 import { thumbsForItems, thumbUrl } from './photos';
+import { signPhotoUrl } from './signed';
 
 /**
  * Missing/out items + the optional bundled digest.
@@ -195,7 +196,8 @@ export async function sendDigest(): Promise<{ sent: boolean; count: number }> {
         out_since: r.outSince,
         days: daysOut(r.outSince),
         status: r.status === 'unaccounted' ? 'unaccounted' : 'out',
-        photo: (t => t ? `${base}${thumbUrl(t)}` : null)(thumbs.get(r.id)),
+        // Signed + expiring: ntfy/Discord fetch images without a session.
+        photo: (t => t ? `${base}${signPhotoUrl(thumbUrl(t))}` : null)(thumbs.get(r.id)),
       })),
     ),
     low_stock: await Promise.all(

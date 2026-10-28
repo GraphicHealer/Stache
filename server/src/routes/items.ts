@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { and, asc, eq, isNull } from 'drizzle-orm';
@@ -11,6 +12,31 @@ import { insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '
 import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
 import { analyzeItemPhoto, hasEmbedding, mlHealthy, nearestToItem } from '../lib/ml';
 import { detectCodes, lookupBarcode, type DetectedCode } from '../lib/barcodes';
+import { parseBody } from '../lib/validate';
+import { z } from 'zod';
+
+const ItemPatchSchema = z.object({
+  area_id: z.string().optional(),
+  status: z.enum(['home', 'out', 'lent', 'unaccounted', 'gone']).optional(),
+  lent_to: z.string().max(200).nullable().optional(),
+  name: z.string().max(200).nullable().optional(),
+  description: z.string().max(4000).nullable().optional(),
+  quantity: z.union([z.number(), z.string()]).optional(),
+  barcode: z.string().max(64).nullable().optional(),
+  detected_codes: z.array(z.any()).nullable().optional(),
+  is_private: z.boolean().optional(),
+  remind_snoozed_until: z.string().nullable().optional(),
+  warranty_until: z.string().nullable().optional(),
+  restock_below: z.union([z.number(), z.string(), z.null()]).optional(),
+}).passthrough();
+
+const SplitSchema = z.object({
+  picks: z.array(z.object({
+    name: z.string().max(200).nullish(),
+    label: z.string().max(200).optional(),
+    box: z.array(z.number()).length(4).optional(),
+  })).min(1),
+}).passthrough();
 
 /** Scan an item's photos for codes; merge new finds into detected_codes. */
 async function detectAndStore(itemId: string, bufs: Buffer[]): Promise<void> {
@@ -52,6 +78,7 @@ function itemJson(i: typeof items.$inferSelect) {
     ai_description: i.aiDescription,
     ai_tags: i.aiTags,
     ai_status: i.aiStatus,
+    duplicate_of: i.duplicateOf,
   };
 }
 
@@ -109,7 +136,7 @@ export async function itemRoutes(app: FastifyInstance) {
           })
           .returning()
           .all();
-        const e = recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId });
+        const e = recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId }, req.user?.id);
         return { item: i, ev: e };
       }));
     } catch (err) {
@@ -124,7 +151,7 @@ export async function itemRoutes(app: FastifyInstance) {
     for (const buf of files) {
       const saved = await savePhotoFile(buf);
       const p = await insertPhoto(saved, { itemId: item.id });
-      analyzeItemPhoto(item.id, p.path).catch((e) =>
+      analyzeItemPhoto(item.id, p.id, p.path).catch((e) =>
         console.error('[ml] analyze failed:', e.message),
       );
     }
@@ -154,7 +181,8 @@ export async function itemRoutes(app: FastifyInstance) {
 
   app.patch('/api/items/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = (req.body ?? {}) as Record<string, any>;
+    const body = parseBody(ItemPatchSchema, req.body, reply);
+    if (!body) return;
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
     // Events are collected, then written in one transaction with the update -
@@ -230,17 +258,18 @@ export async function itemRoutes(app: FastifyInstance) {
     const prev: Record<string, unknown> = {};
     const next: Record<string, unknown> = {};
     for (const [key, col] of Object.entries(editable)) {
-      if (body[key] !== undefined && body[key] !== (item as any)[col]) {
+      const raw = body[key as keyof typeof body];
+      if (raw !== undefined && raw !== (item as any)[col]) {
         prev[col] = (item as any)[col];
-        next[col] = body[key];
+        next[col] = raw;
         (item as any)[col] =
           key === 'quantity'
-            ? Math.max(1, parseInt(body[key], 10) || 1)
-            : key === 'remind_snoozed_until' && body[key]
-              ? new Date(body[key])
+            ? Math.max(1, parseInt(String(raw), 10) || 1)
+            : key === 'remind_snoozed_until' && raw
+              ? new Date(raw as string)
               : key === 'restock_below'
-                ? (body[key] === null ? null : Math.max(0, parseInt(body[key], 10) || 0))
-                : body[key];
+                ? (raw === null ? null : Math.max(0, parseInt(String(raw), 10) || 0))
+                : raw;
       }
     }
     if (Object.keys(prev).length) {
@@ -251,7 +280,7 @@ export async function itemRoutes(app: FastifyInstance) {
     if (item.isPrivate && !item.ownerId) item.ownerId = req.user?.id ?? null;
 
     const { updated, eventIds } = db.transaction((tx) => {
-      const ids = evs.map((e) => recordEventTx(tx, e.type, 'item', id, e.payload).id);
+      const ids = evs.map((e) => recordEventTx(tx, e.type, 'item', id, e.payload, req.user?.id).id);
       const [u] = tx
         .update(items)
         .set({
@@ -293,7 +322,7 @@ export async function itemRoutes(app: FastifyInstance) {
         bufs.push(buf);
         const p = await insertPhoto(await savePhotoFile(buf), { itemId: id });
         saved.push(p);
-        analyzeItemPhoto(id, p.path).catch((e) => console.error('[ml] analyze failed:', e.message));
+        analyzeItemPhoto(id, p.id, p.path).catch((e) => console.error('[ml] analyze failed:', e.message));
       }
     }
     if (!saved.length) return reply.badRequest('no photo uploaded');
@@ -315,7 +344,7 @@ export async function itemRoutes(app: FastifyInstance) {
         area_id: item.areaId,
         status_before: item.status,
         out_since_before: item.outSince,
-      });
+      }, req.user?.id);
       const [u] = tx
         .update(items)
         .set({
@@ -362,7 +391,7 @@ export async function itemRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
-    if (!(await mlHealthy())) return { items: [], ml: false };
+    if (!mlHealthy()) return { items: [], ml: false };
     const neighbors = await nearestToItem(id, 12, req.user?.id ?? null);
     const thumbs = await thumbsForItems(neighbors.map((n) => n.id));
     const meta = neighbors.length
@@ -441,7 +470,10 @@ export async function itemRoutes(app: FastifyInstance) {
       .limit(1);
     if (!photo) return reply.badRequest('item has no photo to split');
     try {
-      const suggestions = await detectObjects(path.join(env.dataDir, 'photos', photo.path));
+      const suggestions = await detectObjects(
+        path.join(env.dataDir, 'photos', photo.path),
+        item.isPrivate,
+      );
       return { suggestions, photo_url: photoUrl(photo) };
     } catch (e) {
       return reply.badRequest(`split detection failed: ${(e as Error).message}`);
@@ -452,12 +484,10 @@ export async function itemRoutes(app: FastifyInstance) {
   // New items share the source item's home area; each gets a crop of the photo.
   app.post('/api/items/:id/split', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { picks } = (req.body ?? {}) as {
-      picks?: { name?: string | null; label?: string; box?: number[] }[];
-    };
+    const { picks } = parseBody(SplitSchema, req.body, reply) ?? {};
+    if (!picks) return;
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
-    if (!picks?.length) return reply.badRequest('no picks given');
     const [photo] = await db
       .select()
       .from(photos)
@@ -501,12 +531,12 @@ export async function itemRoutes(app: FastifyInstance) {
           area_id: item.areaId,
           via: 'split',
           source_item_id: id,
-        });
+        }, req.user?.id);
         return { child: c, ev: e };
       });
       const saved = await savePhotoFile(buf);
-      await insertPhoto(saved, { itemId: child.id });
-      analyzeItemPhoto(child.id, saved.path).catch(() => {});
+      const cp = await insertPhoto(saved, { itemId: child.id });
+      analyzeItemPhoto(child.id, cp.id, saved.path).catch(() => {});
       eventIds.push(ev.id);
       created.push({ id: child.id, name: child.name, thumb: `/photos/${saved.thumbPath}` });
     }
@@ -529,8 +559,41 @@ export async function itemRoutes(app: FastifyInstance) {
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
     const ev = db.transaction((tx) => {
       tx.update(items).set({ hiddenAt: new Date() }).where(eq(items.id, id)).run();
-      return recordEventTx(tx, 'item.hidden', 'item', id, { name: item.name });
+      return recordEventTx(tx, 'item.hidden', 'item', id, { name: item.name }, req.user?.id);
     });
     return { ok: true, event_id: ev.id };
+  });
+
+  // Restore from trash - inverse of hide, and itself undoable.
+  app.post('/api/items/:id/restore', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    const ev = db.transaction((tx) => {
+      tx.update(items).set({ hiddenAt: null }).where(eq(items.id, id)).run();
+      return recordEventTx(tx, 'item.restored', 'item', id, { name: item.name }, req.user?.id);
+    });
+    return { ok: true, event_id: ev.id };
+  });
+
+  // Permanent delete - removes the row, its photo rows, files, and vectors.
+  // Only for the Trash page; hiding is the normal path.
+  app.delete('/api/items/:id/purge', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item.hiddenAt) return reply.badRequest('only hidden items can be purged');
+    const pics = await db.select().from(photos).where(eq(photos.itemId, id));
+    db.transaction((tx) => {
+      tx.delete(photos).where(eq(photos.itemId, id)).run();
+      tx.delete(items).where(eq(items.id, id)).run();
+    });
+    for (const p of pics) {
+      for (const f of [p.path, p.thumbPath].filter(Boolean)) {
+        fs.rm(path.join(env.dataDir, 'photos', f!), { force: true }).catch(() => {});
+      }
+    }
+    query('DELETE FROM photo_embeddings WHERE item_id = ?', id);
+    return { ok: true };
   });
 }

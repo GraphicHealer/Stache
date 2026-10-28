@@ -18,4 +18,14 @@ export const env = {
   // Baked at image build time by the release workflow.
   appVersion: process.env.APP_VERSION ?? 'dev',
   isProd: process.env.NODE_ENV === 'production',
+  // Only trust X-Forwarded-* when a reverse proxy sets them deliberately.
+  trustProxy: process.env.STACHE_TRUST_PROXY === '1',
+  // Optional first-run gate: when set, the first sign-up needs this token.
+  setupToken: process.env.STACHE_SETUP_TOKEN ?? '',
+  // Public origin for auth callbacks + label/digest links when proxied.
+  baseUrl: process.env.STACHE_BASE_URL ?? process.env.BETTER_AUTH_URL ?? '',
+  trustedOrigins: (process.env.STACHE_TRUSTED_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 };

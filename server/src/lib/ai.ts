@@ -76,6 +76,11 @@ async function suggestOne(itemId: string): Promise<void> {
 
   const [item] = await db.select().from(items).where(eq(items.id, itemId));
   if (!item) return;
+  // Private items never leave the device - remote providers are skipped.
+  if (item.isPrivate && cfg.provider !== 'local') {
+    await db.update(items).set({ aiStatus: 'skipped' }).where(eq(items.id, itemId));
+    return;
+  }
   const [photo] = await db
     .select()
     .from(photos)
@@ -164,9 +169,11 @@ No markdown, no explanation.`;
  * Find objects in a photo for the user to pick from. Suggestions only - nothing
  * here files anything; the split-confirm route does that on explicit picks.
  */
-export async function detectObjects(photoFile: string): Promise<DetectedObject[]> {
+export async function detectObjects(photoFile: string, isPrivate = false): Promise<DetectedObject[]> {
   const cfg = await getAiConfig();
   if (!cfg?.enabled) throw new Error('AI provider is not configured');
+  if (isPrivate && cfg.provider !== 'local')
+    throw new Error('private items can only use the built-in model');
   const buf = await fs.readFile(photoFile);
 
   if (cfg.provider === 'local') {

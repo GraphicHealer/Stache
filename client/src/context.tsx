@@ -19,6 +19,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  role?: string;
 }
 
 interface AppCtx {
@@ -105,6 +106,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [toast],
   );
+
+  // Safety net: a rejected promise that nobody caught still surfaces as a
+  // toast instead of vanishing (covers handlers without their own try/catch).
+  useEffect(() => {
+    const onRej = (e: PromiseRejectionEvent) => {
+      toast(`Error: ${(e.reason as Error)?.message ?? 'something failed'}`);
+    };
+    window.addEventListener('unhandledrejection', onRej);
+    return () => window.removeEventListener('unhandledrejection', onRej);
+  }, [toast]);
 
   // Drain the outbox on boot and whenever connectivity returns.
   useEffect(() => {

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -316,13 +316,32 @@ export function registerMcp(app: FastifyInstance) {
       const { slug } = req.params as { slug: string };
       const [conn] = await db.select().from(mcpTokens).where(eq(mcpTokens.slug, slug));
       if (!conn) return reply.notFound();
-      const provided = req.headers.authorization ?? '';
-      const expected = `Bearer ${conn.token}`;
-      if (
-        provided.length !== expected.length ||
-        !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
-      ) {
+      const authz = req.headers.authorization ?? '';
+      if (!authz.startsWith('Bearer ')) {
         return reply.code(401).send({ error: 'unauthorized' });
+      }
+      const hash = createHash('sha256').update(authz.slice(7)).digest('hex');
+      if (conn.tokenHash) {
+        if (
+          conn.tokenHash.length !== hash.length ||
+          !timingSafeEqual(Buffer.from(conn.tokenHash), Buffer.from(hash))
+        ) {
+          return reply.code(401).send({ error: 'unauthorized' });
+        }
+      } else {
+        // Legacy plaintext token (pre-hash migration): verify then upgrade.
+        const legacy = `Bearer ${conn.token ?? ''}`;
+        if (
+          !conn.token ||
+          authz.length !== legacy.length ||
+          !timingSafeEqual(Buffer.from(authz), Buffer.from(legacy))
+        ) {
+          return reply.code(401).send({ error: 'unauthorized' });
+        }
+        await db
+          .update(mcpTokens)
+          .set({ tokenHash: hash, token: null })
+          .where(eq(mcpTokens.id, conn.id));
       }
       db.update(mcpTokens)
         .set({ lastUsedAt: new Date() })

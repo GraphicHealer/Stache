@@ -2,6 +2,7 @@
   --bg: #111318;
   --panel: #1b1f27;
   --panel-2: #232833;
+  --surface-2: var(--panel-2);
   --border: #2c3340;
   --text: #e8eaee;
   --muted: #9aa3b2;
@@ -23,7 +24,9 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-.shell { height: 100%; display: flex; flex-direction: column; }
+/* 100dvh tracks the visible viewport as mobile browser chrome collapses -
+   plain 100% leaves dead space under the bottom nav on iOS/Android. */
+.shell { height: 100%; height: 100dvh; display: flex; flex-direction: column; }
 .content { flex: 1; overflow-y: auto; }
 
 .page { padding: 16px; max-width: 720px; margin: 0 auto; }
@@ -223,6 +226,18 @@ textarea.input { resize: vertical; }
 .triage-actions { display: flex; gap: 12px; justify-content: center; margin-top: 12px; }
 .triage-actions .btn { min-width: 96px; padding: 14px 0; font-size: 17px; }
 
+/* Printer add/edit form on the labels page */
+.printer-form { background: var(--panel); border-radius: 14px; padding: 12px; margin-top: 12px; }
+.printer-form .input { margin: 4px 0; }
+.printer-form .row .input { width: auto; flex: 1; }
+
+/* Photo capture block when claiming a label into a new area */
+.claim-photo { margin: 12px 0; }
+.claim-photo img { width: 100%; border-radius: 14px; display: block; }
+
+/* Pile-split results: photo with boxes on the left, checklist below */
+.split-view { background: var(--panel); border-radius: 14px; padding: 12px; margin-top: 12px; }
+
 /* Pile-split overlay */
 .split-photo { position: relative; max-width: 420px; margin: 0 auto; border-radius: 12px; overflow: visible; }
 .split-photo > img { width: 100%; border-radius: 12px; display: block; }
@@ -282,6 +297,9 @@ textarea.input { resize: vertical; }
 @media print {
   body { background: #fff; }
   .nav, .row, h1, h2, .muted, .label-list, .toasts { display: none !important; }
+  /* Fixed height + scroll would clip multi-page label sheets. */
+  .shell { height: auto !important; display: block; }
+  .content { overflow: visible !important; }
   .label-sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
   .label-cell { border: 1px dashed #999; border-radius: 0; }
 }

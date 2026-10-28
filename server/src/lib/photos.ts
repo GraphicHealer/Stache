@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
-import { inArray } from 'drizzle-orm';
+import { asc, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { photos, type Photo } from '../db/schema';
 import { env } from '../env';
@@ -61,20 +61,28 @@ export function thumbUrl(p: Photo) {
   return `/photos/${p.thumbPath ?? p.path}`;
 }
 
-/** First photo per item, for grids. */
+/** Oldest photo per item, for grids. ORDER BY keeps "first" deterministic. */
 export async function thumbsForItems(itemIds: string[]): Promise<Map<string, Photo>> {
   const map = new Map<string, Photo>();
   if (itemIds.length === 0) return map;
-  const rows = await db.select().from(photos).where(inArray(photos.itemId, itemIds));
+  const rows = await db
+    .select()
+    .from(photos)
+    .where(inArray(photos.itemId, itemIds))
+    .orderBy(asc(photos.createdAt));
   for (const p of rows) if (!map.has(p.itemId!)) map.set(p.itemId!, p);
   return map;
 }
 
-/** Photos keyed by area id. */
+/** Photos keyed by area id, oldest first. */
 export async function photosForAreas(areaIds: string[]): Promise<Map<string, Photo[]>> {
   const map = new Map<string, Photo[]>();
   if (areaIds.length === 0) return map;
-  const rows = await db.select().from(photos).where(inArray(photos.areaId, areaIds));
+  const rows = await db
+    .select()
+    .from(photos)
+    .where(inArray(photos.areaId, areaIds))
+    .orderBy(asc(photos.createdAt));
   for (const p of rows) {
     const list = map.get(p.areaId!) ?? [];
     list.push(p);

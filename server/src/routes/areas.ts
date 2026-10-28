@@ -14,18 +14,24 @@ import {
 } from '../lib/photos';
 import { items } from '../db/schema';
 import { itemVisible } from '../lib/visibility';
+import { parseBody } from '../lib/validate';
+import { z } from 'zod';
 
-interface CreateAreaBody {
-  name?: string | null;
-  parent_id?: string | null;
-  label_code?: string | null;
-}
+const CreateAreaSchema = z.object({
+  name: z.string().max(200).nullish(),
+  parent_id: z.string().nullish(),
+  label_code: z.string().regex(/^ST-\d{6}$/i, 'invalid label code').nullish(),
+}).passthrough();
 
-interface PatchAreaBody {
-  name?: string | null;
-  parent_id?: string | null;
-  cover_photo_id?: string | null;
-}
+const PatchAreaSchema = z.object({
+  name: z.string().max(200).nullish(),
+  parent_id: z.string().nullish(),
+  cover_photo_id: z.string().nullish(),
+}).passthrough();
+
+const StocktakeSchema = z.object({
+  present_ids: z.array(z.string()).max(5000),
+}).passthrough();
 
 function areaJson(a: typeof areas.$inferSelect, cover?: { thumbUrl: string; url: string } | null) {
   return {
@@ -60,7 +66,8 @@ export async function areaRoutes(app: FastifyInstance) {
 
   // Create an area - optionally claiming a pre-printed label.
   app.post('/api/areas', async (req, reply) => {
-    const body = (req.body ?? {}) as CreateAreaBody;
+    const body = parseBody(CreateAreaSchema, req.body, reply);
+    if (!body) return;
 
     if (body.parent_id) {
       const [parent] = await db.select().from(areas).where(eq(areas.id, body.parent_id));
@@ -75,22 +82,36 @@ export async function areaRoutes(app: FastifyInstance) {
       labelCode = label.code;
     }
 
-    const { area, ev } = db.transaction((tx) => {
-      const [a] = tx
-        .insert(areas)
-        .values({ name: body.name ?? null, parentId: body.parent_id ?? null, labelCode })
-        .returning()
-        .all();
-      if (labelCode) {
-        tx.update(labels).set({ areaId: a.id }).where(eq(labels.code, labelCode)).run();
-      }
-      const e = recordEventTx(tx, 'area.created', 'area', a.id, {
-        label_code: labelCode,
-        parent_id: a.parentId,
+    let created: { area: typeof areas.$inferSelect; ev: { id: string } };
+    try {
+      created = db.transaction((tx) => {
+        const [a] = tx
+          .insert(areas)
+          .values({ name: body.name ?? null, parentId: body.parent_id ?? null, labelCode })
+          .returning()
+          .all();
+        if (labelCode) {
+          // Atomic claim - a concurrent claim makes this a no-op.
+          const r = tx
+            .update(labels)
+            .set({ areaId: a.id })
+            .where(and(eq(labels.code, labelCode), isNull(labels.areaId)))
+            .run();
+          if (r.changes === 0) throw new Error('CONFLICT:label claimed');
+        }
+        const e = recordEventTx(tx, 'area.created', 'area', a.id, {
+          label_code: labelCode,
+          parent_id: a.parentId,
+        }, req.user?.id);
+        return { area: a, ev: e };
       });
-      return { area: a, ev: e };
-    });
-    return reply.code(201).send({ area: areaJson(area), event_id: ev.id });
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg.startsWith('CONFLICT:') || msg.includes('UNIQUE'))
+        return reply.conflict('label already claimed');
+      throw e;
+    }
+    return reply.code(201).send({ area: areaJson(created.area), event_id: created.ev.id });
   });
 
   // Area detail: breadcrumb, sub-areas, contents.
@@ -151,7 +172,8 @@ export async function areaRoutes(app: FastifyInstance) {
 
   app.patch('/api/areas/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = (req.body ?? {}) as PatchAreaBody;
+    const body = parseBody(PatchAreaSchema, req.body, reply);
+    if (!body) return;
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
     const evs: { type: 'area.moved' | 'area.updated'; payload: Record<string, unknown> }[] = [];
@@ -176,7 +198,7 @@ export async function areaRoutes(app: FastifyInstance) {
     }
 
     const { updated, eventIds } = db.transaction((tx) => {
-      const ids = evs.map((e) => recordEventTx(tx, e.type, 'area', id, e.payload).id);
+      const ids = evs.map((e) => recordEventTx(tx, e.type, 'area', id, e.payload, req.user?.id).id);
       const [u] = tx
         .update(areas)
         .set({
@@ -199,9 +221,73 @@ export async function areaRoutes(app: FastifyInstance) {
     if (!area) return reply.notFound('area not found');
     const ev = db.transaction((tx) => {
       tx.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, id)).run();
-      return recordEventTx(tx, 'area.archived', 'area', id, { name: area.name });
+      return recordEventTx(tx, 'area.archived', 'area', id, { name: area.name }, req.user?.id);
     });
     return { ok: true, event_id: ev.id };
+  });
+
+  // Restore an archived area - inverse of archive, undoable.
+  app.post('/api/areas/:id/restore', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    const ev = db.transaction((tx) => {
+      tx.update(areas).set({ archivedAt: null }).where(eq(areas.id, id)).run();
+      return recordEventTx(tx, 'area.restored', 'area', id, { name: area.name }, req.user?.id);
+    });
+    return { ok: true, event_id: ev.id };
+  });
+
+  // Stocktake: tick what's actually here - ticked items go home, the rest are
+  // marked unaccounted. One event, one undo.
+  app.post('/api/areas/:id/stocktake', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = parseBody(StocktakeSchema, req.body, reply);
+    if (!body) return;
+    const { present_ids } = body;
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    const present = new Set(present_ids);
+    const contents = await db
+      .select()
+      .from(items)
+      .where(and(eq(items.areaId, id), isNull(items.hiddenAt), itemVisible(req.user?.id ?? null)));
+
+    const changes: { id: string; prev: Record<string, unknown>; next: string }[] = [];
+    const now = new Date();
+    const eventId = db.transaction((tx) => {
+      for (const i of contents) {
+        const isPresent = present.has(i.id);
+        // No-ops: ticked+home, or absent with an explained status already.
+        if (isPresent && i.status === 'home') continue;
+        if (!isPresent && i.status !== 'home') continue;
+        const prev = {
+          status: i.status,
+          lent_to: i.lentTo,
+          out_since: i.outSince,
+          hidden_at: i.hiddenAt,
+          not_here_count: i.notHereCount,
+        };
+        tx.update(items)
+          .set(
+            isPresent
+              ? { status: 'home', lentTo: null, outSince: null }
+              : {
+                  status: 'unaccounted',
+                  notHereCount: i.notHereCount + 1,
+                  outSince: i.outSince ?? now,
+                },
+          )
+          .where(eq(items.id, i.id))
+          .run();
+        changes.push({ id: i.id, prev, next: isPresent ? 'home' : 'unaccounted' });
+      }
+      if (!changes.length) return null;
+      return recordEventTx(
+        tx, 'stocktake', 'multi', id, { changes, area_id: id }, req.user?.id,
+      ).id;
+    });
+    return { ok: true, changed: changes.length, event_id: eventId };
   });
 
   // Upload a photo for an area; `cover` field marks it as the cover.
