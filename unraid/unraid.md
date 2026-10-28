@@ -14,20 +14,24 @@ folder, so backups are just backing up `/mnt/user/appdata/stash`.
 
 ### Manual install (template not in CA yet)
 
-1. Docker tab -> **Add Container**.
-2. Fill in:
-   - **Repository:** `ghcr.io/graphichealer/stash:latest`
-   - **Network Type:** `bridge`
-   - **Port:** host `8080` -> container `8080` (TCP)
-   - **Path:** `/mnt/user/appdata/stash` -> `/data` (RW)
-   - **Variable:** `TZ` = your timezone (used by the digest schedule)
-   - **Extra Parameters:** `--add-host=host.docker.internal:host-gateway`
-     (lets the optional AI provider URL reach services on the Unraid host,
-     e.g. Ollama at `http://host.docker.internal:11434/v1`)
-3. Apply, then open the WebUI on port 8080.
+Copy `stash.xml` onto your flash drive's user-template folder, then install
+from the Docker tab:
 
-The ready-made template is also in this folder as `stash.xml` - point Unraid's
-template repositories at this repo or copy the fields above.
+1. Copy `unraid/stash.xml` to
+   `/boot/config/plugins/dockerMan/templates-user/stash.xml`
+   (e.g. `cp stash.xml /boot/config/plugins/dockerMan/templates-user/`
+   over SSH, or drop it on the `flash` share at
+   `config/plugins/dockerMan/templates-user/`).
+2. Docker tab -> **Add Container** -> the **Template** dropdown now lists
+   **Stash**. Pick it, adjust the port/appdata if needed, Apply.
+3. Open the WebUI on port 8080.
+
+Alternatively, fill the fields by hand in **Add Container**: repository
+`ghcr.io/graphichealer/stash:latest`, bridge network, port `8080`, path
+`/mnt/user/appdata/stash` -> `/data` (RW), `TZ` variable, and
+`--add-host=host.docker.internal:host-gateway` in Extra Parameters (lets the
+optional AI provider URL reach services on the Unraid host, e.g. Ollama at
+`http://host.docker.internal:11434/v1`).
 
 ## Configuration
 

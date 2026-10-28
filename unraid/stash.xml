@@ -4,7 +4,6 @@
   <Repository>ghcr.io/graphichealer/stash:latest</Repository>
   <Registry>https://github.com/GraphicHealer/Stash/pkgs/container/stash</Registry>
   <Network>bridge</Network>
-  <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
   <Support>https://github.com/GraphicHealer/Stash/issues</Support>
