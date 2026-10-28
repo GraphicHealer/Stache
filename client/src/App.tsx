@@ -25,7 +25,7 @@ function useWedgeScan() {
   const { toast } = useApp();
   const buf = useRef('');
   const lastKey = useRef(0);
-  const reset = useRef<ReturnType<typeof setTimeout>>();
+  const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
