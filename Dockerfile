@@ -1,6 +1,6 @@
 # Stache - single container: app + embedded SQLite, no external services.
 
-FROM node:22-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY server/package.json server/
@@ -20,7 +20,7 @@ COPY server/ server/
 COPY client/ client/
 RUN npm run build -w server && npm run build -w client
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 ARG APP_VERSION=dev
 ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION}
