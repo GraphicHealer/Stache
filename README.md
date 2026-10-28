@@ -52,7 +52,11 @@ Everything below is off by default - the app is fully usable without any of it.
 
 [![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FGraphicHealer%2FStash)
 
-Click the badge to add this repo to your add-on store, then install **Stash** and open its Web UI on port 8080. (Manual path: Settings → Add-ons → Add-on Store → ⋯ → Repositories → paste `https://github.com/GraphicHealer/Stash`.) From inside Stash, Settings shows a ready-made REST sensor URL (`out`/`unaccounted` counts, item names, low stock, warranties) and a digest trigger URL for automations.
+Click the badge to add this repo to your add-on store, then install **Stash** and open its Web UI on port 8080. (Manual path: Settings → Add-ons → Add-on Store → ⋯ → Repositories → paste `https://github.com/GraphicHealer/Stash`.)
+
+[![Add Stash integration via HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=GraphicHealer&repository=stash-ha&category=integration)
+
+For sensors inside Home Assistant, there's a [HACS integration](https://github.com/GraphicHealer/stash-ha) - items out, unaccounted, low stock, and warranty-expiring sensors fed by the app's webhook. From inside Stash, Settings also shows a ready-made REST sensor URL and a digest trigger URL for automations without the integration.
 
 **MCP** (Settings → MCP connections): each connection gets its own `/mcp/<slug>` URL plus a separate bearer token. Eight tools - search, areas, contents, details, move, resolve label, `add_item`, `update_item` - so assistants can answer "where is my soldering iron" or file receipts and voice descriptions for you. Front with HTTPS to expose externally.
 
