@@ -1,4 +1,4 @@
-# Stash
+# Stache
 
 Self-hosted, photo-first home inventory for people who won't fill in forms.
 
@@ -29,9 +29,9 @@ docker compose up -d --build
 
 Open `http://<host>:8080`, create the first household account, then head to `/labels` to print your first batch.
 
-Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/stash`) - the embedded SQLite database, photos, and AI model cache all live in the `stash_data` volume at `/data`. Backup is copying that volume.
+Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/stache`) - the embedded SQLite database, photos, and AI model cache all live in the `stache_data` volume at `/data`. Backup is copying that volume.
 
-**Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or photo search, not at boot - once warm the app sits around 450-550MB. On very small hosts, set `STASH_NO_ML=1` to disable embeddings entirely; everything else keeps working.
+**Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or photo search, not at boot - once warm the app sits around 450-550MB. On very small hosts, set `STACHE_NO_ML=1` to disable embeddings entirely; everything else keeps working.
 
 ## How it works
 
@@ -50,13 +50,13 @@ Everything below is off by default - the app is fully usable without any of it.
 
 **Home Assistant**: two ways in -
 
-[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FGraphicHealer%2FStash)
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FGraphicHealer%2FStache)
 
-Click the badge to add this repo to your add-on store, then install **Stash** and open its Web UI on port 8080. (Manual path: Settings → Add-ons → Add-on Store → ⋯ → Repositories → paste `https://github.com/GraphicHealer/Stash`.)
+Click the badge to add this repo to your add-on store, then install **Stache** and open its Web UI on port 8080. (Manual path: Settings → Add-ons → Add-on Store → ⋯ → Repositories → paste `https://github.com/GraphicHealer/Stache`.)
 
-[![Add Stash integration via HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=GraphicHealer&repository=stash-ha&category=integration)
+[![Add Stache integration via HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=GraphicHealer&repository=stache-ha&category=integration)
 
-For sensors inside Home Assistant, there's a [HACS integration](https://github.com/GraphicHealer/stash-ha) - items out, unaccounted, low stock, and warranty-expiring sensors fed by the app's webhook. From inside Stash, Settings also shows a ready-made REST sensor URL and a digest trigger URL for automations without the integration.
+For sensors inside Home Assistant, there's a [HACS integration](https://github.com/GraphicHealer/stache-ha) - items out, unaccounted, low stock, and warranty-expiring sensors fed by the app's webhook. From inside Stache, Settings also shows a ready-made REST sensor URL and a digest trigger URL for automations without the integration.
 
 **MCP** (Settings → MCP connections): each connection gets its own `/mcp/<slug>` URL plus a separate bearer token. Eight tools - search, areas, contents, details, move, resolve label, `add_item`, `update_item` - so assistants can answer "where is my soldering iron" or file receipts and voice descriptions for you. Front with HTTPS to expose externally.
 
@@ -70,10 +70,10 @@ Single container, no database service - the appdata folder holds everything. A r
 |----------|---------|---------|
 | `PORT` | `8080` | Web port |
 | `DATA_DIR` | `/data` | SQLite db + photos + AI model cache |
-| `DB_PATH` | `$DATA_DIR/stash.db` | SQLite file location |
+| `DB_PATH` | `$DATA_DIR/stache.db` | SQLite file location |
 | `TZ` | `UTC` | Digest schedule timezone |
 | `BETTER_AUTH_SECRET` | auto-generated | Session secret (persisted in DB) |
-| `STASH_NO_ML` | unset | `1` disables CLIP embeddings/photo similarity |
+| `STACHE_NO_ML` | unset | `1` disables CLIP embeddings/photo similarity |
 
 As a Home Assistant add-on the same image is used; the add-on's data dir maps to `/data`, so nothing else is needed.
 
@@ -90,7 +90,7 @@ Migrations live in `server/migrations/` and apply on boot. See `AGENTS.md` for a
 
 ## Releasing
 
-Publish a GitHub Release and Actions builds + pushes `ghcr.io/graphichealer/stash:<version>` and `:latest` for amd64 and arm64, with the version baked into the Settings footer and `/api/health`.
+Publish a GitHub Release and Actions builds + pushes `ghcr.io/graphichealer/stache:<version>` and `:latest` for amd64 and arm64, with the version baked into the Settings footer and `/api/health`.
 
 ## License
 

@@ -11,7 +11,7 @@ export interface OutboxOp {
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open('stash-outbox', 1);
+    const r = indexedDB.open('stache-outbox', 1);
     r.onupgradeneeded = () => r.result.createObjectStore('ops', { keyPath: 'id', autoIncrement: true });
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);

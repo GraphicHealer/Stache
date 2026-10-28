@@ -1,4 +1,4 @@
-# Stash
+# Stache
 
 Self-hosted, photo-first home inventory. "Where is my stuff?" - capture fast,
 organize never (or later). Only containers (areas) get QR labels; items are
@@ -16,12 +16,12 @@ overwrites.
 - `Dockerfile` - multi-stage: deps → build → runtime (`node:22-bookworm-slim`,
   non-root `node` user, `cups-client` for label printing).
 - `docker-compose.yml` - a single `app` service, no DB container. Everything
-  persists under `/data` (stash.db + photos + model cache).
-- Home Assistant add-on lives in `stash/` (config.yaml points at the released
+  persists under `/data` (stache.db + photos + model cache).
+- Home Assistant add-on lives in `stache/` (config.yaml points at the released
   GHCR image, `init: false`, port 8080 + `webui` button). `repository.yaml`
   at root makes the repo an add-on store source. `docker-entrypoint.sh`
   chowns /data then drops to `node` - HA mounts addon data root-owned.
-  The release workflow syncs `stash/config.yaml`'s `version:` to the tag.
+  The release workflow syncs `stache/config.yaml`'s `version:` to the tag.
 
 ## Build & verify
 
@@ -73,7 +73,7 @@ curl localhost:8080/api/health
   `lower()` or `LIKE`); recursive CTEs and `json_extract` work; vec0 KNN is
   `embedding MATCH ? AND k = ?`; FTS5 query strings come from `ftsQuery()`.
 - **Memory**: CLIP loads lazily on first embed (~200MB boot, ~450-500MB warm,
-  q8 + 2 threads). `STASH_NO_ML=1` disables ML entirely for tiny hosts.
+  q8 + 2 threads). `STACHE_NO_ML=1` disables ML entirely for tiny hosts.
 - **Zebra wedge scans** = rapid keystrokes ending in Enter (`parseScan`).
 - `/data` must stay writable by the `node` user (db + photos + model cache).
 - Docker daemon access may need `sg docker -c "..."` in a stale shell.
@@ -111,4 +111,4 @@ curl localhost:8080/api/health
 - External barcode lookup is free-tier only (Open*Facts); misses return
   `product: null` - never error, never block filing.
 - AI/ML is optional and non-blocking: filing works with no models loaded;
-  CLIP embeds lazily in the background, `STASH_NO_ML=1` disables it fully.
+  CLIP embeds lazily in the background, `STACHE_NO_ML=1` disables it fully.

@@ -4,7 +4,7 @@ export type Scan =
 
 /**
  * Detect the first product barcode in a photo - native BarcodeDetector with a
- * @zxing fallback. Skips Stash's own labels (those parse as 'label').
+ * @zxing fallback. Skips Stache's own labels (those parse as 'label').
  */
 export async function detectBarcodeInPhoto(blob: Blob): Promise<{ format: string; text: string } | null> {
   const isProduct = (t: string) => parseScan(t)?.kind === 'barcode';

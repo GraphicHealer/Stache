@@ -18,7 +18,7 @@ const pathOf = async (areaId: string) =>
   (await breadcrumb(areaId)).map((c) => c.name ?? 'unnamed').join(' › ');
 
 function buildMcpServer(): McpServer {
-  const server = new McpServer({ name: 'stash', version: '0.1.0' });
+  const server = new McpServer({ name: 'stache', version: '0.1.0' });
 
   server.registerTool(
     'search_items',

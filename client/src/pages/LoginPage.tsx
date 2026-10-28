@@ -49,7 +49,7 @@ export function LoginPage() {
     <div className="page login">
       <div className="login-brand">
         <img className="login-logo" src="/icon.svg" alt="" />
-        <h1>Stash</h1>
+        <h1>Stache</h1>
         <p className="login-tagline">Where is my stuff?</p>
       </div>
       <p className="muted">

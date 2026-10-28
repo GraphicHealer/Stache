@@ -8,7 +8,7 @@ import { env } from '../env';
  * In-process CLIP (ViT-B/32, q8) via transformers.js + onnxruntime-node.
  * Loads lazily on first embed - never at boot, so a cold start stays light.
  * Models download once into DATA_DIR/models (~350MB disk).
- * STASH_NO_ML=1 disables it entirely (very low-RAM hosts).
+ * STACHE_NO_ML=1 disables it entirely (very low-RAM hosts).
  */
 const MODEL = 'Xenova/clip-vit-base-patch32';
 
@@ -41,7 +41,7 @@ function l2norm(v: ArrayLike<number>): number[] {
   return arr.map((x) => x / norm);
 }
 
-const mlDisabled = process.env.STASH_NO_ML === '1';
+const mlDisabled = process.env.STACHE_NO_ML === '1';
 
 async function rawImage(buf: Buffer) {
   const hf = await import('@huggingface/transformers');
@@ -54,7 +54,7 @@ async function rawImage(buf: Buffer) {
 }
 
 async function loadClip(): Promise<Clip> {
-  if (mlDisabled) throw new Error('ML disabled via STASH_NO_ML');
+  if (mlDisabled) throw new Error('ML disabled via STACHE_NO_ML');
   const hf = await import('@huggingface/transformers');
   hf.env.cacheDir = path.join(env.dataDir, 'models');
   const [processor, tokenizer, vision, textModel] = await Promise.all([
@@ -186,7 +186,7 @@ type Vlm = { model: any; processor: any; tokenizer: any };
 let vlmPromise: Promise<Vlm> | null = null;
 
 async function loadVlm(): Promise<Vlm> {
-  if (mlDisabled) throw new Error('ML disabled via STASH_NO_ML');
+  if (mlDisabled) throw new Error('ML disabled via STACHE_NO_ML');
   const hf = await import('@huggingface/transformers');
   hf.env.cacheDir = path.join(env.dataDir, 'models');
   const [model, processor, tokenizer] = await Promise.all([

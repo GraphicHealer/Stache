@@ -1,4 +1,4 @@
--- Stash initial schema - SQLite dialect.
+-- Stache initial schema - SQLite dialect.
 -- Timestamps are INTEGER unix ms; booleans INTEGER; JSON is TEXT.
 -- Embeddings live in the vec0 virtual table (requires sqlite-vec, loaded by
 -- the app before migrations run). Full-text index lives in items_fts (FTS5)

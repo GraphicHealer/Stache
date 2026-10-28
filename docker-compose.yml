@@ -2,7 +2,7 @@ services:
   app:
     # Prebuilt release image - `docker compose pull` grabs it; `build` still
     # works for local development from source.
-    image: ghcr.io/graphichealer/stash:latest
+    image: ghcr.io/graphichealer/stache:latest
     build: .
     restart: unless-stopped
     environment:
@@ -10,7 +10,7 @@ services:
       DATA_DIR: /data
       TZ: ${TZ:-UTC}   # digest "time" setting uses this timezone
     volumes:
-      - stash_data:/data   # SQLite db + photos + model cache all live here
+      - stache_data:/data   # SQLite db + photos + model cache all live here
     ports:
       - "8080:8080"
     # Lets the AI provider URL reach services on the Docker host
@@ -19,4 +19,4 @@ services:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  stash_data:
+  stache_data:

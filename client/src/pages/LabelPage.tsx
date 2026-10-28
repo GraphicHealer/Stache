@@ -32,7 +32,7 @@ export function LabelPage() {
   if (error || !data)
     return (
       <div className="page">
-        <h1>Not a Stash label</h1>
+        <h1>Not a Stache label</h1>
         <p className="muted">Code “{code}” isn't in a generated batch. Print labels first.</p>
       </div>
     );

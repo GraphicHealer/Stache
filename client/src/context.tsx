@@ -38,7 +38,7 @@ interface AppCtx {
 const Ctx = createContext<AppCtx>(null as unknown as AppCtx);
 export const useApp = () => useContext(Ctx);
 
-const LS_KEY = 'stash.currentArea';
+const LS_KEY = 'stache.currentArea';
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentArea, setArea] = useState<AreaRef | null>(() => {
@@ -65,8 +65,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then((r) => setUser(r.user))
       .catch(() => setUser(null));
     const unauth = () => setUser(null);
-    window.addEventListener('stash:unauth', unauth);
-    return () => window.removeEventListener('stash:unauth', unauth);
+    window.addEventListener('stache:unauth', unauth);
+    return () => window.removeEventListener('stache:unauth', unauth);
   }, []);
 
   const setCurrentArea = useCallback((a: AreaRef | null) => {

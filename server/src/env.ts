@@ -9,7 +9,7 @@ export const env = {
   port: Number(process.env.PORT ?? 8080),
   host: process.env.HOST ?? '0.0.0.0',
   // Embedded SQLite lives in DATA_DIR next to the photos.
-  dbPath: process.env.DB_PATH ?? path.join(dataDir, 'stash.db'),
+  dbPath: process.env.DB_PATH ?? path.join(dataDir, 'stache.db'),
   dataDir,
   // Photos on disk. In Docker: /data volume. Locally: <repo>/data.
   // Built PWA. In Docker: /app/client/dist. In dev the Vite server serves it.

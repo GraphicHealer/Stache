@@ -5,8 +5,8 @@ export interface DetectedCode {
   text: string;
 }
 
-/** Stash's own labels - never treated as product codes. */
-const isStashLabel = (t: string) => /\/l\/[A-Za-z0-9-]+/.test(t) || /^ST-\d+$/i.test(t);
+/** Stache's own labels - never treated as product codes. */
+const isStacheLabel = (t: string) => /\/l\/[A-Za-z0-9-]+/.test(t) || /^ST-\d+$/i.test(t);
 
 /** Detect barcodes/QR codes in an image buffer (zxing-cpp via WASM). */
 export async function detectCodes(buf: Buffer): Promise<DetectedCode[]> {
@@ -17,7 +17,7 @@ export async function detectCodes(buf: Buffer): Promise<DetectedCode[]> {
     const results = await readBarcodes(png, { tryHarder: true });
     const seen = new Set<string>();
     return results
-      .filter((r) => r.text && !r.error && !isStashLabel(r.text))
+      .filter((r) => r.text && !r.error && !isStacheLabel(r.text))
       .map((r) => ({ format: String(r.format), text: r.text! }))
       .filter((r) => (seen.has(r.text) ? false : (seen.add(r.text), true)));
   } catch {
@@ -43,7 +43,7 @@ export async function lookupBarcode(code: string): Promise<ProductInfo | null> {
     try {
       const res = await fetch(`${base}/api/v2/product/${encodeURIComponent(code)}.json`, {
         signal: AbortSignal.timeout(5000),
-        headers: { 'User-Agent': 'StashInventory/0.1 (self-hosted)' },
+        headers: { 'User-Agent': 'StacheInventory/0.1 (self-hosted)' },
       });
       if (!res.ok) continue;
       const data: any = await res.json();

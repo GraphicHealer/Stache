@@ -20,7 +20,7 @@ export interface SessionUser {
 
 function makeAuth(secret: string) {
   return betterAuth({
-    appName: 'Stash',
+    appName: 'Stache',
     secret,
     database: drizzleAdapter(db, { provider: 'sqlite' }),
     emailAndPassword: { enabled: true, minPasswordLength: 8 },

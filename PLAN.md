@@ -1,8 +1,8 @@
-# Stash
+# Stache
 
 A self-hosted home inventory that's built for people who won't fill in forms.
 
-Stash answers one question: **"Where is my stuff?"** It does that without asking you to name, categorize, or organize anything at the moment you're holding an object and want to put it down.
+Stache answers one question: **"Where is my stuff?"** It does that without asking you to name, categorize, or organize anything at the moment you're holding an object and want to put it down.
 
 *This document describes the idea, the user experience, and the decisions taken. Status markers: **[done]**, **[partial]**, **[todo]**, or covered by MCP/another feature instead.*
 
@@ -18,7 +18,7 @@ Most inventory tools assume a tidy person with spare executive function. They as
 4. Deciding on categories and names at the worst possible moment causes paralysis.
 5. Finding something means scrolling or recalling the exact name you gave it, and recalling is the thing that's already broken.
 
-Stash is designed around those failures.
+Stache is designed around those failures.
 
 ## Principles
 
@@ -102,7 +102,7 @@ Search accepts whatever you remember:
 - a model number printed on the item
 - **a photo** of something similar, to find what you already have
 
-Results show the item photo and its breadcrumb. If the item isn't where it says, one tap marks it "not here," and Stash lowers its confidence, marks it unaccounted for, and suggests where else to look.
+Results show the item photo and its breadcrumb. If the item isn't where it says, one tap marks it "not here," and Stache lowers its confidence, marks it unaccounted for, and suggests where else to look.
 
 ### 4. Moving things **[done]**
 - Select items from an area's photo grid, then scan the destination.
@@ -172,7 +172,7 @@ Design rules - all implemented:
 
 ---
 
-## Things Stash deliberately won't do
+## Things Stache deliberately won't do
 
 - Require a name, category, or any field except a photo.
 - Show "you have 143 items to categorize."

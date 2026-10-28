@@ -1,13 +1,13 @@
-name: Stash
+name: Stache
 version: "0.1.1"
-slug: stash
+slug: stache
 description: Photo-first home inventory - "Where is my stuff?"
-url: https://github.com/GraphicHealer/Stash
+url: https://github.com/GraphicHealer/Stache
 arch:
   - aarch64
   - amd64
 init: false
-image: ghcr.io/graphichealer/stash
+image: ghcr.io/graphichealer/stache
 startup: application
 boot: auto
 ports:

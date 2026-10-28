@@ -51,9 +51,9 @@ jobs:
       - name: Sync add-on version
         run: |
           # Image tags are semver without the leading v (metadata-action pattern).
-          sed -i "s/^version:.*/version: \"${GITHUB_REF_NAME#v}\"/" stash/config.yaml
+          sed -i "s/^version:.*/version: \"${GITHUB_REF_NAME#v}\"/" stache/config.yaml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add stash/config.yaml
+          git add stache/config.yaml
           git commit -m "Bump add-on version to ${{ github.event.release.tag_name }}" || echo "no change"
           git push origin HEAD:main

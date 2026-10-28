@@ -1,4 +1,4 @@
-# Stash - single container: app + embedded SQLite, no external services.
+# Stache - single container: app + embedded SQLite, no external services.
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app

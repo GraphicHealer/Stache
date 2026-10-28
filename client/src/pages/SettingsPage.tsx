@@ -299,7 +299,7 @@ export function SettingsPage() {
       )}
 
       <p className="muted" style={{ marginTop: '32px' }}>
-        Stash {import.meta.env.VITE_APP_VERSION || 'dev'}
+        Stache {import.meta.env.VITE_APP_VERSION || 'dev'}
       </p>
     </div>
   );

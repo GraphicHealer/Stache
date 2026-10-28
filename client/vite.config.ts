@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'Stash',
-        short_name: 'Stash',
+        name: 'Stache',
+        short_name: 'Stache',
         description: 'Where is my stuff?',
         theme_color: '#111318',
         background_color: '#111318',
@@ -29,7 +29,7 @@ export default defineConfig({
             urlPattern: /\/photos\/.*/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'stash-photos',
+              cacheName: 'stache-photos',
               expiration: { maxEntries: 2000, maxAgeSeconds: 60 * 60 * 24 * 90 },
             },
           },
@@ -42,7 +42,7 @@ export default defineConfig({
             urlPattern: /\/api\/.*/,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'stash-api',
+              cacheName: 'stache-api',
               networkTimeoutSeconds: 4,
               expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },

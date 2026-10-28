@@ -1,4 +1,4 @@
-# Stash
+# Stache
 
 Self-hosted, photo-first home inventory for people who won't fill in forms.
 "Where is my stuff?" - snap a photo, drop the thing in a bin, scan the bin's
@@ -17,7 +17,7 @@ add-on's data storage and survives updates.
 
 ## Home Assistant integration
 
-Once running, open Stash's **Settings** page for ready-made URLs:
+Once running, open Stache's **Settings** page for ready-made URLs:
 
 - **Out sensor** - a `rest` sensor endpoint exposing out/unaccounted counts,
   item names, low stock, and expiring warranties.
@@ -30,17 +30,17 @@ Once running, open Stash's **Settings** page for ready-made URLs:
 sensor:
   - platform: rest
     resource: "http://<your-ha-host>:8080/api/webhooks/out-sensor?token=TOKEN"
-    name: "Stash Still Out"
+    name: "Stache Still Out"
     value_template: "{{ value_json.total }}"
     json_attributes:
       - items
 ```
 
-The token URL is shown in Stash Settings - copy it from there.
+The token URL is shown in Stache Settings - copy it from there.
 
 ## Optional AI
 
 All AI is off by default. Configure an OpenAI-compatible endpoint
 (Ollama, LM Studio, hosted) in Settings for suggested names, OCR,
 photo similarity, and pile splitting. To save memory on small hosts,
-set `STASH_NO_ML=1` via the environment to disable local embeddings.
+set `STACHE_NO_ML=1` via the environment to disable local embeddings.
