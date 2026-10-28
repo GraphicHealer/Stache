@@ -74,7 +74,7 @@ export function buildApp() {
     decorateReply: false,
     cacheControl: false,
     setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+      res.header('Cache-Control', 'private, max-age=31536000, immutable');
     },
   });
 
