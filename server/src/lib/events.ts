@@ -27,6 +27,22 @@ export async function recordEvent(
   return row;
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Same as recordEvent but inside a better-sqlite3 transaction - pair it with
+ * the mutation it records so a failure can't leave an undoable ghost event.
+ */
+export function recordEventTx(
+  tx: Tx,
+  type: EventType,
+  entityType: 'area' | 'item',
+  entityId: string,
+  payload: Record<string, unknown> = {},
+) {
+  return tx.insert(events).values({ type, entityType, entityId, payload }).returning().all()[0];
+}
+
 /**
  * Applies the inverse of an event and marks it undone.
  * Undo never destroys data - filing an item is undone by hiding it, etc.

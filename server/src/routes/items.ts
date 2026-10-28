@@ -6,7 +6,7 @@ import { db, query, placeholders } from '../db';
 import { env } from '../env';
 import { areas, items, photos } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
-import { recordEvent } from '../lib/events';
+import { recordEventTx, type EventType } from '../lib/events';
 import { insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
 import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
 import { analyzeItemPhoto, hasEmbedding, mlHealthy, nearestToItem } from '../lib/ml';
@@ -83,18 +83,43 @@ export async function itemRoutes(app: FastifyInstance) {
       .where(and(eq(areas.id, areaId), isNull(areas.archivedAt)));
     if (!area) return reply.badRequest('area not found');
 
-    const [item] = await db
-      .insert(items)
-      .values({
-        areaId,
-        name: fields.name || null,
-        description: fields.description || null,
-        quantity: Math.max(1, parseInt(fields.quantity ?? '1', 10) || 1),
-        barcode: fields.barcode || null,
-        ownerId: req.user?.id ?? null,
-        isPrivate: fields.is_private === 'true',
-      })
-      .returning();
+    // Offline replays carry a client_id - if the first attempt actually
+    // landed, return the existing item instead of filing a duplicate.
+    const clientId = fields.client_id || null;
+    if (clientId) {
+      const [existing] = await db.select().from(items).where(eq(items.clientId, clientId));
+      if (existing) return { item: itemJson(existing), event_id: null, deduped: true };
+    }
+
+    let item: typeof items.$inferSelect;
+    let ev: { id: string };
+    try {
+      ({ item, ev } = db.transaction((tx) => {
+        const [i] = tx
+          .insert(items)
+          .values({
+            areaId,
+            name: fields.name || null,
+            description: fields.description || null,
+            quantity: Math.max(1, parseInt(fields.quantity ?? '1', 10) || 1),
+            barcode: fields.barcode || null,
+            ownerId: req.user?.id ?? null,
+            isPrivate: fields.is_private === 'true',
+            clientId,
+          })
+          .returning()
+          .all();
+        const e = recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId });
+        return { item: i, ev: e };
+      }));
+    } catch (err) {
+      // Concurrent replay - the unique index rejected the second insert.
+      if (clientId) {
+        const [existing] = await db.select().from(items).where(eq(items.clientId, clientId));
+        if (existing) return { item: itemJson(existing), event_id: null, deduped: true };
+      }
+      throw err;
+    }
 
     for (const buf of files) {
       const saved = await savePhotoFile(buf);
@@ -104,7 +129,6 @@ export async function itemRoutes(app: FastifyInstance) {
       );
     }
 
-    const ev = await recordEvent('item.filed', 'item', item.id, { area_id: areaId });
     if (files.length) {
       detectAndStore(item.id, files).catch(() => {});
       await maybeQueueItem(item.id);
@@ -133,7 +157,9 @@ export async function itemRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as Record<string, any>;
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
-    const eventIds: string[] = [];
+    // Events are collected, then written in one transaction with the update -
+    // a failed update can't leave an undoable event for nothing.
+    const evs: { type: EventType; payload: Record<string, unknown> }[] = [];
 
     // Move to another area.
     if (body.area_id !== undefined && body.area_id !== item.areaId) {
@@ -142,11 +168,10 @@ export async function itemRoutes(app: FastifyInstance) {
         .from(areas)
         .where(and(eq(areas.id, body.area_id), isNull(areas.archivedAt)));
       if (!area) return reply.badRequest('destination area not found');
-      const ev = await recordEvent('item.moved', 'item', id, {
-        from_area_id: item.areaId,
-        to_area_id: body.area_id,
+      evs.push({
+        type: 'item.moved',
+        payload: { from_area_id: item.areaId, to_area_id: body.area_id },
       });
-      eventIds.push(ev.id);
       item.areaId = body.area_id;
     }
 
@@ -154,18 +179,20 @@ export async function itemRoutes(app: FastifyInstance) {
     if (body.status !== undefined && body.status !== item.status) {
       if (!['home', 'out', 'lent', 'unaccounted', 'gone'].includes(body.status))
         return reply.badRequest('status must be home|out|lent|unaccounted|gone');
-      const ev = await recordEvent('item.status', 'item', id, {
-        prev: {
-          status: item.status,
-          lent_to: item.lentTo,
-          out_since: item.outSince,
-          hidden_at: item.hiddenAt,
-          takeout_count: item.takeoutCount,
-          last_used: item.lastUsedAt,
+      evs.push({
+        type: 'item.status',
+        payload: {
+          prev: {
+            status: item.status,
+            lent_to: item.lentTo,
+            out_since: item.outSince,
+            hidden_at: item.hiddenAt,
+            takeout_count: item.takeoutCount,
+            last_used: item.lastUsedAt,
+          },
+          next: { status: body.status, lent_to: body.lent_to ?? null },
         },
-        next: { status: body.status, lent_to: body.lent_to ?? null },
       });
-      eventIds.push(ev.id);
       const goingOut = ['out', 'lent'].includes(body.status) && item.status === 'home';
       item.status = body.status;
       item.lentTo = body.status === 'lent' ? (body.lent_to ?? item.lentTo) : null;
@@ -217,36 +244,40 @@ export async function itemRoutes(app: FastifyInstance) {
       }
     }
     if (Object.keys(prev).length) {
-      const ev = await recordEvent('item.updated', 'item', id, { prev, next });
-      eventIds.push(ev.id);
+      evs.push({ type: 'item.updated', payload: { prev, next } });
     }
 
     // A private item with no owner would be invisible to everyone.
     if (item.isPrivate && !item.ownerId) item.ownerId = req.user?.id ?? null;
 
-    const [updated] = await db
-      .update(items)
-      .set({
-        areaId: item.areaId,
-        status: item.status,
-        lentTo: item.lentTo,
-        outSince: item.outSince,
-        name: item.name,
-        description: item.description,
-        quantity: item.quantity,
-        barcode: item.barcode,
-        detectedCodes: item.detectedCodes,
-        isPrivate: item.isPrivate,
-        hiddenAt: item.hiddenAt,
-        takeoutCount: item.takeoutCount,
-        ownerId: item.ownerId,
-        lastUsedAt: item.lastUsedAt,
-        remindSnoozedUntil: item.remindSnoozedUntil,
-        warrantyUntil: item.warrantyUntil,
-        restockBelow: item.restockBelow,
-      })
-      .where(eq(items.id, id))
-      .returning();
+    const { updated, eventIds } = db.transaction((tx) => {
+      const ids = evs.map((e) => recordEventTx(tx, e.type, 'item', id, e.payload).id);
+      const [u] = tx
+        .update(items)
+        .set({
+          areaId: item.areaId,
+          status: item.status,
+          lentTo: item.lentTo,
+          outSince: item.outSince,
+          name: item.name,
+          description: item.description,
+          quantity: item.quantity,
+          barcode: item.barcode,
+          detectedCodes: item.detectedCodes,
+          isPrivate: item.isPrivate,
+          hiddenAt: item.hiddenAt,
+          takeoutCount: item.takeoutCount,
+          ownerId: item.ownerId,
+          lastUsedAt: item.lastUsedAt,
+          remindSnoozedUntil: item.remindSnoozedUntil,
+          warrantyUntil: item.warrantyUntil,
+          restockBelow: item.restockBelow,
+        })
+        .where(eq(items.id, id))
+        .returning()
+        .all();
+      return { updated: u, eventIds: ids };
+    });
     return { item: itemJson(updated), event_ids: eventIds };
   });
 
@@ -278,22 +309,26 @@ export async function itemRoutes(app: FastifyInstance) {
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
 
-    const ev = await recordEvent('item.not_here', 'item', id, {
-      count_before: item.notHereCount,
-      area_id: item.areaId,
-      status_before: item.status,
-      out_since_before: item.outSince,
+    const { ev, updated } = db.transaction((tx) => {
+      const e = recordEventTx(tx, 'item.not_here', 'item', id, {
+        count_before: item.notHereCount,
+        area_id: item.areaId,
+        status_before: item.status,
+        out_since_before: item.outSince,
+      });
+      const [u] = tx
+        .update(items)
+        .set({
+          notHereCount: item.notHereCount + 1,
+          // "Not here" means the location is unknown - it's unaccounted for.
+          status: item.status === 'home' ? 'unaccounted' : item.status,
+          outSince: item.outSince ?? new Date(),
+        })
+        .where(eq(items.id, id))
+        .returning()
+        .all();
+      return { ev: e, updated: u };
     });
-    const [updated] = await db
-      .update(items)
-      .set({
-        notHereCount: item.notHereCount + 1,
-        // "Not here" means the location is unknown - it's unaccounted for.
-        status: item.status === 'home' ? 'unaccounted' : item.status,
-        outSince: item.outSince ?? new Date(),
-      })
-      .where(eq(items.id, id))
-      .returning();
 
     // Suggest: areas it lived in before (from move events) + siblings of current area.
     const prevAreas = query<{ area_id: string }>(
@@ -450,24 +485,28 @@ export async function itemRoutes(app: FastifyInstance) {
 
       const buf = await sharp(file).extract({ left, top, width, height }).toBuffer();
       const name = pick.name?.trim() || null;
-      const [child] = await db
-        .insert(items)
-        .values({
-          areaId: item.areaId,
-          name,
-          aiName: name ? null : (pick.label ?? null),
-          ownerId: item.ownerId,
-          isPrivate: item.isPrivate,
-        })
-        .returning();
+      const { child, ev } = db.transaction((tx) => {
+        const [c] = tx
+          .insert(items)
+          .values({
+            areaId: item.areaId,
+            name,
+            aiName: name ? null : (pick.label ?? null),
+            ownerId: item.ownerId,
+            isPrivate: item.isPrivate,
+          })
+          .returning()
+          .all();
+        const e = recordEventTx(tx, 'item.filed', 'item', c.id, {
+          area_id: item.areaId,
+          via: 'split',
+          source_item_id: id,
+        });
+        return { child: c, ev: e };
+      });
       const saved = await savePhotoFile(buf);
       await insertPhoto(saved, { itemId: child.id });
       analyzeItemPhoto(child.id, saved.path).catch(() => {});
-      const ev = await recordEvent('item.filed', 'item', child.id, {
-        area_id: item.areaId,
-        via: 'split',
-        source_item_id: id,
-      });
       eventIds.push(ev.id);
       created.push({ id: child.id, name: child.name, thumb: `/photos/${saved.thumbPath}` });
     }
@@ -488,8 +527,10 @@ export async function itemRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
-    await db.update(items).set({ hiddenAt: new Date() }).where(eq(items.id, id));
-    const ev = await recordEvent('item.hidden', 'item', id, { name: item.name });
+    const ev = db.transaction((tx) => {
+      tx.update(items).set({ hiddenAt: new Date() }).where(eq(items.id, id)).run();
+      return recordEventTx(tx, 'item.hidden', 'item', id, { name: item.name });
+    });
     return { ok: true, event_id: ev.id };
   });
 }

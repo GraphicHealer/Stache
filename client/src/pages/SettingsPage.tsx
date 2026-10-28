@@ -298,6 +298,26 @@ export function SettingsPage() {
         </>
       )}
 
+      <h2>Backup</h2>
+      <p className="muted">
+        Saves a consistent snapshot of the database into your data folder
+        (<code>backups/</code>), keeping the newest 10. Photos live alongside it in
+        <code>photos/</code> - back up the whole data folder to cover both.
+      </p>
+      <button
+        className="btn"
+        onClick={async () => {
+          try {
+            const r = await api.post('/api/backup');
+            toast(`Backed up: ${r.file}`);
+          } catch (e) {
+            toast(`Backup failed: ${(e as Error).message}`);
+          }
+        }}
+      >
+        Back up now
+      </button>
+
       <p className="muted" style={{ marginTop: '32px' }}>
         Stache {import.meta.env.VITE_APP_VERSION || 'dev'}
       </p>

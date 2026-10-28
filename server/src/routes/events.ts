@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm';
-import { db } from '../db';
+import { db, sqlite } from '../db';
+import { env } from '../env';
 import { events, items } from '../db/schema';
 import { undoEvent } from '../lib/events';
 import { itemVisible } from '../lib/visibility';
@@ -145,5 +148,22 @@ export async function miscRoutes(app: FastifyInstance) {
         thumb: (t => t ? thumbUrl(t) : null)(miscThumbs.get(i.id)),
       })),
     };
+  });
+
+  // Consistent snapshot of the live database (SQLite backup API under the
+  // hood - safe on a WAL database, unlike copying the files). Keeps 10.
+  app.post('/api/backup', async () => {
+    const dir = path.join(env.dataDir, 'backups');
+    await fs.mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const file = path.join(dir, `stache-${stamp}.db`);
+    await sqlite.backup(file);
+    const stat = await fs.stat(file);
+
+    const backups = (await fs.readdir(dir)).filter((f) => f.endsWith('.db')).sort();
+    for (const f of backups.slice(0, Math.max(0, backups.length - 10))) {
+      await fs.rm(path.join(dir, f), { force: true });
+    }
+    return { ok: true, file: path.basename(file), bytes: stat.size };
   });
 }

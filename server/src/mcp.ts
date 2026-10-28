@@ -8,7 +8,7 @@ import { db, queryOne } from './db';
 import { areas, items, labels, mcpTokens, photos } from './db/schema';
 import { breadcrumb } from './lib/breadcrumb';
 import { searchItemIds } from './lib/textsearch';
-import { recordEvent } from './lib/events';
+import { recordEventTx, type EventType } from './lib/events';
 import { photoUrl, thumbUrl } from './lib/photos';
 
 const text = (data: unknown) => ({
@@ -124,10 +124,12 @@ function buildMcpServer(): McpServer {
       if (!i || i.isPrivate) return text({ error: 'item not found' });
       const [a] = await db.select().from(areas).where(eq(areas.id, area_id));
       if (!a || a.archivedAt) return text({ error: 'area not found' });
-      await recordEvent('item.moved', 'item', item_id, {
-        from_area_id: i.areaId, to_area_id: area_id,
+      db.transaction((tx) => {
+        recordEventTx(tx, 'item.moved', 'item', item_id, {
+          from_area_id: i.areaId, to_area_id: area_id,
+        });
+        tx.update(items).set({ areaId: area_id }).where(eq(items.id, item_id)).run();
       });
-      await db.update(items).set({ areaId: area_id }).where(eq(items.id, item_id));
       return text({ ok: true, path: await pathOf(area_id) });
     },
   );
@@ -166,8 +168,11 @@ function buildMcpServer(): McpServer {
         if (a) {
           areaId = a.id;
         } else {
-          const [created] = await db.insert(areas).values({ name: area_name }).returning();
-          await recordEvent('area.created', 'area', created.id, { name: area_name });
+          const created = db.transaction((tx) => {
+            const [c] = tx.insert(areas).values({ name: area_name }).returning().all();
+            recordEventTx(tx, 'area.created', 'area', c.id, { name: area_name });
+            return c;
+          });
           areaId = created.id;
         }
       }
@@ -175,19 +180,23 @@ function buildMcpServer(): McpServer {
       const [area] = await db.select().from(areas).where(eq(areas.id, areaId));
       if (!area || area.archivedAt) return text({ error: 'area not found' });
 
-      const [item] = await db
-        .insert(items)
-        .values({
-          areaId,
-          name: name ?? null,
-          description: description ?? null,
-          quantity: quantity ?? 1,
-          barcode: barcode ?? null,
-          warrantyUntil: warranty_until ?? null,
-          restockBelow: restock_below ?? null,
-        })
-        .returning();
-      await recordEvent('item.filed', 'item', item.id, { area_id: areaId, via: 'mcp' });
+      const item = db.transaction((tx) => {
+        const [i] = tx
+          .insert(items)
+          .values({
+            areaId,
+            name: name ?? null,
+            description: description ?? null,
+            quantity: quantity ?? 1,
+            barcode: barcode ?? null,
+            warrantyUntil: warranty_until ?? null,
+            restockBelow: restock_below ?? null,
+          })
+          .returning()
+          .all();
+        recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId, via: 'mcp' });
+        return i;
+      });
       return text({ ok: true, item_id: item.id, path: await pathOf(areaId) });
     },
   );
@@ -227,17 +236,21 @@ function buildMcpServer(): McpServer {
           edits[col] = v;
         }
       }
+      const evs: { type: EventType; payload: Record<string, unknown> }[] = [];
       if (Object.keys(prev).length) {
-        await recordEvent('item.updated', 'item', item_id, { prev, next: edits });
+        evs.push({ type: 'item.updated', payload: { prev, next: { ...edits } } });
       }
 
       if (status !== undefined && status !== i.status) {
-        await recordEvent('item.status', 'item', item_id, {
-          prev: {
-            status: i.status, lent_to: i.lentTo, out_since: i.outSince,
-            hidden_at: i.hiddenAt, takeout_count: i.takeoutCount, last_used: i.lastUsedAt,
+        evs.push({
+          type: 'item.status',
+          payload: {
+            prev: {
+              status: i.status, lent_to: i.lentTo, out_since: i.outSince,
+              hidden_at: i.hiddenAt, takeout_count: i.takeoutCount, last_used: i.lastUsedAt,
+            },
+            next: { status, lent_to: lent_to ?? null },
           },
-          next: { status, lent_to: lent_to ?? null },
         });
         edits.status = status;
         edits.lentTo = status === 'lent' ? (lent_to ?? i.lentTo) : null;
@@ -254,7 +267,10 @@ function buildMcpServer(): McpServer {
         }
       }
       if (!Object.keys(edits).length) return text({ ok: true, changed: false });
-      await db.update(items).set(edits).where(eq(items.id, item_id));
+      db.transaction((tx) => {
+        for (const e of evs) recordEventTx(tx, e.type, 'item', item_id, e.payload);
+        tx.update(items).set(edits).where(eq(items.id, item_id)).run();
+      });
       return text({ ok: true, changed: true, path: await pathOf(i.areaId) });
     },
   );

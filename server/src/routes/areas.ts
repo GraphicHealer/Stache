@@ -3,7 +3,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { areas, labels, photos } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
-import { recordEvent } from '../lib/events';
+import { recordEventTx } from '../lib/events';
 import {
   coverThumbsForAreas,
   insertPhoto,
@@ -75,16 +75,20 @@ export async function areaRoutes(app: FastifyInstance) {
       labelCode = label.code;
     }
 
-    const [area] = await db
-      .insert(areas)
-      .values({ name: body.name ?? null, parentId: body.parent_id ?? null, labelCode })
-      .returning();
-    if (labelCode) {
-      await db.update(labels).set({ areaId: area.id }).where(eq(labels.code, labelCode));
-    }
-    const ev = await recordEvent('area.created', 'area', area.id, {
-      label_code: labelCode,
-      parent_id: area.parentId,
+    const { area, ev } = db.transaction((tx) => {
+      const [a] = tx
+        .insert(areas)
+        .values({ name: body.name ?? null, parentId: body.parent_id ?? null, labelCode })
+        .returning()
+        .all();
+      if (labelCode) {
+        tx.update(labels).set({ areaId: a.id }).where(eq(labels.code, labelCode)).run();
+      }
+      const e = recordEventTx(tx, 'area.created', 'area', a.id, {
+        label_code: labelCode,
+        parent_id: a.parentId,
+      });
+      return { area: a, ev: e };
     });
     return reply.code(201).send({ area: areaJson(area), event_id: ev.id });
   });
@@ -150,7 +154,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as PatchAreaBody;
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
-    const eventIds: string[] = [];
+    const evs: { type: 'area.moved' | 'area.updated'; payload: Record<string, unknown> }[] = [];
 
     if (body.parent_id !== undefined && body.parent_id !== area.parentId) {
       if (body.parent_id === id) return reply.badRequest('an area cannot contain itself');
@@ -162,26 +166,29 @@ export async function areaRoutes(app: FastifyInstance) {
         if (chain.some((c) => c.id === id))
           return reply.badRequest('an area cannot move inside itself');
       }
-      const ev = await recordEvent('area.moved', 'area', id, {
-        from_parent_id: area.parentId,
-        to_parent_id: body.parent_id,
+      evs.push({
+        type: 'area.moved',
+        payload: { from_parent_id: area.parentId, to_parent_id: body.parent_id },
       });
-      eventIds.push(ev.id);
     }
     if (body.name !== undefined && body.name !== area.name) {
-      const ev = await recordEvent('area.updated', 'area', id, { prev: { name: area.name } });
-      eventIds.push(ev.id);
+      evs.push({ type: 'area.updated', payload: { prev: { name: area.name } } });
     }
 
-    const [updated] = await db
-      .update(areas)
-      .set({
-        name: body.name === undefined ? area.name : body.name,
-        parentId: body.parent_id === undefined ? area.parentId : body.parent_id,
-        coverPhotoId: body.cover_photo_id === undefined ? area.coverPhotoId : body.cover_photo_id,
-      })
-      .where(eq(areas.id, id))
-      .returning();
+    const { updated, eventIds } = db.transaction((tx) => {
+      const ids = evs.map((e) => recordEventTx(tx, e.type, 'area', id, e.payload).id);
+      const [u] = tx
+        .update(areas)
+        .set({
+          name: body.name === undefined ? area.name : body.name,
+          parentId: body.parent_id === undefined ? area.parentId : body.parent_id,
+          coverPhotoId: body.cover_photo_id === undefined ? area.coverPhotoId : body.cover_photo_id,
+        })
+        .where(eq(areas.id, id))
+        .returning()
+        .all();
+      return { updated: u, eventIds: ids };
+    });
     return { area: areaJson(updated), event_ids: eventIds };
   });
 
@@ -190,8 +197,10 @@ export async function areaRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
-    await db.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, id));
-    const ev = await recordEvent('area.archived', 'area', id, { name: area.name });
+    const ev = db.transaction((tx) => {
+      tx.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, id)).run();
+      return recordEventTx(tx, 'area.archived', 'area', id, { name: area.name });
+    });
     return { ok: true, event_id: ev.id };
   });
 

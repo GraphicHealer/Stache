@@ -55,7 +55,14 @@ export const items = sqliteTable('items', {
   // Household sharing: shared by default; private items are owner-only.
   ownerId: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
   isPrivate: integer('is_private', { mode: 'boolean' }).notNull().default(false),
-}, (t) => [index('items_area_idx').on(t.areaId)]);
+  // Client-generated idempotency key - offline replays dedupe on it.
+  clientId: text('client_id'),
+}, (t) => [
+  index('items_area_idx').on(t.areaId),
+  uniqueIndex('items_client_id_idx').on(t.clientId),
+  index('items_barcode_idx').on(t.barcode),
+  index('items_status_idx').on(t.status),
+]);
 
 export const photos = sqliteTable('photos', {
   id: text('id').primaryKey().$defaultFn(newId),
@@ -79,7 +86,10 @@ export const events = sqliteTable('events', {
   payload: text('payload', { mode: 'json' }),
   undoneAt: ts('undone_at'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
-}, (t) => [index('events_created_idx').on(t.createdAt)]);
+}, (t) => [
+  index('events_created_idx').on(t.createdAt),
+  index('events_entity_idx').on(t.entityId),
+]);
 
 export const printers = sqliteTable('printers', {
   id: text('id').primaryKey().$defaultFn(newId),

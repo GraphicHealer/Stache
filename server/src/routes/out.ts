@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, queryOne } from '../db';
 import { items } from '../db/schema';
-import { recordEvent } from '../lib/events';
+import { recordEventTx } from '../lib/events';
 import { thumbsForItems, thumbUrl } from '../lib/photos';
 import {
   fetchLowStock,
@@ -98,15 +98,18 @@ export async function outRoutes(app: FastifyInstance) {
       const [item] = await db.select().from(items).where(eq(items.id, id));
       if (!item || (item.isPrivate && item.ownerId !== uid)) continue;
       if (['home', 'gone'].includes(item.status)) continue;
-      const ev = await recordEvent('item.status', 'item', id, {
-        prev: { status: item.status, lent_to: item.lentTo, out_since: item.outSince, hidden_at: item.hiddenAt },
-        next: { status: 'home' },
+      const ev = db.transaction((tx) => {
+        const e = recordEventTx(tx, 'item.status', 'item', id, {
+          prev: { status: item.status, lent_to: item.lentTo, out_since: item.outSince, hidden_at: item.hiddenAt },
+          next: { status: 'home' },
+        });
+        tx.update(items)
+          .set({ status: 'home', lentTo: null, outSince: null })
+          .where(eq(items.id, id))
+          .run();
+        return e;
       });
       eventIds.push(ev.id);
-      await db
-        .update(items)
-        .set({ status: 'home', lentTo: null, outSince: null })
-        .where(eq(items.id, id));
     }
     return { ok: true, put_back: eventIds.length, event_ids: eventIds };
   });

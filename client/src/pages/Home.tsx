@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { useApp } from '../context';
 import { outboxAdd } from '../outbox';
 import { detectBarcodeInPhoto, parseScan } from '../scan';
@@ -36,8 +36,11 @@ export function Home() {
   };
 
   const filePhoto = async (blob: Blob, areaId: string) => {
+    // client_id makes the upload idempotent - a retried request (offline
+    // outbox, flaky network) dedupes server-side instead of double-filing.
+    const fields = { area_id: areaId, client_id: crypto.randomUUID() };
     try {
-      const r = await api.fileItem({ area_id: areaId }, [blob]);
+      const r = await api.fileItem(fields, [blob]);
       toast('Filed', r.event_id);
       qc.invalidateQueries({ queryKey: ['area', areaId] });
       qc.invalidateQueries({ queryKey: ['inbox'] });
@@ -48,8 +51,13 @@ export function Home() {
           .then((l) => setCodePrompt({ itemId: r.item.id, text: code.text, product: l.product?.name ?? null }))
           .catch(() => setCodePrompt({ itemId: r.item.id, text: code.text, product: null }));
       }
-    } catch {
-      await outboxAdd({ kind: 'file-item', fields: { area_id: areaId }, blobs: [blob], createdAt: Date.now() });
+    } catch (e) {
+      // A server rejection will never succeed on replay - don't queue it.
+      if (e instanceof ApiError) {
+        toast(`Not filed: ${e.message}`);
+        return;
+      }
+      await outboxAdd({ kind: 'file-item', fields, blobs: [blob], createdAt: Date.now() });
       await refreshPending();
       toast('Offline - queued for sync');
     }
@@ -139,7 +147,9 @@ export function Home() {
         </div>
       )}
 
-      <CameraView onCapture={onCapture} label="Take photo" />
+      {/* Unmounted while the scanner runs - two getUserMedia streams would
+          fight over the camera on some devices. */}
+      {!scanning && <CameraView onCapture={onCapture} label="Take photo" />}
 
       <div className="home-actions">
         <button className="btn btn-big" onClick={() => { setHint('Scan an area label'); setScanning(true); }}>
