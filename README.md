@@ -48,7 +48,11 @@ Everything below is off by default - the app is fully usable without any of it.
 
 **Out reminders** (Settings → Out reminders): one bundled digest POST to any webhook (ntfy, Discord, Home Assistant), daily at a time you pick or triggered externally. Snoozable per item, never per-item pings.
 
-**Home Assistant**: Settings shows a ready-made sensor URL (`out`/`unaccounted` counts, item names, low stock, warranties) and a digest trigger URL for automations.
+**Home Assistant**: two ways in -
+
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FGraphicHealer%2FStash)
+
+Click the badge to add this repo to your add-on store, then install **Stash** and open its Web UI on port 8080. (Manual path: Settings → Add-ons → Add-on Store → ⋯ → Repositories → paste `https://github.com/GraphicHealer/Stash`.) From inside Stash, Settings shows a ready-made REST sensor URL (`out`/`unaccounted` counts, item names, low stock, warranties) and a digest trigger URL for automations.
 
 **MCP** (Settings → MCP connections): each connection gets its own `/mcp/<slug>` URL plus a separate bearer token. Eight tools - search, areas, contents, details, move, resolve label, `add_item`, `update_item` - so assistants can answer "where is my soldering iron" or file receipts and voice descriptions for you. Front with HTTPS to expose externally.
 
@@ -62,6 +66,8 @@ Everything below is off by default - the app is fully usable without any of it.
 | `TZ` | `UTC` | Digest schedule timezone |
 | `BETTER_AUTH_SECRET` | auto-generated | Session secret (persisted in DB) |
 | `STASH_NO_ML` | unset | `1` disables CLIP embeddings/photo similarity |
+
+As a Home Assistant add-on the same image is used; the add-on's data dir maps to `/data`, so nothing else is needed.
 
 Everything else - AI provider, printers, MCP connections, digest webhooks - is configured in the app's Settings page.
 

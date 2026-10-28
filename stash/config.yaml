@@ -1,0 +1,20 @@
+name: Stash
+version: "0.1.0"
+slug: stash
+description: Photo-first home inventory - "Where is my stuff?"
+url: https://github.com/GraphicHealer/Stash
+arch:
+  - aarch64
+  - amd64
+init: false
+image: ghcr.io/graphichealer/stash:{version}
+startup: application
+boot: auto
+ports:
+  8080/tcp: 8080
+ports_description:
+  8080/tcp: Web interface
+webui: http://[HOST]:[PORT:8080]/
+watchdog: http://[HOST]:[PORT:8080]/api/health
+options: {}
+schema: {}

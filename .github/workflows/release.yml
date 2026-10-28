@@ -8,7 +8,7 @@ on:
     types: [published]
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -45,3 +45,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Keep the HA add-on's version in lockstep with the image tag so the
+      # store's update prompt always points at a published image.
+      - name: Sync add-on version
+        run: |
+          # Image tags are semver without the leading v (metadata-action pattern).
+          sed -i "s/^version:.*/version: \"${GITHUB_REF_NAME#v}\"/" stash/config.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add stash/config.yaml
+          git commit -m "Bump add-on version to ${{ github.event.release.tag_name }}" || echo "no change"
+          git push

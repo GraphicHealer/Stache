@@ -44,10 +44,13 @@ ENV PORT=8080 \
     DATA_DIR=/data \
     CLIENT_DIST=/app/client/dist
 
-RUN mkdir -p /data/photos && chown -R node:node /data
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /data/photos && chown -R node:node /data
 
 VOLUME /data
 EXPOSE 8080
 
-USER node
-CMD ["node", "server/dist/index.js"]
+# Stays root only for the chown, then drops to node (entrypoint handles it;
+# required because Home Assistant mounts /data root-owned).
+CMD ["docker-entrypoint.sh"]

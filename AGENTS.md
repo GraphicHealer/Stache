@@ -17,6 +17,11 @@ overwrites.
   non-root `node` user, `cups-client` for label printing).
 - `docker-compose.yml` - a single `app` service, no DB container. Everything
   persists under `/data` (stash.db + photos + model cache).
+- Home Assistant add-on lives in `stash/` (config.yaml points at the released
+  GHCR image, `init: false`, port 8080 + `webui` button). `repository.yaml`
+  at root makes the repo an add-on store source. `docker-entrypoint.sh`
+  chowns /data then drops to `node` - HA mounts addon data root-owned.
+  The release workflow syncs `stash/config.yaml`'s `version:` to the tag.
 
 ## Build & verify
 
