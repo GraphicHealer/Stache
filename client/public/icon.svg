@@ -20,21 +20,24 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.66668501"
-     inkscape:cx="323.99109"
-     inkscape:cy="285.74214"
+     inkscape:zoom="0.73579281"
+     inkscape:cx="262.3021"
+     inkscape:cy="238.51823"
      inkscape:window-width="1536"
      inkscape:window-height="792"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g16" />
+     inkscape:current-layer="g11" />
   <rect
      width="512"
      height="512"
      rx="96"
      fill="#111318"
-     id="rect1" />
+     id="rect1"
+     x="-512"
+     y="0"
+     transform="scale(-1,1)" />
   <g
      id="g16"
      transform="translate(0,5.50014)">
@@ -112,6 +115,18 @@
          d="m 146,236 110,64 110,-64"
          id="path11"
          style="stroke-miterlimit:4" />
+      <path
+         d="m 333.3663,252.90708 c 5.79392,-3.50067 21.13849,-14.66828 27.99818,-24.51503 -20.42849,11.21294 -36.62967,9.93198 -50.7814,0.33072 -17.16429,-11.15132 -37.18929,-15.33308 -48.63213,-5.57567 -14.30358,11.15136 -8.58215,32.06014 11.44284,39.02972 22.88572,8.3635 38.24801,3.85613 59.97251,-9.26974 z"
+         fill="#f2b233"
+         id="mustache"
+         sodipodi:nodetypes="sccccs"
+         style="stroke:none;stroke-width:1.41203" />
+      <path
+         d="m 178.6337,252.90708 c -5.79392,-3.50067 -21.13849,-14.66828 -27.99818,-24.51503 20.42849,11.21294 36.62967,9.93198 50.7814,0.33072 17.16429,-11.15132 37.18929,-15.33308 48.63213,-5.57567 14.30358,11.15136 8.58215,32.06014 -11.44284,39.02972 -22.88572,8.3635 -38.24801,3.85613 -59.97251,-9.26974 z"
+         fill="#f2b233"
+         id="path12"
+         sodipodi:nodetypes="sccccs"
+         style="stroke:none;stroke-width:1.41203;stroke-opacity:1" />
     </g>
   </g>
 </svg>
