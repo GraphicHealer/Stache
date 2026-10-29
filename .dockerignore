@@ -5,5 +5,4 @@ data
 *.log
 .env
 .git
-PLAN.md
 README.md

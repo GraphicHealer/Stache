@@ -96,7 +96,7 @@ npm install
 npm run dev            # server on :8080, Vite dev server on :5173; db file in ./data
 ```
 
-Migrations live in `server/migrations/` and apply on boot. See `AGENTS.md` for architecture notes and conventions, `PLAN.md` for the design philosophy.
+Migrations live in `server/migrations/` and apply on boot. See `AGENTS.md` for architecture notes and conventions.
 
 ## Releasing
 
