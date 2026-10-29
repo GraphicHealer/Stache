@@ -15,12 +15,13 @@ import {
 import { items } from '../db/schema';
 import { itemVisible } from '../lib/visibility';
 import { parseBody } from '../lib/validate';
+import { LABEL_CODE_RE } from '../lib/labelcode';
 import { z } from 'zod';
 
 const CreateAreaSchema = z.object({
   name: z.string().max(200).nullish(),
   parent_id: z.string().nullish(),
-  label_code: z.string().regex(/^ST-\d{6}$/i, 'invalid label code').nullish(),
+  label_code: z.string().regex(LABEL_CODE_RE, 'invalid label code').nullish(),
 }).passthrough();
 
 const PatchAreaSchema = z.object({
@@ -48,12 +49,13 @@ function areaJson(a: typeof areas.$inferSelect, cover?: { thumbUrl: string; url:
 }
 
 export async function areaRoutes(app: FastifyInstance) {
-  // Root areas for browsing.
-  app.get('/api/areas', async () => {
+  // Root areas for browsing; ?all=1 returns every live area (parent pickers).
+  app.get('/api/areas', async (req) => {
+    const all = (req.query as { all?: string }).all === '1';
     const roots = await db
       .select()
       .from(areas)
-      .where(and(isNull(areas.parentId), isNull(areas.archivedAt)))
+      .where(all ? isNull(areas.archivedAt) : and(isNull(areas.parentId), isNull(areas.archivedAt)))
       .orderBy(asc(areas.createdAt));
     const covers = await coverThumbsForAreas(roots);
     return {
@@ -76,7 +78,7 @@ export async function areaRoutes(app: FastifyInstance) {
 
     let labelCode: string | null = null;
     if (body.label_code) {
-      const [label] = await db.select().from(labels).where(eq(labels.code, body.label_code));
+      const [label] = await db.select().from(labels).where(eq(labels.code, body.label_code.toUpperCase()));
       if (!label) return reply.badRequest('unknown label code');
       if (label.areaId) return reply.conflict('label already claimed');
       labelCode = label.code;

@@ -140,7 +140,7 @@ function buildMcpServer(): McpServer {
     {
       description:
         'File a new item into the inventory (e.g. from a delivered-purchase receipt). ' +
-        'Needs a home: pass area_id, a QR area_label like ST-000001, or area_name ' +
+        'Needs a home: pass area_id, a QR area_label like ST-K7QX9M2T, or area_name ' +
         '(matched loosely, created if absent).',
       inputSchema: {
         name: z.string().optional(),
@@ -278,7 +278,7 @@ function buildMcpServer(): McpServer {
   server.registerTool(
     'resolve_label',
     {
-      description: 'Resolve a QR label code (e.g. ST-000007) to its area.',
+      description: 'Resolve a QR label code (e.g. ST-K7QX9M2T) to its area.',
       inputSchema: { code: z.string() },
     },
     async ({ code }) => {

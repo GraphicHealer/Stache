@@ -97,6 +97,21 @@ describe('undoEvent', () => {
   });
 });
 
+describe('label codes', () => {
+  it('generates ST-XXXXXXXX codes from the unambiguous alphabet', async () => {
+    const { newLabelCode, LABEL_CODE_RE } = await import('../src/lib/labelcode');
+    const code = newLabelCode();
+    expect(code).toMatch(LABEL_CODE_RE);
+    expect(code).toMatch(/^ST-[2-9A-HJKM-NP-Z]{8}$/); // no 0/1/I/L/O
+  });
+
+  it('generates unique codes at scale', async () => {
+    const { newLabelCode } = await import('../src/lib/labelcode');
+    const codes = new Set(Array.from({ length: 5000 }, () => newLabelCode()));
+    expect(codes.size).toBe(5000);
+  });
+});
+
 describe('api (fastify.inject)', () => {
   it('health is open', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
@@ -106,6 +121,15 @@ describe('api (fastify.inject)', () => {
 
   it('protected routes 401 without a session', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/areas' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('label batch endpoint 401s without a session', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/labels/batch',
+      payload: { count: 5 },
+    });
     expect(res.statusCode).toBe(401);
   });
 

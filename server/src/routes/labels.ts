@@ -1,10 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { asc, eq } from 'drizzle-orm';
-import { db, queryOne } from '../db';
+import { db, query, queryOne } from '../db';
 import { areas, labels } from '../db/schema';
-
-const PREFIX = 'ST-';
-const PAD = 6;
+import { newLabelCode } from '../lib/labelcode';
 
 export async function labelRoutes(app: FastifyInstance) {
   // All labels, with what each is attached to (for the print sheet + status).
@@ -23,26 +21,23 @@ export async function labelRoutes(app: FastifyInstance) {
     return { labels: rows };
   });
 
-  // Pre-print a batch of sequential labels.
+  // Pre-print a batch of labels - random codes, unclaimed until first scan.
   app.post('/api/labels/batch', async (req, reply) => {
     const body = (req.body ?? {}) as { count?: number };
     const count = Math.min(500, Math.max(1, Math.floor(Number(body.count)) || 24));
 
-    const { max } = queryOne<{ max: number | null }>(
-      `SELECT max(CAST(substr(code, ?) AS INTEGER)) AS max
-       FROM labels WHERE code LIKE ?`,
-      PREFIX.length + 1,
-      PREFIX + '%',
-    ) ?? { max: null };
-    const start = (max ?? 0) + 1;
     const batchRow = queryOne<{ batch: number }>(
       `SELECT coalesce(max(batch), 0) + 1 AS batch FROM labels`,
     )!;
+    const taken = new Set(query<{ code: string }>(`SELECT code FROM labels`).map((r) => r.code));
 
-    const codes = Array.from({ length: count }, (_, i) => ({
-      code: `${PREFIX}${String(start + i).padStart(PAD, '0')}`,
-      batch: batchRow.batch,
-    }));
+    const codes: { code: string; batch: number }[] = [];
+    while (codes.length < count) {
+      const code = newLabelCode();
+      if (taken.has(code)) continue;
+      taken.add(code);
+      codes.push({ code, batch: batchRow.batch });
+    }
     await db.insert(labels).values(codes);
     return reply.code(201).send({ batch: batchRow.batch, labels: codes.map((c) => c.code) });
   });

@@ -113,7 +113,7 @@ export function LabelsPage() {
 
   const testPrinter = async (p: Printer) => {
     if (p.type === 'dymo') {
-      await printTo(p, ['ST-000000']);
+      await printTo(p, ['ST-SAMPLE22']);
       return;
     }
     try {

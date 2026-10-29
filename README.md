@@ -45,7 +45,7 @@ Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/sta
 
 ## How it works
 
-1. **Print labels** (`/labels`) - sequential QRs like `ST-000001`. Stick them on bins, shelves, drawers.
+1. **Print labels** (`/labels`) - random QRs like `ST-K7QX9M2T`. Stick them on bins, shelves, drawers.
 2. **Claim a label** - scan an unclaimed one, take a photo of the area, done. It becomes a scannable container.
 3. **Put things away** - scan a label to set the current area, then snap photos. Or snap first, scan after.
 4. **Find things** - search by name, description, barcode, or photo; or scan a bin to see inside it.

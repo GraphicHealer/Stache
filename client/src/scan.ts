@@ -44,7 +44,6 @@ export function parseScan(text: string): Scan | null {
   if (!t) return null;
   const urlMatch = t.match(/\/l\/([A-Za-z0-9-]+)/i);
   if (urlMatch) return { kind: 'label', code: urlMatch[1].toUpperCase() };
-  if (/^ST-\d+$/i.test(t)) return { kind: 'label', code: t.toUpperCase() };
-  if (/^\d{1,6}$/.test(t)) return { kind: 'label', code: `ST-${t.padStart(6, '0')}` };
+  if (/^ST-[2-9A-HJKM-NP-Z]{8}$/i.test(t)) return { kind: 'label', code: t.toUpperCase() };
   return { kind: 'barcode', value: t };
 }

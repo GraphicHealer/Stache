@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { LABEL_CODE_RE } from './labelcode';
 
 export interface DetectedCode {
   format: string;
@@ -6,7 +7,7 @@ export interface DetectedCode {
 }
 
 /** Stache's own labels - never treated as product codes. */
-const isStacheLabel = (t: string) => /\/l\/[A-Za-z0-9-]+/.test(t) || /^ST-\d+$/i.test(t);
+const isStacheLabel = (t: string) => /\/l\/[A-Za-z0-9-]+/.test(t) || LABEL_CODE_RE.test(t);
 
 /** Detect barcodes/QR codes in an image buffer (zxing-cpp via WASM). */
 export async function detectCodes(buf: Buffer): Promise<DetectedCode[]> {

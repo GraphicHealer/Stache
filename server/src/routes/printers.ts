@@ -6,6 +6,7 @@ import { printLabels } from '../lib/print';
 import { requireAdmin } from '../lib/guards';
 import { getDigestConfig } from '../lib/digest';
 import { parseBody } from '../lib/validate';
+import { LABEL_CODE_RE } from '../lib/labelcode';
 import { z } from 'zod';
 
 const PrinterCreateSchema = z.object({
@@ -23,11 +24,11 @@ const PrinterPatchSchema = PrinterCreateSchema.partial();
 
 const PrintLabelsSchema = z.object({
   printer_id: z.string(),
-  codes: z.array(z.string().regex(/^ST-\d{6}$/i, 'invalid label code')).min(1).max(200),
+  codes: z.array(z.string().regex(LABEL_CODE_RE, 'invalid label code')).min(1).max(200),
 }).passthrough();
 
 // Codes become filenames and are interpolated into ZPL/SVG - strict shape only.
-const CODE_RE = /^ST-\d{6}$/;
+const CODE_RE = LABEL_CODE_RE;
 
 // Label QRs need an absolute origin. A configured public base URL wins -
 // printing from a localhost session otherwise makes dead labels.
@@ -104,7 +105,7 @@ export async function printerRoutes(app: FastifyInstance) {
     const [p] = await db.select().from(printers).where(eq(printers.id, id));
     if (!p) return reply.notFound();
     try {
-      await printLabels(p, ['ST-000000'], originOf(req, await publicBaseUrl()));
+      await printLabels(p, ['ST-23456789'], originOf(req, await publicBaseUrl()));
       return { ok: true };
     } catch (e) {
       return reply.badRequest(`print failed: ${(e as Error).message}`);
@@ -119,7 +120,7 @@ export async function printerRoutes(app: FastifyInstance) {
     if (!p) return reply.notFound('printer not found');
     if (p.type === 'dymo')
       return reply.badRequest('dymo printers print from the browser (DYMO Web Service)');
-    const codes = body.codes.slice(0, 200);
+    const codes = body.codes.slice(0, 200).map((c) => c.toUpperCase());
     if (!codes.every((c) => typeof c === 'string' && CODE_RE.test(c)))
       return reply.badRequest('invalid label code');
     const existing = new Set(
