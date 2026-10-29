@@ -1,6 +1,7 @@
 {
   "name": "@stache/server",
   "version": "0.2.2",
+  "license": "AGPL-3.0",
   "private": true,
   "type": "module",
   "scripts": {

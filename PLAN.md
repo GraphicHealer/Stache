@@ -131,7 +131,7 @@ Skipping it for a month changes nothing and loses nothing. The same page quietly
 ## Labels **[done]**
 
 - QR codes encode a short URL, so any phone camera can open them, not just the dedicated scanner.
-- Labels are **pre-printed in sequential batches**. Scanning a blank one starts a "claim this label" flow: take a photo, optionally scan its parent area, done.
+- Labels are **pre-printed in batches of random codes** (`ST-XXXXXXXX`, unambiguous alphabet - unguessable, so a printed-but-unplaced label can't be claimed by guesswork). Scanning a blank one starts a "claim this label" flow: take a photo, name it if you like, pick where it lives, done.
 - Labels are meant to be **large and in a consistent spot** (for example, the front-left of each shelf or bin) so you can scan standing up, without opening doors.
 - If an area is thrown out, its label still resolves and points to wherever its contents went, instead of dead-ending.
 - Printing: Zebra/ZPL over the network, CUPS queues, or DYMO via the DYMO Connect web service.
@@ -187,7 +187,7 @@ Design rules - all implemented:
 
 1. **Core loop:** areas with QR codes, photo capture, filing, looking inside, basic search. **[done]**
 2. **Offline client** for the Zebra handheld and phones. **[done]**
-3. **Label generator:** printable sheets of sequential QR labels. **[done + printer integrations]**
+3. **Label generator:** printable sheets of random QR labels. **[done + printer integrations]**
 4. **Move, take-out, and lend** flows. **[done - full out/unaccounted model]**
 5. **Optional AI:** naming, tagging, OCR, photo and fuzzy search. **[done]**
 6. **MCP interface** for assistants. **[done - incl. write tools]**
@@ -211,4 +211,4 @@ Design rules - all implemented:
 
 ## License
 
-TBD.
+[AGPL-3.0](LICENSE) - forks must stay open source, with attribution.

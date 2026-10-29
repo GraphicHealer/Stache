@@ -104,4 +104,4 @@ Publish a GitHub Release and Actions builds + pushes `ghcr.io/graphichealer/stac
 
 ## License
 
-TBD.
+[AGPL-3.0](LICENSE) - forks must stay open source, with attribution.
