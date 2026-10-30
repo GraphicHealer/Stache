@@ -84,6 +84,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .input:focus { border-color: var(--accent); outline: none; }
 .input::placeholder { color: var(--muted); }
 textarea.input { resize: vertical; }
+.input-inline { width: 70px; min-height: 40px; margin: 0 4px; padding: 8px 10px; text-align: center; }
 
 /* Home */
 .home { display: flex; flex-direction: column; height: 100%; }

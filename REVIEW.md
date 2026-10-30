@@ -58,11 +58,11 @@ original findings.
   the Notes field; browser-native, no model, hidden when unsupported.
 - Settings UI - all of the above (backup options/restore/import/maintenance,
   MCP scope picker), admin-gated where the endpoints are.
+- Scheduled backups - opt-in (`settings.backup_schedule`, off by default):
+  unencrypted bundles in `/data/backups`, every N days, keeps newest N.
+  Encrypted bundles stay a manual download (no stored passphrase).
 
 ## Deliberately deferred
-
-- **Scheduled backups** - download/restore exists; a cron-like scheduler
-  inside the app is the next layer (keep it boring: N daily zips on disk).
 - **Server-side speech-to-text** - whisper in `ml.ts` would cover
   browsers without SpeechRecognition and recorded audio; not needed while
   dictation is a convenience, not a requirement.

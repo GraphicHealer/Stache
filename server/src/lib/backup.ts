@@ -2,7 +2,9 @@ import AdmZip from 'adm-zip';
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { sqlite, query } from '../db';
+import { eq } from 'drizzle-orm';
+import { db, sqlite, query } from '../db';
+import { settings } from '../db/schema';
 import { env } from '../env';
 
 /**
@@ -120,6 +122,84 @@ export async function buildBackup(opts: BuildOptions): Promise<{ buf: Buffer; ke
 
   out.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)));
   return { buf: out.toBuffer(), key: keyHex };
+}
+
+// --- Scheduled backups ----------------------------------------------------
+// Opt-in: off unless enabled in Settings. Writes unencrypted bundles to
+// /data/backups/stache-backup-<stamp>.zip and keeps the newest `keep`.
+
+export interface BackupSchedule {
+  enabled: boolean;
+  interval_days: number;
+  keep: number;
+}
+
+export async function getBackupSchedule(): Promise<BackupSchedule> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'backup_schedule'));
+  const v = (row?.value ?? {}) as Partial<BackupSchedule>;
+  return {
+    enabled: !!v.enabled,
+    interval_days: Math.min(30, Math.max(1, v.interval_days ?? 1)),
+    keep: Math.min(30, Math.max(1, v.keep ?? 7)),
+  };
+}
+
+export async function setBackupSchedule(cfg: BackupSchedule): Promise<void> {
+  await db
+    .insert(settings)
+    .values({ key: 'backup_schedule', value: cfg as any })
+    .onConflictDoUpdate({ target: settings.key, set: { value: cfg as any } });
+}
+
+const bundleDir = () => path.join(env.dataDir, 'backups');
+const isBundle = (f: string) => f.startsWith('stache-backup-') && f.endsWith('.zip');
+
+export async function writeBundle(): Promise<string> {
+  const { buf } = await buildBackup({ encrypt: false });
+  await fs.mkdir(bundleDir(), { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const name = `stache-backup-${stamp}.zip`;
+  await fs.writeFile(path.join(bundleDir(), name), buf);
+  return name;
+}
+
+async function listBundles(): Promise<string[]> {
+  try {
+    return (await fs.readdir(bundleDir())).filter(isBundle).sort();
+  } catch {
+    return [];
+  }
+}
+
+async function newestBundleMtime(): Promise<number> {
+  let newest = 0;
+  for (const f of await listBundles()) {
+    const st = await fs.stat(path.join(bundleDir(), f)).catch(() => null);
+    if (st) newest = Math.max(newest, st.mtimeMs);
+  }
+  return newest;
+}
+
+export function startBackupScheduler(): void {
+  const tick = async () => {
+    try {
+      const cfg = await getBackupSchedule();
+      if (!cfg.enabled) return;
+      // Due when the newest bundle is older than the interval. Files gone
+      // (user deleted them) reads as "never backed up" → run immediately.
+      if (Date.now() - (await newestBundleMtime()) < cfg.interval_days * 86400_000) return;
+      const name = await writeBundle();
+      const files = await listBundles();
+      const stale = files.slice(0, Math.max(0, files.length - cfg.keep));
+      for (const f of stale) await fs.rm(path.join(bundleDir(), f), { force: true }).catch(() => {});
+      console.log(`[backup] wrote ${name}${stale.length ? `, pruned ${stale.length}` : ''}`);
+    } catch (e) {
+      console.error('[backup] scheduled run failed:', (e as Error).message);
+    }
+  };
+  setInterval(tick, 30 * 60_000);
+  // Catch up shortly after boot - covers "machine was off at backup time".
+  setTimeout(tick, 60_000);
 }
 
 export class RestoreError extends Error {}

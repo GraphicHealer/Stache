@@ -97,6 +97,11 @@ curl localhost:8080/api/health
 - **Digest/webhooks**: `/api/webhooks/*` are session-exempt but require the
   `settings.webhook_token` query param. Digest config lives in
   `settings.digest`; scheduler compares against container `TZ`.
+- **Backups**: `lib/backup.ts` builds the bundle (plaintext `manifest.json` +
+  `payload.zip`/`payload.enc`). `settings.backup_schedule` gates the
+  `startBackupScheduler` interval - opt-in only, writes unencrypted zips to
+  `/data/backups`. Restore stages to `/data/restore-pending/` and
+  `db/index.ts` swaps it in before the DB opens (process restarts).
 - **Optional item fields**: `warranty_until` (TEXT 'YYYY-MM-DD') and
   `restock_below` (int). Low stock = `quantity <= restock_below`;
   surfaces in `/api/inbox`, the digest payload, and `out-sensor` - never alerts.

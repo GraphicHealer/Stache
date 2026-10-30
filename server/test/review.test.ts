@@ -76,6 +76,46 @@ describe('backup bundle', () => {
     const ok3 = await unpackBackup(pass.buf, 'hunter2');
     expect(ok3.db.length).toBeGreaterThan(0);
   });
+
+  it('scheduled backups: off by default, config persists, writeBundle produces a restorable zip', async () => {
+    const { getBackupSchedule, setBackupSchedule, writeBundle, unpackBackup } = await import(
+      '../src/lib/backup'
+    );
+    // Opt-in: disabled out of the box.
+    const cfg0 = await getBackupSchedule();
+    expect(cfg0.enabled).toBe(false);
+
+    await setBackupSchedule({ enabled: true, interval_days: 2, keep: 5 });
+    const cfg = await getBackupSchedule();
+    expect(cfg).toEqual({ enabled: true, interval_days: 2, keep: 5 });
+
+    const name = await writeBundle();
+    expect(name).toMatch(/^stache-backup-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.zip$/);
+    const { promises: fsp } = await import('node:fs');
+    const { env } = await import('../src/env');
+    const buf = await fsp.readFile(path.join(env.dataDir, 'backups', name));
+    const out = await unpackBackup(buf, null);
+    expect(out.manifest.encrypted).toBe(false);
+    expect(out.db.length).toBeGreaterThan(0);
+  });
+
+  it('backup-schedule endpoints are admin-only', async () => {
+    const member = await login('sched-member@t.dev');
+    const denied = await app.inject({
+      method: 'GET', url: '/api/settings/backup-schedule', headers: member,
+    });
+    expect(denied.statusCode).toBe(403);
+    const admin = await login('sched-admin@t.dev', 'admin');
+    const res = await app.inject({
+      method: 'PUT', url: '/api/settings/backup-schedule', headers: admin,
+      payload: { enabled: true, interval_days: 3, keep: 4 },
+    });
+    expect(res.statusCode).toBe(200);
+    const got = await app.inject({
+      method: 'GET', url: '/api/settings/backup-schedule', headers: admin,
+    });
+    expect(got.json()).toEqual({ enabled: true, interval_days: 3, keep: 4 });
+  });
 });
 
 describe('import', () => {

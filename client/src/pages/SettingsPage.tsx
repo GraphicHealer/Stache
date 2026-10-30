@@ -75,9 +75,12 @@ export function SettingsPage() {
   const { data: mcp } = useQuery({ queryKey: ['settings-mcp'], queryFn: () => api.get('/api/settings/mcp') });
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const { data: digest } = useQuery({ queryKey: ['settings-digest'], queryFn: () => api.get('/api/settings/digest') });
+  const { data: backupSched } = useQuery({ queryKey: ['settings-backup-schedule'], queryFn: () => api.get('/api/settings/backup-schedule') });
   const [form, setForm] = useState({ provider: 'off', base_url: '', model: '', api_key: '' });
   const [dg, setDg] = useState({ enabled: false, webhook_url: '', time: '09:00', base_url: '' });
   const [dgLoaded, setDgLoaded] = useState(false);
+  const [sched, setSched] = useState({ enabled: false, interval_days: 1, keep: 7 });
+  const [schedLoaded, setSchedLoaded] = useState(false);
   const [connName, setConnName] = useState('');
   const [connScope, setConnScope] = useState<'read' | 'read-write'>('read-write');
   const [backupOpts, setBackupOpts] = useState({ encrypt: false, passphrase: '', includeKey: false });
@@ -113,7 +116,15 @@ export function SettingsPage() {
       });
       setDgLoaded(true);
     }
-  }, [data, loaded, digest, dgLoaded]);
+    if (backupSched && !schedLoaded) {
+      setSched({
+        enabled: backupSched.enabled,
+        interval_days: backupSched.interval_days,
+        keep: backupSched.keep,
+      });
+      setSchedLoaded(true);
+    }
+  }, [data, loaded, digest, dgLoaded, backupSched, schedLoaded]);
 
   const save = async () => {
     try {
@@ -624,6 +635,62 @@ export function SettingsPage() {
               }}
             >
               Quick DB snapshot
+            </button>
+          </div>
+
+          <h3>Automatic backups</h3>
+          <p className="muted">
+            Saves an unencrypted bundle on the server (<code>/data/backups</code>) on a
+            schedule. Off by default - encrypted backups stay a manual download.
+          </p>
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={sched.enabled}
+              onChange={(e) => setSched({ ...sched, enabled: e.target.checked })}
+            />
+            Back up automatically
+          </label>
+          {sched.enabled && (
+            <div className="row">
+              <label>
+                Every{' '}
+                <input
+                  className="input input-inline"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={sched.interval_days}
+                  onChange={(e) => setSched({ ...sched, interval_days: Number(e.target.value) || 1 })}
+                />{' '}
+                day(s)
+              </label>
+              <label>
+                keep last{' '}
+                <input
+                  className="input input-inline"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={sched.keep}
+                  onChange={(e) => setSched({ ...sched, keep: Number(e.target.value) || 1 })}
+                />
+              </label>
+            </div>
+          )}
+          <div className="row">
+            <button
+              className="btn btn-small"
+              onClick={async () => {
+                try {
+                  await api.put('/api/settings/backup-schedule', sched);
+                  toast(sched.enabled ? `Backing up every ${sched.interval_days} day(s), keeping ${sched.keep}` : 'Automatic backups off');
+                } catch (e) {
+                  toast(`Save failed: ${(e as Error).message}`);
+                }
+              }}
+            >
+              Save schedule
             </button>
           </div>
           {backupKey && (

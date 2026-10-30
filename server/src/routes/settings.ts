@@ -6,6 +6,7 @@ import { items, mcpTokens } from '../db/schema';
 import { getAiConfig, kickAi, setAiConfig } from '../lib/ai';
 import { analyzeItemPhoto, vlmDownloaded } from '../lib/ml';
 import { getDigestConfig, setDigestConfig, webhookToken } from '../lib/digest';
+import { getBackupSchedule, setBackupSchedule } from '../lib/backup';
 import { requireAdmin } from '../lib/guards';
 import { parseBody } from '../lib/validate';
 import { z } from 'zod';
@@ -46,6 +47,12 @@ function badAiUrl(raw: string): string | null {
   if (blocked.includes(h)) return 'base_url points at a cloud metadata endpoint';
   return null;
 }
+
+const BackupScheduleSchema = z.object({
+  enabled: z.boolean().optional(),
+  interval_days: z.number().int().min(1).max(30).optional(),
+  keep: z.number().int().min(1).max(30).optional(),
+}).passthrough();
 
 const McpCreateSchema = z.object({
   name: z.string().min(1).max(100),
@@ -192,6 +199,23 @@ export async function settingsRoutes(app: FastifyInstance) {
       webhook_url: body.webhook_url ?? prev.webhook_url,
       time: body.time ?? prev.time,
       base_url: body.base_url ?? prev.base_url,
+    });
+    return { ok: true };
+  });
+
+  // --- Scheduled backups ----------------------------------------------------
+  // Opt-in: writes unencrypted bundles under /data/backups, keeps newest N.
+
+  app.get('/api/settings/backup-schedule', async () => getBackupSchedule());
+
+  app.put('/api/settings/backup-schedule', async (req, reply) => {
+    const body = parseBody(BackupScheduleSchema, req.body, reply);
+    if (!body) return;
+    const prev = await getBackupSchedule();
+    await setBackupSchedule({
+      enabled: !!body.enabled,
+      interval_days: body.interval_days ?? prev.interval_days,
+      keep: body.keep ?? prev.keep,
     });
     return { ok: true };
   });

@@ -5,6 +5,7 @@ import { ensurePhotoDir } from './lib/photos';
 import { buildApp } from './app';
 import { startAiWorker } from './lib/ai';
 import { startDigestScheduler } from './lib/digest';
+import { startBackupScheduler } from './lib/backup';
 import { pruneEvents } from './lib/events';
 import { sqlite } from './db';
 import { env } from './env';
@@ -33,6 +34,7 @@ async function main() {
   await initAuth();
   startAiWorker();
   startDigestScheduler();
+  startBackupScheduler();
   // Events grow forever otherwise; 90d/20k cap keeps recent undo history.
   setInterval(() => {
     try {
