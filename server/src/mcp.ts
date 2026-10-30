@@ -18,8 +18,12 @@ const text = (data: unknown) => ({
 const pathOf = async (areaId: string) =>
   (await breadcrumb(areaId)).map((c) => c.name ?? 'unnamed').join(' › ');
 
-function buildMcpServer(): McpServer {
+function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
   const server = new McpServer({ name: 'stache', version: '0.1.0' });
+  const actor = `mcp:${conn.slug}`;
+  // Read-scope connections get the read tools only - write tools aren't
+  // registered at all, so the client can't even discover them.
+  const canWrite = conn.scope !== 'read';
 
   server.registerTool(
     'search_items',
@@ -113,7 +117,7 @@ function buildMcpServer(): McpServer {
     },
   );
 
-  server.registerTool(
+  if (canWrite) server.registerTool(
     'move_item',
     {
       description: 'Move an item to a different area.',
@@ -127,7 +131,7 @@ function buildMcpServer(): McpServer {
       db.transaction((tx) => {
         recordEventTx(tx, 'item.moved', 'item', item_id, {
           from_area_id: i.areaId, to_area_id: area_id,
-        });
+        }, null, actor);
         tx.update(items).set({ areaId: area_id }).where(eq(items.id, item_id)).run();
       });
       return text({ ok: true, path: await pathOf(area_id) });
@@ -135,7 +139,7 @@ function buildMcpServer(): McpServer {
   );
 
   // Receipt/voice ingest paths: an assistant can file and annotate items.
-  server.registerTool(
+  if (canWrite) server.registerTool(
     'add_item',
     {
       description:
@@ -170,7 +174,7 @@ function buildMcpServer(): McpServer {
         } else {
           const created = db.transaction((tx) => {
             const [c] = tx.insert(areas).values({ name: area_name }).returning().all();
-            recordEventTx(tx, 'area.created', 'area', c.id, { name: area_name });
+            recordEventTx(tx, 'area.created', 'area', c.id, { name: area_name }, null, actor);
             return c;
           });
           areaId = created.id;
@@ -194,14 +198,14 @@ function buildMcpServer(): McpServer {
           })
           .returning()
           .all();
-        recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId, via: 'mcp' });
+        recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId }, null, actor);
         return i;
       });
       return text({ ok: true, item_id: item.id, path: await pathOf(areaId) });
     },
   );
 
-  server.registerTool(
+  if (canWrite) server.registerTool(
     'update_item',
     {
       description:
@@ -268,7 +272,7 @@ function buildMcpServer(): McpServer {
       }
       if (!Object.keys(edits).length) return text({ ok: true, changed: false });
       db.transaction((tx) => {
-        for (const e of evs) recordEventTx(tx, e.type, 'item', item_id, e.payload);
+        for (const e of evs) recordEventTx(tx, e.type, 'item', item_id, e.payload, null, actor);
         tx.update(items).set(edits).where(eq(items.id, item_id)).run();
       });
       return text({ ok: true, changed: true, path: await pathOf(i.areaId) });
@@ -312,6 +316,7 @@ export function registerMcp(app: FastifyInstance) {
   app.route({
     method: ['GET', 'POST', 'DELETE'],
     url: '/mcp/:slug',
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const [conn] = await db.select().from(mcpTokens).where(eq(mcpTokens.slug, slug));
@@ -347,7 +352,7 @@ export function registerMcp(app: FastifyInstance) {
         .set({ lastUsedAt: new Date() })
         .where(eq(mcpTokens.id, conn.id))
         .catch(() => {});
-      const server = buildMcpServer();
+      const server = buildMcpServer({ slug: conn.slug, scope: conn.scope });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });

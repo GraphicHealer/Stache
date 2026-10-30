@@ -1,6 +1,9 @@
-import { eq } from 'drizzle-orm';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, query } from '../db';
-import { areas, events, items } from '../db/schema';
+import { areas, events, itemLinks, itemReceipts, items, photos } from '../db/schema';
+import { env } from '../env';
 
 export type EventType =
   | 'area.created'
@@ -15,6 +18,12 @@ export type EventType =
   | 'item.hidden'
   | 'item.not_here'
   | 'item.restored'
+  | 'item.linked'
+  | 'item.unlinked'
+  | 'item.receipt_attached'
+  | 'item.receipt_detached'
+  | 'item.merged'
+  | 'item.photo_replaced'
   | 'stocktake';
 
 /** Audit trail: who did it. NULL = MCP/system action. */
@@ -26,10 +35,11 @@ export async function recordEvent(
   entityId: string,
   payload: Record<string, unknown> = {},
   userId: UserId = null,
+  actor: string | null = null,
 ) {
   const [row] = await db
     .insert(events)
-    .values({ type, entityType, entityId, payload, userId })
+    .values({ type, entityType, entityId, payload, userId, actor })
     .returning();
   return row;
 }
@@ -47,10 +57,11 @@ export function recordEventTx(
   entityId: string,
   payload: Record<string, unknown> = {},
   userId: UserId = null,
+  actor: string | null = null,
 ) {
   return tx
     .insert(events)
-    .values({ type, entityType, entityId, payload, userId })
+    .values({ type, entityType, entityId, payload, userId, actor })
     .returning()
     .all()[0];
 }
@@ -82,10 +93,33 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
   const entityId = ev.entityId!;
   const p = (ev.payload ?? {}) as Record<string, any>;
 
+  // Only the newest un-undone change to an entity can be reversed - undoing
+  // an older event would silently overwrite the newer work.
+  const newerOn = (entityType: string | null, eid: string) =>
+    query<{ id: string }>(
+      `SELECT id FROM events
+        WHERE entity_type = ? AND entity_id = ? AND id != ?
+          AND undone_at IS NULL AND created_at > ?
+        LIMIT 1`,
+      entityType,
+      eid,
+      ev.id,
+      ev.createdAt.getTime(),
+    ).length > 0;
+  if (ev.entityType && newerOn(ev.entityType, entityId))
+    return { ok: false, message: 'a newer change exists on this - undo that first' };
+
   switch (ev.type) {
-    case 'item.filed':
-      await db.update(items).set({ hiddenAt: new Date() }).where(eq(items.id, entityId));
+    case 'item.filed': {
+      // Single-file hides the item; a multi/import filing hides the batch.
+      const ids = ev.entityType === 'multi' && Array.isArray(p.ids) && p.ids.length
+        ? (p.ids as string[])
+        : [entityId];
+      await db.update(items).set({ hiddenAt: new Date() }).where(
+        ids.length === 1 ? eq(items.id, ids[0]) : inArray(items.id, ids),
+      );
       break;
+    }
     case 'item.moved':
       await db.update(items).set({ areaId: p.from_area_id }).where(eq(items.id, entityId));
       break;
@@ -125,6 +159,11 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
     }
     case 'stocktake': {
       const date = (v: unknown) => (v ? new Date(v as string) : null);
+      // Stocktake spans many items - refuse if any of them changed since.
+      for (const c of (p.changes ?? []) as { id: string }[]) {
+        if (newerOn('item', c.id))
+          return { ok: false, message: 'an item changed since this stocktake - undo that first' };
+      }
       for (const c of (p.changes ?? []) as { id: string; prev: any }[]) {
         await db
           .update(items)
@@ -146,6 +185,8 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
         'name', 'description', 'quantity', 'barcode',
         'detectedCodes', 'isPrivate', 'remindSnoozedUntil',
         'warrantyUntil', 'restockBelow',
+        'purchaseDate', 'purchasePrice', 'retailer', 'serialNumber', 'tags',
+        'duplicateOf',
       ]);
       const set = Object.fromEntries(
         Object.entries(prev)
@@ -153,6 +194,59 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
           .map(([k, v]) => [k, k === 'remindSnoozedUntil' && v ? new Date(v as string) : v]),
       );
       await db.update(items).set(set).where(eq(items.id, entityId));
+      break;
+    }
+    case 'item.linked': {
+      const [a, b] = [entityId, p.other_id].sort();
+      await db.delete(itemLinks).where(and(eq(itemLinks.aId, a), eq(itemLinks.bId, b)));
+      break;
+    }
+    case 'item.unlinked': {
+      const [a, b] = [entityId, p.other_id].sort();
+      await db.insert(itemLinks).values({ aId: a, bId: b }).onConflictDoNothing();
+      break;
+    }
+    case 'item.receipt_attached':
+      await db
+        .delete(itemReceipts)
+        .where(and(eq(itemReceipts.itemId, entityId), eq(itemReceipts.photoId, p.photo_id)));
+      break;
+    case 'item.receipt_detached':
+      await db
+        .insert(itemReceipts)
+        .values({ itemId: entityId, photoId: p.photo_id })
+        .onConflictDoNothing();
+      break;
+    case 'item.merged': {
+      // Winner keeps nothing of the merge: photos + links go back to the
+      // loser, which is unhidden.
+      const loserId = p.loser_id as string;
+      for (const pid of (p.moved_photo_ids ?? []) as string[]) {
+        await db.update(photos).set({ itemId: loserId }).where(eq(photos.id, pid));
+      }
+      for (const l of (p.moved_links ?? []) as { other_id: string }[]) {
+        const [a, b] = [loserId, l.other_id].sort();
+        await db.insert(itemLinks).values({ aId: a, bId: b }).onConflictDoNothing();
+        await db
+          .delete(itemLinks)
+          .where(and(eq(itemLinks.aId, [entityId, l.other_id].sort()[0]), eq(itemLinks.bId, [entityId, l.other_id].sort()[1])));
+      }
+      await db.update(items).set({ hiddenAt: null }).where(eq(items.id, loserId));
+      break;
+    }
+    case 'item.photo_replaced': {
+      await db
+        .update(photos)
+        .set({
+          path: p.prev_path,
+          thumbPath: p.prev_thumb,
+          width: p.prev_width,
+          height: p.prev_height,
+        })
+        .where(eq(photos.id, p.photo_id));
+      for (const f of [p.new_path, p.new_thumb].filter(Boolean) as string[]) {
+        fs.rm(path.join(env.dataDir, 'photos', f), { force: true }).catch(() => {});
+      }
       break;
     }
     case 'area.created':

@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { areas, labels, photos } from '../db/schema';
-import { breadcrumb } from '../lib/breadcrumb';
+import { breadcrumb, descendantAreaIds, subtreeItemCounts } from '../lib/breadcrumb';
 import { recordEventTx } from '../lib/events';
 import {
   coverThumbsForAreas,
@@ -32,9 +32,15 @@ const PatchAreaSchema = z.object({
 
 const StocktakeSchema = z.object({
   present_ids: z.array(z.string()).max(5000),
+  // When false, unticked items are left alone instead of flagged unaccounted.
+  mark_unaccounted: z.boolean().optional(),
 }).passthrough();
 
-function areaJson(a: typeof areas.$inferSelect, cover?: { thumbUrl: string; url: string } | null) {
+function areaJson(
+  a: typeof areas.$inferSelect,
+  cover?: { thumbUrl: string; url: string } | null,
+  itemCount?: number,
+) {
   return {
     id: a.id,
     parent_id: a.parentId,
@@ -45,6 +51,8 @@ function areaJson(a: typeof areas.$inferSelect, cover?: { thumbUrl: string; url:
     cover_url: cover?.url ?? null,
     created_at: a.createdAt,
     archived_at: a.archivedAt,
+    last_audit_at: a.lastAuditAt,
+    ...(itemCount !== undefined ? { item_count: itemCount } : {}),
   };
 }
 
@@ -58,10 +66,14 @@ export async function areaRoutes(app: FastifyInstance) {
       .where(all ? isNull(areas.archivedAt) : and(isNull(areas.parentId), isNull(areas.archivedAt)))
       .orderBy(asc(areas.createdAt));
     const covers = await coverThumbsForAreas(roots);
+    const counts = await subtreeItemCounts(
+      roots.map((a) => a.id),
+      req.user?.id ?? null,
+    );
     return {
       areas: roots.map((a) => {
         const c = covers.get(a.id);
-        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, counts.get(a.id) ?? 0);
       }),
     };
   });
@@ -116,12 +128,15 @@ export async function areaRoutes(app: FastifyInstance) {
     return reply.code(201).send({ area: areaJson(created.area), event_id: created.ev.id });
   });
 
-  // Area detail: breadcrumb, sub-areas, contents.
+  // Area detail: breadcrumb, sub-areas, contents. ?deep=1 returns items from
+  // the whole subtree (each tagged with its own area path).
   app.get('/api/areas/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
+    const deep = (req.query as { deep?: string }).deep === '1';
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
 
+    const scopeIds = deep ? await descendantAreaIds(id) : [id];
     const [crumb, subs, contents, areaPhotos] = await Promise.all([
       breadcrumb(id),
       db
@@ -132,14 +147,28 @@ export async function areaRoutes(app: FastifyInstance) {
       db
         .select()
         .from(items)
-        .where(and(eq(items.areaId, id), isNull(items.hiddenAt), itemVisible(req.user?.id ?? null)))
+        .where(
+          and(
+            inArray(items.areaId, scopeIds),
+            isNull(items.hiddenAt),
+            itemVisible(req.user?.id ?? null),
+          ),
+        )
         .orderBy(asc(items.createdAt)),
       db.select().from(photos).where(eq(photos.areaId, id)),
     ]);
 
     const covers = await coverThumbsForAreas(subs);
+    const subCounts = await subtreeItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
     const thumbs = await thumbsForItems(contents.map((i) => i.id));
     const cover = areaPhotos.find((p) => p.id === area.coverPhotoId) ?? areaPhotos[0];
+    const areaNames = new Map(subs.map((a) => [a.id, a.name]));
+    const itemAreaName = async (areaId: string) => {
+      if (areaId === id) return null;
+      if (areaNames.has(areaId)) return areaNames.get(areaId) ?? null;
+      const [a] = await db.select({ name: areas.name }).from(areas).where(eq(areas.id, areaId));
+      return a?.name ?? null;
+    };
 
     return {
       area: areaJson(
@@ -148,15 +177,17 @@ export async function areaRoutes(app: FastifyInstance) {
       ),
       archived: !!area.archivedAt,
       breadcrumb: crumb,
+      deep,
       subareas: subs.map((a) => {
         const c = covers.get(a.id);
-        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, subCounts.get(a.id) ?? 0);
       }),
-      items: contents.map((i) => {
+      items: await Promise.all(contents.map(async (i) => {
         const t = thumbs.get(i.id);
         return {
           id: i.id,
           area_id: i.areaId,
+          area_name: deep ? await itemAreaName(i.areaId) : undefined,
           name: i.name,
           description: i.description,
           quantity: i.quantity,
@@ -167,7 +198,7 @@ export async function areaRoutes(app: FastifyInstance) {
           thumb: t ? thumbUrl(t) : null,
           photo: t ? photoUrl(t) : null,
         };
-      }),
+      })),
       photos: areaPhotos.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })),
     };
   });
@@ -247,6 +278,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const body = parseBody(StocktakeSchema, req.body, reply);
     if (!body) return;
     const { present_ids } = body;
+    const markUnaccounted = body.mark_unaccounted !== false;
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
     const present = new Set(present_ids);
@@ -262,7 +294,7 @@ export async function areaRoutes(app: FastifyInstance) {
         const isPresent = present.has(i.id);
         // No-ops: ticked+home, or absent with an explained status already.
         if (isPresent && i.status === 'home') continue;
-        if (!isPresent && i.status !== 'home') continue;
+        if (!isPresent && (!markUnaccounted || i.status !== 'home')) continue;
         const prev = {
           status: i.status,
           lent_to: i.lentTo,
@@ -284,6 +316,7 @@ export async function areaRoutes(app: FastifyInstance) {
           .run();
         changes.push({ id: i.id, prev, next: isPresent ? 'home' : 'unaccounted' });
       }
+      tx.update(areas).set({ lastAuditAt: now }).where(eq(areas.id, id)).run();
       if (!changes.length) return null;
       return recordEventTx(
         tx, 'stocktake', 'multi', id, { changes, area_id: id }, req.user?.id,

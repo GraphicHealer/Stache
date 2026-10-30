@@ -62,7 +62,10 @@ export function InboxPage() {
 
   return (
     <div className="page">
-      <h1>Inbox</h1>
+      <div className="row spread">
+        <h1>Inbox</h1>
+        <Link to="/review" className="btn btn-ghost">Review queue</Link>
+      </div>
       {isLoading && <p className="muted">Loading…</p>}
       {!isLoading && !current && <p className="muted">All clear. Nothing needs naming.</p>}
 

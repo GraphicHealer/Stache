@@ -11,6 +11,7 @@ import { requireAdmin } from '../lib/guards';
 import { thumbsForItems, thumbUrl } from '../lib/photos';
 import { breadcrumb } from '../lib/breadcrumb';
 import { fetchLowStock, fetchWarrantyExpiring } from '../lib/digest';
+import { buildBackup, unpackBackup, RestoreError } from '../lib/backup';
 
 /** Item events on other users' private items must not leak names/payloads. */
 async function eventVisibleToUser(
@@ -53,6 +54,7 @@ export async function miscRoutes(app: FastifyInstance) {
         payload: e.payload,
         user_id: e.userId,
         user_name: e.userId ? (names.get(e.userId) ?? 'someone') : null,
+        actor: e.actor,
         undone: !!e.undoneAt,
         created_at: e.createdAt,
       })),
@@ -258,7 +260,10 @@ export async function miscRoutes(app: FastifyInstance) {
 
   // Consistent snapshot of the live database (SQLite backup API under the
   // hood - safe on a WAL database, unlike copying the files). Keeps 10.
-  app.post('/api/backup', { preHandler: requireAdmin }, async () => {
+  app.post('/api/backup', {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async () => {
     const dir = path.join(env.dataDir, 'backups');
     await fs.mkdir(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -271,5 +276,76 @@ export async function miscRoutes(app: FastifyInstance) {
       await fs.rm(path.join(dir, f), { force: true });
     }
     return { ok: true, file: path.basename(file), bytes: stat.size };
+  });
+
+  // Full bundle download: manifest.json + payload.zip (or payload.enc).
+  // The generated key is returned in a response header - show it once.
+  app.post('/api/backup/download', {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 6, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      encrypt?: boolean;
+      passphrase?: string | null;
+      include_key?: boolean;
+    };
+    const { buf, key } = await buildBackup({
+      encrypt: !!body.encrypt,
+      passphrase: body.passphrase?.trim() || null,
+      includeKey: !!body.include_key,
+    });
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    reply.header('content-type', 'application/zip');
+    reply.header('content-disposition', `attachment; filename="stache-backup-${stamp}.zip"`);
+    if (key) reply.header('x-stache-key', key);
+    return reply.send(buf);
+  });
+
+  // Restore: upload a bundle, we stage it, then the process exits - the
+  // next boot applies it before the database opens. Docker's restart policy
+  // brings it right back; dev mode needs a manual `npm run dev` restart.
+  app.post('/api/backup/restore', {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 6, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    let zipBuf: Buffer | null = null;
+    let key: string | null = null;
+    for await (const part of req.parts()) {
+      if (part.type === 'file') zipBuf = await part.toBuffer();
+      else if (part.fieldname === 'key' && typeof part.value === 'string') key = part.value;
+    }
+    if (!zipBuf) return reply.badRequest('no backup file uploaded');
+
+    let unpacked;
+    try {
+      unpacked = await unpackBackup(zipBuf, key);
+    } catch (e) {
+      if (e instanceof RestoreError) return reply.badRequest(e.message);
+      throw e;
+    }
+
+    const pending = path.join(env.dataDir, 'restore-pending');
+    await fs.rm(pending, { recursive: true, force: true });
+    await fs.mkdir(path.join(pending, 'photos'), { recursive: true });
+    await fs.writeFile(path.join(pending, 'stache.db'), unpacked.db);
+    for (const [name, buf] of unpacked.photos) {
+      await fs.writeFile(path.join(pending, 'photos', name), buf);
+    }
+    await fs.writeFile(
+      path.join(pending, 'manifest.json'),
+      JSON.stringify(unpacked.manifest, null, 2),
+    );
+
+    reply.send({
+      ok: true,
+      restart_required: true,
+      restored: unpacked.manifest.counts,
+      auto_restart: env.isProd,
+    });
+    if (env.isProd) {
+      // Reply is already flushed; give it a moment then let Docker restart us.
+      setTimeout(() => process.exit(0), 750).unref();
+    }
+    return reply;
   });
 }

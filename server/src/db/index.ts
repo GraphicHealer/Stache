@@ -11,6 +11,28 @@ import * as schema from './schema';
 // holds the search index - both created in migrations.
 fs.mkdirSync(env.dataDir, { recursive: true });
 
+// A staged restore (Settings > Backup > restore) is applied before the DB
+// opens: the server exits after staging, and the next boot swaps the pending
+// database + photos in wholesale. Same path for Docker and `npm run dev`.
+{
+  const pending = path.join(env.dataDir, 'restore-pending');
+  if (fs.existsSync(path.join(pending, 'stache.db'))) {
+    for (const f of ['stache.db', 'stache.db-shm', 'stache.db-wal']) {
+      try {
+        fs.rmSync(path.join(env.dataDir, f), { force: true });
+      } catch { /* missing is fine */ }
+    }
+    fs.renameSync(path.join(pending, 'stache.db'), env.dbPath);
+    const pdir = path.join(env.dataDir, 'photos');
+    fs.rmSync(pdir, { recursive: true, force: true });
+    const stagedPhotos = path.join(pending, 'photos');
+    if (fs.existsSync(stagedPhotos)) fs.renameSync(stagedPhotos, pdir);
+    else fs.mkdirSync(pdir, { recursive: true });
+    fs.rmSync(pending, { recursive: true, force: true });
+    console.log('[restore] applied pending backup');
+  }
+}
+
 export const sqlite = new Database(env.dbPath);
 sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('foreign_keys = ON');

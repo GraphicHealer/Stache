@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, query, placeholders } from '../db';
 import { items } from '../db/schema';
-import { breadcrumb } from '../lib/breadcrumb';
+import { breadcrumb, descendantAreaIds } from '../lib/breadcrumb';
 import { thumbsForItems, thumbUrl, photoUrl, coverThumbsForAreas } from '../lib/photos';
 import { embedImage, embedText, mlHealthy, nearestByVector, warmClip } from '../lib/ml';
 import { searchItemIds, wordSim, trigramSim, levenshtein, soundex } from '../lib/textsearch';
@@ -11,24 +11,42 @@ export async function searchRoutes(app: FastifyInstance) {
   // ?q= fuzzy/full-text  ·  ?barcode= exact product match ("do I own this?")
   // Optional filters: &status= &area_id= &private=1
   app.get('/api/search', async (req, reply) => {
-    const { q, barcode, status, area_id, private: priv } = req.query as {
+    const { q, barcode, status, area_id, private: priv, tag } = req.query as {
       q?: string;
       barcode?: string;
       status?: string;
       area_id?: string;
       private?: string;
+      tag?: string;
     };
     const uid = req.user?.id ?? null;
-    const hasFilters = !!(status || area_id || priv);
+    const tagLc = tag?.trim().toLowerCase() || null;
+    const hasFilters = !!(status || area_id || priv || tagLc);
+    const tagCond = () =>
+      tagLc
+        ? query<{ id: string }>(
+            `SELECT id FROM items
+             WHERE EXISTS (
+               SELECT 1 FROM json_each(items.tags)
+               WHERE lower(json_each.value) = ?
+             )`,
+            tagLc,
+          ).map((r) => r.id)
+        : null;
+    // Area filters cover the whole subtree - "in the garage" means anywhere
+    // inside it, not just loose on the garage floor.
+    const areaScope = area_id ? await descendantAreaIds(area_id) : null;
 
     // Post-filter matched ids by SQL - keeps result ordering intact.
+    const tagIds = tagCond();
     const applyFilters = async (ids: string[]) => {
       if (!hasFilters || !ids.length) return ids;
       const conds = [inArray(items.id, ids)];
       if (status) conds.push(eq(items.status, status));
-      if (area_id) conds.push(eq(items.areaId, area_id));
+      if (areaScope) conds.push(inArray(items.areaId, areaScope));
       if (priv === '1') conds.push(eq(items.isPrivate, true));
       if (priv === '0') conds.push(eq(items.isPrivate, false));
+      if (tagIds) conds.push(inArray(items.id, tagIds));
       const ok = new Set(
         (await db.select({ id: items.id }).from(items).where(and(...conds))).map((r) => r.id),
       );
@@ -56,8 +74,9 @@ export async function searchRoutes(app: FastifyInstance) {
         uid ? or(eq(items.isPrivate, false), eq(items.ownerId, uid))! : eq(items.isPrivate, false),
       ];
       if (status) conds.push(eq(items.status, status));
-      if (area_id) conds.push(eq(items.areaId, area_id));
+      if (areaScope) conds.push(inArray(items.areaId, areaScope));
       if (priv === '1') conds.push(eq(items.isPrivate, true));
+      if (tagIds) conds.push(inArray(items.id, tagIds));
       const rows = await db
         .select({ id: items.id })
         .from(items)
@@ -121,7 +140,9 @@ export async function searchRoutes(app: FastifyInstance) {
   });
 
   // Search by photo - "find things like this". First use lazily loads CLIP.
-  app.post('/api/search/photo', async (req, reply) => {
+  app.post('/api/search/photo', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     let buf: Buffer | null = null;
     for await (const part of req.parts()) {
       if (part.type === 'file') buf = await part.toBuffer();

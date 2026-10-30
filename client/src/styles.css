@@ -152,6 +152,22 @@ textarea.input { resize: vertical; }
 /* Item page */
 .photo-strip { display: flex; gap: 8px; overflow-x: auto; margin: 8px 0; align-items: center; }
 .photo-strip img { height: 160px; border-radius: 12px; }
+.photo-cell { position: relative; flex-shrink: 0; }
+.photo-replace {
+  position: absolute; top: 4px; right: 4px; width: 28px; height: 28px;
+  border-radius: 50%; border: 0; background: rgba(0,0,0,0.55); color: #fff;
+  font-size: 1rem; line-height: 1; cursor: pointer; display: grid;
+  place-items: center;
+}
+.link-chip { display: inline-flex; gap: 6px; align-items: center; margin: 2px 6px 2px 0; }
+.link-chip a { color: inherit; }
+.link-chip button {
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  font-size: 1rem; padding: 0 2px;
+}
+.mini-thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 6px; }
+.history { list-style: none; padding: 0; margin: 8px 0; }
+.history li { padding: 4px 0; border-bottom: 1px solid var(--panel-2); font-size: 0.9rem; }
 .qty { font-size: 1.2rem; font-weight: 700; padding: 0 4px; }
 .suggest { background: var(--panel); border-radius: 12px; padding: 12px; margin-top: 12px; }
 .suggest .btn { margin: 4px 6px 4px 0; }

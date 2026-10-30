@@ -5,6 +5,68 @@ import { useApp } from '../context';
 
 const copy = (text: string) => navigator.clipboard?.writeText(text).catch(() => {});
 
+/** Minimal CSV parse - quoted fields, escaped quotes, CRLF all handled. */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let cur: string[] = [''];
+  let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cur[cur.length - 1] += '"';
+          i++;
+        } else inQ = false;
+      } else cur[cur.length - 1] += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ',') cur.push('');
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      rows.push(cur);
+      cur = [''];
+    } else cur[cur.length - 1] += ch;
+  }
+  if (cur.length > 1 || cur[0] !== '') rows.push(cur);
+  return rows;
+}
+
+const HEADER_ALIASES: Record<string, string> = {
+  description: 'note',
+  desc: 'note',
+  area: 'area_name',
+  location: 'area_name',
+  label: 'area_label',
+};
+
+/** JSON (array or {items:[…]}) or CSV with a header row → import rows. */
+function parseImportFile(text: string, filename: string): Record<string, unknown>[] {
+  const trimmed = text.trim();
+  if (filename.endsWith('.json') || trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    const j = JSON.parse(trimmed);
+    const rows = Array.isArray(j) ? j : j.items;
+    if (!Array.isArray(rows)) throw new Error('JSON must be an array or { items: […] }');
+    return rows;
+  }
+  const lines = parseCsv(text);
+  if (lines.length < 2) throw new Error('CSV needs a header row plus data rows');
+  const headers = lines[0].map((h) => HEADER_ALIASES[h.trim().toLowerCase()] ?? h.trim().toLowerCase());
+  return lines
+    .slice(1)
+    .filter((r) => r.some((c) => c.trim()))
+    .map((cols) => {
+      const row: Record<string, unknown> = {};
+      headers.forEach((h, i) => {
+        const v = cols[i]?.trim();
+        if (!v) return;
+        if (h === 'tags') row.tags = v.split(';').map((t) => t.trim()).filter(Boolean);
+        else if (h === 'private') row.private = /^(1|true|yes)$/i.test(v);
+        else row[h] = v;
+      });
+      return row;
+    });
+}
+
 /** AI provider settings + MCP connections - any OpenAI-compatible endpoint. */
 export function SettingsPage() {
   const { toast, user, signOut } = useApp();
@@ -17,6 +79,14 @@ export function SettingsPage() {
   const [dg, setDg] = useState({ enabled: false, webhook_url: '', time: '09:00', base_url: '' });
   const [dgLoaded, setDgLoaded] = useState(false);
   const [connName, setConnName] = useState('');
+  const [connScope, setConnScope] = useState<'read' | 'read-write'>('read-write');
+  const [backupOpts, setBackupOpts] = useState({ encrypt: false, passphrase: '', includeKey: false });
+  const [backupKey, setBackupKey] = useState<string | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [importRows, setImportRows] = useState<Record<string, unknown>[] | null>(null);
+  const [importPreview, setImportPreview] = useState<any>(null);
+  const [maint, setMaint] = useState<any>(null);
   const [member, setMember] = useState({ name: '', email: '', password: '' });
   const [pw, setPw] = useState({ current: '', next: '' });
   // New MCP tokens are shown exactly once - the server only stores a hash.
@@ -244,6 +314,7 @@ export function SettingsPage() {
             </button>
           </div>
           <p className="muted">
+            {c.scope === 'read' ? 'Read only' : 'Read + write'} ·{' '}
             {c.last_used_at ? `Last used ${new Date(c.last_used_at).toLocaleString()}` : 'Never used'}
           </p>
         </div>
@@ -255,11 +326,20 @@ export function SettingsPage() {
           value={connName}
           onChange={(e) => setConnName(e.target.value)}
         />
+        <select
+          className="input"
+          style={{ maxWidth: '150px' }}
+          value={connScope}
+          onChange={(e) => setConnScope(e.target.value as 'read' | 'read-write')}
+        >
+          <option value="read-write">Read + write</option>
+          <option value="read">Read only</option>
+        </select>
         <button
           className="btn"
           onClick={async () => {
             if (!connName.trim()) return;
-            const r = await api.post('/api/settings/mcp', { name: connName.trim() });
+            const r = await api.post('/api/settings/mcp', { name: connName.trim(), scope: connScope });
             setConnName('');
             setNewToken(r.token ?? null);
             qc.invalidateQueries({ queryKey: ['settings-mcp'] });
@@ -386,32 +466,287 @@ export function SettingsPage() {
         Backfill AI/ML
       </button>
 
-      <h2>Export</h2>
+      <h2>Export / Import</h2>
       <p className="muted">Everything you can see - items and areas - as a file.</p>
       <div className="row">
         <a className="btn" href="/api/export?format=json" download="stache-export.json">JSON</a>
         <a className="btn" href="/api/export?format=csv" download="stache-items.csv">CSV</a>
       </div>
+      {isAdmin && (
+        <>
+          <p className="muted">
+            Import a JSON or CSV file of items. Columns/keys: <code>name</code>,{' '}
+            <code>note</code>, <code>quantity</code>, <code>tags</code> (semicolon-separated
+            in CSV), <code>barcode</code>, <code>status</code>, <code>area_name</code>
+            {' '}(found or created), <code>area_label</code> (<code>ST-…</code>),{' '}
+            <code>area_id</code>. Rows without an area land in "Unsorted".
+          </p>
+          <div className="row">
+            <label className="btn">
+              Choose file…
+              <input
+                type="file"
+                accept=".json,.csv"
+                hidden
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!f) return;
+                  try {
+                    const rows = parseImportFile(await f.text(), f.name);
+                    setImportRows(rows);
+                    setImportPreview(await api.post('/api/import', { items: rows, dry_run: true }));
+                  } catch (err) {
+                    toast(`Import read failed: ${(err as Error).message}`);
+                  }
+                }}
+              />
+            </label>
+            {importPreview && (
+              <button
+                className="btn"
+                onClick={async () => {
+                  const r = await api
+                    .post('/api/import', { items: importRows })
+                    .catch((e) => (toast(`Import failed: ${e.message}`), null));
+                  if (r) {
+                    toast(`Imported ${r.created.length} item(s)`, r.event_id);
+                    setImportRows(null);
+                    setImportPreview(null);
+                  }
+                }}
+              >
+                Import {importPreview.create} item(s)
+              </button>
+            )}
+            {importPreview && (
+              <button className="btn btn-ghost" onClick={() => { setImportRows(null); setImportPreview(null); }}>
+                Cancel
+              </button>
+            )}
+          </div>
+          {importPreview && (
+            <div className="suggest">
+              <p>
+                <b>{importPreview.create}</b> of {importPreview.total} will import
+                {importPreview.new_areas.length > 0 &&
+                  ` · new areas: ${importPreview.new_areas.join(', ')}`}
+              </p>
+              {importPreview.errors.map((e: any) => (
+                <p key={e.row} className="muted">Row {e.row + 1}: {e.error}</p>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       <h2>Backup</h2>
       <p className="muted">
-        Saves a consistent snapshot of the database into your data folder
-        (<code>backups/</code>), keeping the newest 10. Photos live alongside it in
-        <code>photos/</code> - back up the whole data folder to cover both.
+        One zip with everything - database, photos, and a readable manifest.
+        Restorable from a fresh install.
       </p>
-      <button
-        className="btn"
-        onClick={async () => {
-          try {
-            const r = await api.post('/api/backup');
-            toast(`Backed up: ${r.file}`);
-          } catch (e) {
-            toast(`Backup failed: ${(e as Error).message}`);
-          }
-        }}
-      >
-        Back up now
-      </button>
+      {isAdmin && (
+        <>
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={backupOpts.encrypt}
+              onChange={(e) => setBackupOpts({ ...backupOpts, encrypt: e.target.checked })}
+            />
+            Encrypt the backup
+          </label>
+          {backupOpts.encrypt && (
+            <>
+              <input
+                className="input"
+                type="password"
+                placeholder="Passphrase (blank = generate a key)"
+                value={backupOpts.passphrase}
+                onChange={(e) => setBackupOpts({ ...backupOpts, passphrase: e.target.value })}
+              />
+              {!backupOpts.passphrase && (
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    checked={backupOpts.includeKey}
+                    onChange={(e) => setBackupOpts({ ...backupOpts, includeKey: e.target.checked })}
+                  />
+                  Save the generated key inside the backup
+                </label>
+              )}
+            </>
+          )}
+          <div className="row">
+            <button
+              className="btn"
+              disabled={backupBusy}
+              onClick={async () => {
+                setBackupBusy(true);
+                try {
+                  const res = await fetch('/api/backup/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      encrypt: backupOpts.encrypt,
+                      passphrase: backupOpts.passphrase || null,
+                      include_key: backupOpts.includeKey,
+                    }),
+                  });
+                  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message ?? `${res.status}`);
+                  const key = res.headers.get('x-stache-key');
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `stache-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  if (key) setBackupKey(key);
+                  else toast('Backup downloaded');
+                } catch (e) {
+                  toast(`Backup failed: ${(e as Error).message}`);
+                } finally {
+                  setBackupBusy(false);
+                }
+              }}
+            >
+              {backupBusy ? 'Building…' : 'Download backup'}
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={async () => {
+                try {
+                  const r = await api.post('/api/backup');
+                  toast(`Snapshot saved: ${r.file}`);
+                } catch (e) {
+                  toast(`Snapshot failed: ${(e as Error).message}`);
+                }
+              }}
+            >
+              Quick DB snapshot
+            </button>
+          </div>
+          {backupKey && (
+            <div className="suggest">
+              <p><b>Decryption key (shown once):</b></p>
+              <div className="row">
+                <code className="mcp-url">{backupKey}</code>
+                <button className="btn btn-small" onClick={() => copy(backupKey)}>Copy</button>
+                <button className="btn btn-small btn-ghost" onClick={() => setBackupKey(null)}>Done</button>
+              </div>
+            </div>
+          )}
+
+          <h2>Restore</h2>
+          <p className="muted">
+            Replaces the whole inventory with a backup bundle - the app restarts
+            itself to apply it. This can't be undone.
+          </p>
+          {restoring ? (
+            <p className="muted">Restoring - the server is restarting, this takes a moment…</p>
+          ) : (
+            <label className="btn danger">
+              Restore from zip…
+              <input
+                type="file"
+                accept=".zip"
+                hidden
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!f) return;
+                  if (!window.confirm(`Replace the entire inventory with "${f.name}"?`)) return;
+                  const key = window.prompt('Decryption key or passphrase (leave blank if unencrypted)') ?? '';
+                  const form = new FormData();
+                  form.append('file', f, f.name);
+                  if (key.trim()) form.append('key', key.trim());
+                  try {
+                    const r = await api.upload('/api/backup/restore', form);
+                    setRestoring(true);
+                    if (!r.auto_restart) {
+                      toast('Staged - restart the server to apply');
+                      setRestoring(false);
+                      return;
+                    }
+                    // Poll until the restarted server answers, then reload.
+                    for (let i = 0; i < 60; i++) {
+                      await new Promise((s) => setTimeout(s, 2000));
+                      const ok = await fetch('/api/health').then((x) => x.ok).catch(() => false);
+                      if (ok) {
+                        window.location.reload();
+                        return;
+                      }
+                    }
+                    setRestoring(false);
+                    toast('Restore applied - reload the page');
+                  } catch (err) {
+                    toast(`Restore failed: ${(err as Error).message}`);
+                  }
+                }}
+              />
+            </label>
+          )}
+
+          <h2>Photo maintenance</h2>
+          <p className="muted">
+            Checks the photo folder against the database - files nothing
+            references, database rows pointing at missing files, missing thumbnails.
+          </p>
+          <div className="row">
+            <button
+              className="btn"
+              onClick={async () => {
+                setMaint(await api.get('/api/photos/maintenance').catch((e) => (toast(e.message), null)));
+              }}
+            >
+              Check
+            </button>
+            {maint && (
+              <>
+                {maint.orphan_files > 0 && (
+                  <button
+                    className="btn"
+                    onClick={async () => {
+                      const r = await api.post('/api/photos/maintenance', { action: 'delete_orphans' });
+                      toast(`Deleted ${r.deleted} orphan file(s)`);
+                      setMaint(await api.get('/api/photos/maintenance'));
+                    }}
+                  >
+                    Delete {maint.orphan_files} orphans
+                  </button>
+                )}
+                {maint.missing_thumbs > 0 && (
+                  <button
+                    className="btn"
+                    onClick={async () => {
+                      const r = await api.post('/api/photos/maintenance', { action: 'repair_thumbs' });
+                      toast(`Repaired ${r.repaired} thumbnail(s)`);
+                      setMaint(await api.get('/api/photos/maintenance'));
+                    }}
+                  >
+                    Repair {maint.missing_thumbs} thumbs
+                  </button>
+                )}
+                {maint.dangling_rows > 0 && (
+                  <button
+                    className="btn"
+                    onClick={async () => {
+                      const r = await api.post('/api/photos/maintenance', { action: 'prune_dangling' });
+                      toast(`Pruned ${r.pruned} dangling row(s)`);
+                      setMaint(await api.get('/api/photos/maintenance'));
+                    }}
+                  >
+                    Prune {maint.dangling_rows} broken rows
+                  </button>
+                )}
+                {maint.orphan_files === 0 && maint.missing_thumbs === 0 && maint.dangling_rows === 0 && (
+                  <span className="muted">All clean.</span>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       <p className="muted" style={{ marginTop: '32px' }}>
         Stache {import.meta.env.VITE_APP_VERSION || 'dev'}

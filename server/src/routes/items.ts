@@ -2,10 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, query, placeholders } from '../db';
 import { env } from '../env';
-import { areas, items, photos } from '../db/schema';
+import { areas, items, itemLinks, itemReceipts, photos, user } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
 import { recordEventTx, type EventType } from '../lib/events';
 import { insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
@@ -28,6 +28,16 @@ const ItemPatchSchema = z.object({
   remind_snoozed_until: z.string().nullable().optional(),
   warranty_until: z.string().nullable().optional(),
   restock_below: z.union([z.number(), z.string(), z.null()]).optional(),
+  purchase_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  purchase_price: z.union([z.number(), z.string(), z.null()]).optional(),
+  retailer: z.string().max(200).nullable().optional(),
+  serial_number: z.string().max(200).nullable().optional(),
+  tags: z.array(z.string().max(50)).max(50).nullable().optional(),
+  duplicate_of: z.string().nullable().optional(),
+}).passthrough();
+
+const LinkSchema = z.object({
+  item_id: z.string(),
 }).passthrough();
 
 const SplitSchema = z.object({
@@ -79,6 +89,11 @@ function itemJson(i: typeof items.$inferSelect) {
     ai_tags: i.aiTags,
     ai_status: i.aiStatus,
     duplicate_of: i.duplicateOf,
+    purchase_date: i.purchaseDate,
+    purchase_price: i.purchasePrice,
+    retailer: i.retailer,
+    serial_number: i.serialNumber,
+    tags: i.tags,
   };
 }
 
@@ -254,6 +269,12 @@ export async function itemRoutes(app: FastifyInstance) {
       remind_snoozed_until: 'remindSnoozedUntil',
       warranty_until: 'warrantyUntil',
       restock_below: 'restockBelow',
+      purchase_date: 'purchaseDate',
+      purchase_price: 'purchasePrice',
+      retailer: 'retailer',
+      serial_number: 'serialNumber',
+      tags: 'tags',
+      duplicate_of: 'duplicateOf',
     } as const;
     const prev: Record<string, unknown> = {};
     const next: Record<string, unknown> = {};
@@ -301,6 +322,14 @@ export async function itemRoutes(app: FastifyInstance) {
           remindSnoozedUntil: item.remindSnoozedUntil,
           warrantyUntil: item.warrantyUntil,
           restockBelow: item.restockBelow,
+          purchaseDate: item.purchaseDate,
+          purchasePrice: item.purchasePrice === undefined || item.purchasePrice === null
+            ? item.purchasePrice
+            : Number(item.purchasePrice),
+          retailer: item.retailer,
+          serialNumber: item.serialNumber,
+          tags: item.tags,
+          duplicateOf: item.duplicateOf,
         })
         .where(eq(items.id, id))
         .returning()
@@ -330,6 +359,47 @@ export async function itemRoutes(app: FastifyInstance) {
     return reply
       .code(201)
       .send({ photos: saved.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })) });
+  });
+
+  // Re-shoot a photo: same row, new files. Old files are kept until undo is
+  // impossible (the next mutation on this item) - undo swaps the pointers
+  // back and the new files become orphans for maintenance to sweep.
+  app.post('/api/items/:id/photos/:photoId/replace', async (req, reply) => {
+    const { id, photoId } = req.params as { id: string; photoId: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    const [photo] = await db.select().from(photos).where(eq(photos.id, photoId));
+    if (!photo || photo.itemId !== id) return reply.notFound('photo not found');
+
+    let buf: Buffer | null = null;
+    for await (const part of req.parts()) {
+      if (part.type === 'file') buf = await part.toBuffer();
+    }
+    if (!buf) return reply.badRequest('no photo uploaded');
+
+    const saved = await savePhotoFile(buf);
+    const ev = db.transaction((tx) => {
+      tx.update(photos)
+        .set({
+          path: saved.path,
+          thumbPath: saved.thumbPath,
+          width: saved.width,
+          height: saved.height,
+        })
+        .where(eq(photos.id, photoId))
+        .run();
+      return recordEventTx(tx, 'item.photo_replaced', 'item', id, {
+        photo_id: photoId,
+        prev_path: photo.path,
+        prev_thumb: photo.thumbPath,
+        prev_width: photo.width,
+        prev_height: photo.height,
+        new_path: saved.path,
+        new_thumb: saved.thumbPath,
+      }, req.user?.id);
+    });
+    analyzeItemPhoto(id, photoId, saved.path).catch(() => {});
+    return { ok: true, url: `/photos/${saved.path}`, thumb: `/photos/${saved.thumbPath}`, event_id: ev.id };
   });
 
   // "Not here" - lowers confidence and suggests where else to look.
@@ -595,5 +665,223 @@ export async function itemRoutes(app: FastifyInstance) {
     }
     query('DELETE FROM photo_embeddings WHERE item_id = ?', id);
     return { ok: true };
+  });
+
+  // Per-item history - "where did I last see this?" Includes the item's own
+  // events plus stocktake entries that touched it.
+  app.get('/api/items/:id/events', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+
+    const rows = query<{ id: string; type: string; entity_type: string; payload: string; user_id: string | null; actor: string | null; undone_at: number | null; created_at: number }>(
+      `SELECT id, type, entity_type, payload, user_id, actor, undone_at, created_at
+         FROM events
+        WHERE (entity_type = 'item' AND entity_id = ?)
+           OR (entity_type = 'multi' AND payload LIKE ?)
+        ORDER BY created_at DESC LIMIT 100`,
+      id,
+      `%"${id}"%`,
+    );
+
+    const names = new Map(
+      (await db.select({ id: user.id, name: user.name }).from(user)).map((u) => [u.id, u.name]),
+    );
+    return {
+      events: rows.map((e) => ({
+        id: e.id,
+        type: e.type,
+        user_name: e.user_id ? (names.get(e.user_id) ?? 'someone') : null,
+        actor: e.actor,
+        undone: !!e.undone_at,
+        payload: typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload,
+        created_at: e.created_at,
+      })),
+    };
+  });
+
+  // --- Receipts -------------------------------------------------------------
+  // A receipt is a photo (no item link) joined to any number of items.
+
+  const receiptRows = (itemId: string) =>
+    query<{ photo_id: string; path: string; thumb_path: string | null }>(
+      `SELECT r.photo_id, p.path, p.thumb_path
+         FROM item_receipts r JOIN photos p ON p.id = r.photo_id
+        WHERE r.item_id = ? ORDER BY r.created_at`,
+      itemId,
+    ).map((r) => ({
+      photo_id: r.photo_id,
+      url: `/photos/${r.path}`,
+      thumb: `/photos/${r.thumb_path ?? r.path}`,
+    }));
+
+  app.get('/api/items/:id/receipts', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    return { receipts: receiptRows(id) };
+  });
+
+  // Attach a receipt: multipart photo upload, or JSON {photo_id} to link an
+  // already-uploaded photo to this item too.
+  app.post('/api/items/:id/receipts', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+
+    const ctype = req.headers['content-type'] ?? '';
+    let photoIds: string[] = [];
+    if (ctype.includes('multipart/')) {
+      for await (const part of req.parts()) {
+        if (part.type !== 'file') continue;
+        const saved = await savePhotoFile(await part.toBuffer());
+        const p = await insertPhoto(saved, {});
+        photoIds.push(p.id);
+      }
+    } else {
+      const body = (req.body ?? {}) as { photo_id?: string };
+      if (body.photo_id) photoIds = [body.photo_id];
+    }
+    if (!photoIds.length) return reply.badRequest('no photo given');
+
+    const uid = req.user?.id ?? null;
+    const eventIds = db.transaction((tx) => {
+      const ids: string[] = [];
+      for (const pid of photoIds) {
+        tx.insert(itemReceipts)
+          .values({ itemId: id, photoId: pid })
+          .onConflictDoNothing()
+          .run();
+        ids.push(
+          recordEventTx(tx, 'item.receipt_attached', 'item', id, { photo_id: pid }, uid).id,
+        );
+      }
+      return ids;
+    });
+    return reply.code(201).send({ receipts: receiptRows(id), event_ids: eventIds });
+  });
+
+  app.delete('/api/items/:id/receipts/:photoId', async (req, reply) => {
+    const { id, photoId } = req.params as { id: string; photoId: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    const ev = db.transaction((tx) => {
+      tx.delete(itemReceipts)
+        .where(and(eq(itemReceipts.itemId, id), eq(itemReceipts.photoId, photoId)))
+        .run();
+      return recordEventTx(tx, 'item.receipt_detached', 'item', id, { photo_id: photoId }, req.user?.id);
+    });
+    return { ok: true, event_id: ev.id };
+  });
+
+  // --- "Goes with" links ----------------------------------------------------
+
+  const linkedItems = async (itemId: string, uid: string | null) => {
+    const rows = query<{ other_id: string }>(
+      `SELECT CASE WHEN a_id = ? THEN b_id ELSE a_id END AS other_id
+         FROM item_links WHERE a_id = ? OR b_id = ?`,
+      itemId, itemId, itemId,
+    );
+    if (!rows.length) return [];
+    const others = await db
+      .select()
+      .from(items)
+      .where(inArray(items.id, rows.map((r) => r.other_id)));
+    const thumbs = await thumbsForItems(others.map((o) => o.id));
+    return others
+      .filter((o) => !o.hiddenAt && (!o.isPrivate || o.ownerId === uid))
+      .map((o) => {
+        const t = thumbs.get(o.id);
+        return {
+          id: o.id, name: o.name, status: o.status,
+          thumb: t ? thumbUrl(t) : null,
+        };
+      });
+  };
+
+  app.get('/api/items/:id/links', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    return { links: await linkedItems(id, req.user?.id ?? null) };
+  });
+
+  app.post('/api/items/:id/links', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = parseBody(LinkSchema, req.body, reply);
+    if (!body) return;
+    const otherId = body.item_id;
+    if (otherId === id) return reply.badRequest("can't link an item to itself");
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    const [other] = await db.select().from(items).where(eq(items.id, otherId));
+    if (!other || hiddenFrom(other, req)) return reply.notFound('linked item not found');
+
+    const [a, b] = [id, otherId].sort();
+    const ev = db.transaction((tx) => {
+      tx.insert(itemLinks).values({ aId: a, bId: b }).onConflictDoNothing().run();
+      return recordEventTx(tx, 'item.linked', 'item', id, { other_id: otherId }, req.user?.id);
+    });
+    return reply.code(201).send({ links: await linkedItems(id, req.user?.id ?? null), event_id: ev.id });
+  });
+
+  app.delete('/api/items/:id/links/:other', async (req, reply) => {
+    const { id, other } = req.params as { id: string; other: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    const [a, b] = [id, other].sort();
+    const ev = db.transaction((tx) => {
+      tx.delete(itemLinks).where(and(eq(itemLinks.aId, a), eq(itemLinks.bId, b))).run();
+      return recordEventTx(tx, 'item.unlinked', 'item', id, { other_id: other }, req.user?.id);
+    });
+    return { ok: true, event_id: ev.id };
+  });
+
+  // Merge a duplicate into this item: the loser's photos and links move over,
+  // the loser is hidden, and undo restores everything.
+  app.post('/api/items/:id/merge', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = parseBody(LinkSchema, req.body, reply);
+    if (!body) return;
+    const loserId = body.item_id;
+    if (loserId === id) return reply.badRequest("can't merge an item into itself");
+
+    const [winner] = await db.select().from(items).where(eq(items.id, id));
+    if (!winner || hiddenFrom(winner, req)) return reply.notFound('item not found');
+    const [loser] = await db.select().from(items).where(eq(items.id, loserId));
+    if (!loser || hiddenFrom(loser, req)) return reply.notFound('duplicate not found');
+    if (loser.hiddenAt) return reply.badRequest('duplicate is already hidden');
+
+    const loserPics = await db.select().from(photos).where(eq(photos.itemId, loserId));
+    const loserLinks = query<{ other_id: string }>(
+      `SELECT CASE WHEN a_id = ? THEN b_id ELSE a_id END AS other_id
+         FROM item_links WHERE a_id = ? OR b_id = ?`,
+      loserId, loserId, loserId,
+    );
+
+    const ev = db.transaction((tx) => {
+      for (const p of loserPics) {
+        tx.update(photos).set({ itemId: id }).where(eq(photos.id, p.id)).run();
+      }
+      for (const l of loserLinks) {
+        const [la, lb] = [loserId, l.other_id].sort();
+        const [wa, wb] = [id, l.other_id].sort();
+        tx.delete(itemLinks).where(and(eq(itemLinks.aId, la), eq(itemLinks.bId, lb))).run();
+        if (l.other_id !== id) {
+          tx.insert(itemLinks).values({ aId: wa, bId: wb }).onConflictDoNothing().run();
+        }
+      }
+      tx.update(items)
+        .set({ hiddenAt: new Date(), duplicateOf: null })
+        .where(eq(items.id, loserId))
+        .run();
+      return recordEventTx(tx, 'item.merged', 'item', id, {
+        loser_id: loserId,
+        loser_name: loser.name,
+        moved_photo_ids: loserPics.map((p) => p.id),
+        moved_links: loserLinks,
+      }, req.user?.id);
+    });
+    return { ok: true, event_id: ev.id };
   });
 }

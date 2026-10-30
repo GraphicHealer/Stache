@@ -26,6 +26,8 @@ export const areas = sqliteTable('areas', {
   labelCode: text('label_code').unique(),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
   archivedAt: ts('archived_at'),
+  // Last completed stocktake - "audited ... ago" on the area page.
+  lastAuditAt: ts('last_audit_at'),
 }, (t) => [index('areas_parent_idx').on(t.parentId)]);
 
 export const items = sqliteTable('items', {
@@ -59,6 +61,13 @@ export const items = sqliteTable('items', {
   clientId: text('client_id'),
   // Set when CLIP finds a near-identical photo of another item at filing time.
   duplicateOf: text('duplicate_of'),
+  // Optional purchase metadata - all optional, never asked at capture.
+  purchaseDate: text('purchase_date'), // YYYY-MM-DD
+  purchasePrice: real('purchase_price'),
+  retailer: text('retailer'),
+  serialNumber: text('serial_number'),
+  // User-editable cross-location tags (JSON string[]), separate from ai_tags.
+  tags: text('tags', { mode: 'json' }),
 }, (t) => [
   index('items_area_idx').on(t.areaId),
   uniqueIndex('items_client_id_idx').on(t.clientId),
@@ -87,6 +96,8 @@ export const events = sqliteTable('events', {
   entityId: text('entity_id'),
   payload: text('payload', { mode: 'json' }),
   userId: text('user_id'),
+  // Which MCP connection did it ('mcp:<slug>'); NULL = person or system.
+  actor: text('actor'),
   undoneAt: ts('undone_at'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 }, (t) => [
@@ -171,7 +182,29 @@ export const mcpTokens = sqliteTable('mcp_tokens', {
   tokenHash: text('token_hash'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
   lastUsedAt: ts('last_used_at'),
+  // 'read' | 'read-write' - whether the connection gets write tools.
+  scope: text('scope').notNull().default('read-write'),
 });
+
+/** A receipt photo linked to an item (one receipt can cover many items). */
+export const itemReceipts = sqliteTable('item_receipts', {
+  itemId: text('item_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
+  photoId: text('photo_id').notNull().references(() => photos.id, { onDelete: 'cascade' }),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+}, (t) => [
+  index('item_receipts_item_idx').on(t.itemId),
+  index('item_receipts_photo_idx').on(t.photoId),
+]);
+
+/** "Goes with" links - device<->charger, game<->pieces. Pair stored once. */
+export const itemLinks = sqliteTable('item_links', {
+  aId: text('a_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
+  bId: text('b_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+}, (t) => [
+  index('item_links_a_idx').on(t.aId),
+  index('item_links_b_idx').on(t.bId),
+]);
 
 export type Label = typeof labels.$inferSelect;
 export type Area = typeof areas.$inferSelect;

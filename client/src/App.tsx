@@ -13,6 +13,7 @@ import { LabelsPage } from './pages/LabelsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OutPage } from './pages/OutPage';
 import { TrashPage } from './pages/TrashPage';
+import { ReviewPage } from './pages/ReviewPage';
 import { LoginPage } from './pages/LoginPage';
 
 /**
@@ -120,6 +121,7 @@ export function App() {
           <Route path="/browse" element={<BrowsePage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/review" element={<ReviewPage />} />
           <Route path="/out" element={<OutPage />} />
           <Route path="/labels" element={<LabelsPage />} />
           <Route path="/trash" element={<TrashPage />} />

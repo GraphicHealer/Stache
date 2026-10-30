@@ -19,6 +19,7 @@ export function SearchPage() {
   const status = params.get('status') ?? '';
   const areaId = params.get('area_id') ?? '';
   const priv = params.get('private') ?? '';
+  const tag = params.get('tag') ?? '';
   const { toast } = useApp();
   const [photoResults, setPhotoResults] = useState<any[] | null>(null);
   const [photoSearching, setPhotoSearching] = useState(false);
@@ -34,22 +35,23 @@ export function SearchPage() {
     if (status) p.set('status', status);
     if (areaId) p.set('area_id', areaId);
     if (priv) p.set('private', priv);
+    if (tag) p.set('tag', tag);
     return p.toString();
   };
 
   const { data, isFetching } = useQuery({
-    queryKey: ['search', query, barcode, status, areaId, priv],
+    queryKey: ['search', query, barcode, status, areaId, priv, tag],
     queryFn: () =>
       api.get(barcode ? `/api/search?barcode=${encodeURIComponent(barcode)}`
                       : `/api/search?${filterParams()}`),
-    enabled: !!(query || barcode || status || areaId || priv),
+    enabled: !!(query || barcode || status || areaId || priv || tag),
   });
 
   // "Recently filed" feed when nothing is being searched.
   const { data: recent } = useQuery({
     queryKey: ['recent'],
     queryFn: () => api.get('/api/recent'),
-    enabled: !(query || barcode || status || areaId || priv || photoResults),
+    enabled: !(query || barcode || status || areaId || priv || tag || photoResults),
   });
 
   const submit = (e: React.FormEvent) => {
@@ -81,7 +83,7 @@ export function SearchPage() {
   };
 
   const displayItems = photoResults ?? data?.items;
-  const showRecent = !(query || barcode || status || areaId || priv || photoResults);
+  const showRecent = !(query || barcode || status || areaId || priv || tag || photoResults);
 
   return (
     <div className="page">
@@ -127,6 +129,13 @@ export function SearchPage() {
           <option value="0">Shared only</option>
           <option value="1">Private only</option>
         </select>
+        <input
+          className="input"
+          style={{ width: 'auto', flex: 1 }}
+          placeholder="tag"
+          value={tag}
+          onChange={(e) => setFilter('tag', e.target.value)}
+        />
       </div>
       {photoSearching && <p className="muted">Looking for similar things…</p>}
       {photoResults && (

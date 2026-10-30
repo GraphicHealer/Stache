@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
+import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
@@ -10,7 +11,7 @@ import { env } from './env';
 import { getAuth, handleAuthRequest, sessionUser, userCount } from './auth';
 import { user } from './db/schema';
 import { asc, eq } from 'drizzle-orm';
-import { db } from './db';
+import { db, queryOne } from './db';
 import { verifyPhotoSig } from './lib/signed';
 import { parseBody } from './lib/validate';
 import { z } from 'zod';
@@ -28,6 +29,7 @@ import { miscRoutes } from './routes/events';
 import { printerRoutes } from './routes/printers';
 import { settingsRoutes } from './routes/settings';
 import { outRoutes } from './routes/out';
+import { reviewRoutes } from './routes/review';
 import { registerMcp } from './mcp';
 
 export function buildApp() {
@@ -60,6 +62,14 @@ export function buildApp() {
     limits: { fileSize: 25 * 1024 * 1024, files: 8 },
   });
 
+  // Rate limiting on API + MCP only - photo thumbnails come in bursts (an
+  // area grid can fire hundreds at once), and static assets shouldn't count.
+  app.register(rateLimit, {
+    max: 600,
+    timeWindow: '1 minute',
+    allowList: (req) => !(req.url?.startsWith('/api') || req.url?.startsWith('/mcp')),
+  });
+
   // Built PWA, served at / with SPA fallback.
   const clientReady = existsSync(env.clientDist);
   if (clientReady) {
@@ -80,10 +90,12 @@ export function buildApp() {
 
   app.get('/api/health', async () => ({ ok: true, version: env.appVersion }));
 
-  // Better Auth handles everything under /api/auth/*.
+  // Better Auth handles everything under /api/auth/* - tight limit: this is
+  // where password guessing would hammer.
   app.route({
     method: ['GET', 'POST'],
     url: '/api/auth/*',
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     handler: handleAuthRequest,
   });
 
@@ -98,9 +110,10 @@ export function buildApp() {
   app.addHook('onRequest', async (req, reply) => {
     const url = req.raw.url ?? '';
     // Signed photo URLs (digests, HA cards) carry their own HMAC - no session.
+    let pathOnly: string | null = null;
     if (url.startsWith('/photos/')) {
       const q = new URL(url, 'http://x').searchParams;
-      const pathOnly = url.split('?')[0];
+      pathOnly = url.split('?')[0];
       if (verifyPhotoSig(pathOnly, q.get('exp') ?? undefined, q.get('sig') ?? undefined)) return;
     }
     const protectedPath = url.startsWith('/api') || url.startsWith('/photos');
@@ -118,6 +131,22 @@ export function buildApp() {
     const user = await sessionUser(req).catch(() => null);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     req.user = user;
+
+    // Photo access follows the owning item's privacy: a private item's
+    // photo 404s for everyone but its owner, even with a valid session.
+    // (Signed URLs bypassed earlier intentionally - digest/HA use.)
+    if (pathOnly) {
+      const name = pathOnly.split('/').pop()!;
+      const row = queryOne<{ owner_id: string | null; is_private: number | null }>(
+        `SELECT i.owner_id, i.is_private
+           FROM photos p LEFT JOIN items i ON i.id = p.item_id
+          WHERE p.path = ? OR p.thumb_path = ? LIMIT 1`,
+        name,
+        name,
+      );
+      if (row?.is_private && row.owner_id !== user.id)
+        return reply.code(404).send({ error: 'not found' });
+    }
   });
 
   app.get('/api/me', async (req) => ({ user: req.user }));
@@ -125,12 +154,13 @@ export function buildApp() {
   // First account is the admin: member management + settings are admin-only.
   const isAdmin = (req: { user: { role: string } | null }) => req.user?.role === 'admin';
 
-  app.get('/api/users', async () => ({
-    users: (await db
-      .select({ id: user.id, name: user.name, email: user.email, role: user.role })
-      .from(user)
-      .orderBy(asc(user.createdAt))),
-  }));
+  // Members see names + roles (household list); emails are admin-only.
+  app.get('/api/users', async (req) => {
+    const cols = isAdmin(req)
+      ? { id: user.id, name: user.name, email: user.email, role: user.role }
+      : { id: user.id, name: user.name, role: user.role };
+    return { users: await db.select(cols as any).from(user).orderBy(asc(user.createdAt)) };
+  });
 
   app.post('/api/users', async (req, reply) => {
     if (!isAdmin(req)) return reply.code(403).send({ error: 'admin only' });
@@ -169,6 +199,7 @@ export function buildApp() {
   app.register(printerRoutes);
   app.register(settingsRoutes);
   app.register(outRoutes);
+  app.register(reviewRoutes);
   registerMcp(app);
 
   app.setNotFoundHandler((req, reply) => {

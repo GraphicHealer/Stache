@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 process.env.DATA_DIR = mkdtempSync(path.join(tmpdir(), 'stache-test-'));
 
 let db: any, schema: any, itemVisible: any, undoEvent: any, recordEventTx: any;
-let app: any;
+let app: any, getAuth: any;
 
 beforeAll(async () => {
   const { runMigrations } = await import('../src/migrate');
@@ -17,8 +17,9 @@ beforeAll(async () => {
   schema = await import('../src/db/schema');
   ({ itemVisible } = await import('../src/lib/visibility'));
   ({ undoEvent, recordEventTx } = await import('../src/lib/events'));
-  const { initAuth } = await import('../src/auth');
-  await initAuth();
+  const authMod = await import('../src/auth');
+  await authMod.initAuth();
+  getAuth = authMod.getAuth;
   const { buildApp } = await import('../src/app');
   app = buildApp();
   await app.ready();
@@ -29,10 +30,26 @@ async function mkArea(name = 'bin') {
   return a;
 }
 
-async function mkUser(id: string) {
+async function mkUser(id: string, role = 'member') {
   await db.insert(schema.user)
-    .values({ id, name: id, email: `${id}@t.dev`, emailVerified: false })
+    .values({ id, name: id, email: `${id}@t.dev`, emailVerified: false, role })
     .onConflictDoNothing();
+}
+
+/** Real sign-up through Better Auth - returns a usable Cookie header + user id. */
+async function login(email: string, role = 'member') {
+  const res: any = await getAuth().api.signUpEmail({
+    body: { name: email.split('@')[0], email, password: 'password-123' },
+    returnHeaders: true,
+  });
+  const headers: Headers = res?.headers ?? res?.response?.headers;
+  const setCookie = headers?.get('set-cookie') ?? '';
+  const cookie = setCookie.split(';')[0];
+  if (role !== 'member') {
+    await db.update(schema.user).set({ role }).where(eq(schema.user.email, email));
+  }
+  const u = res?.response?.user ?? res?.user;
+  return { cookie, userId: u?.id as string };
 }
 
 describe('visibility rules', () => {
@@ -78,6 +95,34 @@ describe('undoEvent', () => {
 
     const res = await undoEvent(ev.id);
     expect(res.ok).toBe(true);
+    [r] = await db.select().from(schema.items).where(eq(schema.items.id, i.id));
+    expect(r.areaId).toBe(a.id);
+  });
+
+  it('stale undo is refused; undoing the newer event first unblocks it', async () => {
+    const a = await mkArea('a2');
+    const b = await mkArea('b2');
+    const c = await mkArea('c2');
+    const [i] = await db.insert(schema.items).values({ areaId: a.id }).returning();
+
+    const mv = (to: string, from: string) =>
+      db.transaction((tx: any) => {
+        tx.update(schema.items).set({ areaId: to }).where(eq(schema.items.id, i.id)).run();
+        return recordEventTx(
+          tx, 'item.moved', 'item', i.id,
+          { from_area_id: from, to_area_id: to }, 'u1',
+        );
+      });
+    const ev1 = mv(b.id, a.id);
+    await new Promise((r) => setTimeout(r, 5)); // distinct created_at for ordering
+    const ev2 = mv(c.id, b.id);
+
+    expect((await undoEvent(ev1.id)).ok).toBe(false); // stale - B->C happened after
+    let [r] = await db.select().from(schema.items).where(eq(schema.items.id, i.id));
+    expect(r.areaId).toBe(c.id);
+
+    expect((await undoEvent(ev2.id)).ok).toBe(true);  // C -> B
+    expect((await undoEvent(ev1.id)).ok).toBe(true);  // now legal: B -> A
     [r] = await db.select().from(schema.items).where(eq(schema.items.id, i.id));
     expect(r.areaId).toBe(a.id);
   });
@@ -131,6 +176,47 @@ describe('api (fastify.inject)', () => {
       payload: { count: 5 },
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('members get the user list without emails; admins get emails', async () => {
+    const member = await login('mem1@t.dev');
+    const admin = await login('admin1@t.dev', 'admin');
+
+    const mres = await app.inject({ method: 'GET', url: '/api/users', headers: member });
+    expect(mres.statusCode).toBe(200);
+    expect(mres.json().users.length).toBeGreaterThan(0);
+    expect(mres.json().users.every((u: any) => !('email' in u))).toBe(true);
+
+    const ares = await app.inject({ method: 'GET', url: '/api/users', headers: admin });
+    expect(ares.json().users.some((u: any) => u.email)).toBe(true);
+  });
+
+  it('private item photos 404 for other members, serve for the owner', async () => {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const dir = path.join(process.env.DATA_DIR!, 'photos');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'ptest.webp'), Buffer.from('fake-image'));
+
+    const owner = await login('owner@t.dev');
+    const other = await login('other@t.dev');
+    const a = await mkArea();
+    const [i] = await db.insert(schema.items)
+      .values({ areaId: a.id, isPrivate: true, ownerId: owner.userId })
+      .returning();
+    await db.insert(schema.photos)
+      .values({ itemId: i.id, path: 'ptest.webp', thumbPath: 'ptest.webp' });
+
+    const denied = await app.inject({ method: 'GET', url: '/photos/ptest.webp', headers: other });
+    expect(denied.statusCode).toBe(404);
+    const deniedThumb = await app.inject({ method: 'GET', url: '/photos/ptest.webp', headers: other });
+    expect(deniedThumb.statusCode).toBe(404);
+
+    const ok = await app.inject({ method: 'GET', url: '/photos/ptest.webp', headers: owner });
+    expect(ok.statusCode).toBe(200);
+
+    const anon = await app.inject({ method: 'GET', url: '/photos/ptest.webp' });
+    expect(anon.statusCode).toBe(401);
   });
 
   it('setup is public (fixture users exist, so needs_setup is false)', async () => {

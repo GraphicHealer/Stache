@@ -65,8 +65,11 @@ async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promi
     }),
     signal: AbortSignal.timeout(90_000),
   });
-  if (!res.ok) throw new Error(`AI provider ${res.status}: ${await res.text()}`);
-  const body: any = await res.json();
+  if (!res.ok) throw new Error(`AI provider ${res.status}: ${(await res.text()).slice(0, 500)}`);
+  // A hostile or garbage endpoint could return anything - cap the read.
+  const raw = await res.text();
+  if (raw.length > 2_000_000) throw new Error('AI response too large');
+  const body: any = JSON.parse(raw);
   return body.choices?.[0]?.message?.content ?? '';
 }
 

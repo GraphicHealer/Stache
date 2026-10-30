@@ -25,8 +25,31 @@ const DigestSettingsSchema = z.object({
   base_url: z.string().max(500).optional(),
 }).passthrough();
 
+// The AI endpoint is fetched server-side - validate it like an SSRF surface.
+// LAN/loopback hosts are allowed (Ollama on the network is the intended
+// use); only non-http schemes and cloud-metadata targets are refused.
+function badAiUrl(raw: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return 'base_url must be a URL like http://ollama:11434/v1';
+  }
+  if (!['http:', 'https:'].includes(u.protocol)) return 'base_url must be http or https';
+  if (!u.hostname) return 'base_url needs a hostname';
+  const h = u.hostname.toLowerCase();
+  const blocked = [
+    '169.254.169.254',          // cloud instance metadata (AWS/GCP/Azure)
+    'metadata.google.internal',
+    '100.100.100.200',          // Alibaba metadata
+  ];
+  if (blocked.includes(h)) return 'base_url points at a cloud metadata endpoint';
+  return null;
+}
+
 const McpCreateSchema = z.object({
   name: z.string().min(1).max(100),
+  scope: z.enum(['read', 'read-write']).optional(),
 }).passthrough();
 
 export async function settingsRoutes(app: FastifyInstance) {
@@ -49,6 +72,10 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.put('/api/settings/ai', async (req, reply) => {
     const body = parseBody(AiSettingsSchema, req.body, reply);
     if (!body) return;
+    if (body.base_url) {
+      const err = badAiUrl(body.base_url);
+      if (err) return reply.badRequest(err);
+    }
     const prev = await getAiConfig();
     await setAiConfig({
       enabled: !!body.enabled,
@@ -62,7 +89,9 @@ export async function settingsRoutes(app: FastifyInstance) {
   });
 
   // Re-run suggestion for one item.
-  app.post('/api/items/:id/ai-rerun', async (req, reply) => {
+  app.post('/api/items/:id/ai-rerun', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item) return reply.notFound();
@@ -74,7 +103,9 @@ export async function settingsRoutes(app: FastifyInstance) {
   // Backfill: items filed before AI/ML was switched on. Re-queues pending
   // suggestions for anything that never got one, and embeds every photo
   // missing a vector. Runs in the background - inference stays serialized.
-  app.post('/api/settings/backfill', async () => {
+  app.post('/api/settings/backfill', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async () => {
     const cfg = await getAiConfig();
     const aiQueued = cfg?.enabled
       ? sqlite
@@ -123,7 +154,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.post('/api/settings/mcp', async (req, reply) => {
     const body = parseBody(McpCreateSchema, req.body, reply);
     if (!body) return;
-    const { name } = body;
+    const { name, scope } = body;
     const token = crypto.randomBytes(24).toString('base64url');
     const [conn] = await db
       .insert(mcpTokens)
@@ -132,6 +163,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         slug: crypto.randomBytes(9).toString('base64url'),
         token: null,
         tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+        scope: scope ?? 'read-write',
       })
       .returning();
     const { token: _t, tokenHash: _h, ...pub } = conn;

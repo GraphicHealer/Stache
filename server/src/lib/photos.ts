@@ -43,6 +43,18 @@ export async function savePhotoFile(buf: Buffer): Promise<SavedPhoto> {
   return { path: name, thumbPath: thumbName, width: meta.width ?? null, height: meta.height ?? null };
 }
 
+/** Regenerates the 320px thumb for an existing stored original. */
+export async function regenerateThumb(p: Photo): Promise<string> {
+  const thumbName = p.thumbPath ?? `${p.path.replace(/\.webp$/, '')}_t.webp`;
+  await sharp(path.join(PHOTO_DIR(), p.path))
+    .resize(320, 320, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 70 })
+    .toFile(path.join(PHOTO_DIR(), thumbName));
+  return thumbName;
+}
+
+export const photoDir = PHOTO_DIR;
+
 export async function insertPhoto(
   saved: SavedPhoto,
   target: { itemId?: string; areaId?: string },

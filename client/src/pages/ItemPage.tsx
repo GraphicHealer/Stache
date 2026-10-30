@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
@@ -7,6 +7,27 @@ import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
 import { Breadcrumb, CaptureInput } from '../components/Bits';
+
+function describeEvent(e: { type: string; payload?: any }): string {
+  const p = e.payload ?? {};
+  switch (e.type) {
+    case 'item.filed': return 'filed';
+    case 'item.moved': return 'moved';
+    case 'item.updated': return 'edited';
+    case 'item.status': return `status → ${p.next?.status ?? 'changed'}`;
+    case 'item.hidden': return 'hidden';
+    case 'item.restored': return 'restored';
+    case 'item.not_here': return 'marked not here';
+    case 'item.linked': return 'linked to another item';
+    case 'item.unlinked': return 'unlinked';
+    case 'item.receipt_attached': return 'receipt attached';
+    case 'item.receipt_detached': return 'receipt removed';
+    case 'item.merged': return `merged${p.loser_name ? ` "${p.loser_name}"` : ' a duplicate'} into this`;
+    case 'item.photo_replaced': return 'photo re-shot';
+    case 'stocktake': return 'stocktake';
+    default: return e.type;
+  }
+}
 
 export function ItemPage() {
   const { id = '' } = useParams();
@@ -20,6 +41,24 @@ export function ItemPage() {
   const [split, setSplit] = useState<{ photo_url: string; suggestions: { label: string; box: number[] }[] } | null>(null);
   const [splitBusy, setSplitBusy] = useState(false);
   const [picks, setPicks] = useState<{ on: boolean; name: string }[]>([]);
+  const [tagDraft, setTagDraft] = useState('');
+  const [linkQ, setLinkQ] = useState<string | null>(null);
+  const [linkResults, setLinkResults] = useState<{ id: string; name: string | null; thumb: string | null }[]>([]);
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<{ stop: () => void } | null>(null);
+
+  const { data: links } = useQuery({
+    queryKey: ['links', id],
+    queryFn: () => api.get(`/api/items/${id}/links`).catch(() => ({ links: [] })),
+  });
+  const { data: receipts } = useQuery({
+    queryKey: ['receipts', id],
+    queryFn: () => api.get(`/api/items/${id}/receipts`).catch(() => ({ receipts: [] })),
+  });
+  const { data: history } = useQuery({
+    queryKey: ['history', id],
+    queryFn: () => api.get(`/api/items/${id}/events`).catch(() => ({ events: [] })),
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['item', id],
@@ -31,8 +70,13 @@ export function ItemPage() {
   });
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['item', id] });
+    qc.invalidateQueries({ queryKey: ['links', id] });
+    qc.invalidateQueries({ queryKey: ['receipts', id] });
+    qc.invalidateQueries({ queryKey: ['history', id] });
     if (data?.item?.area_id) qc.invalidateQueries({ queryKey: ['area', data.item.area_id] });
   };
+
+  useEffect(() => () => recRef.current?.stop(), []);
 
   useEffect(() => {
     if (data?.item) {
@@ -122,13 +166,114 @@ export function ItemPage() {
     nav(-1);
   };
 
+  // Voice notes: browser-native speech-to-text appended to Notes. No model,
+  // no server - it's just a faster keyboard. Unsupported browsers hide it.
+  const toggleVoice = () => {
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    if (!SR) return toast('Voice input not supported in this browser');
+    if (listening) {
+      recRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e: any) => {
+      const t = Array.from(e.results as any[])
+        .slice(e.resultIndex)
+        .map((r: any) => r[0].transcript)
+        .join(' ')
+        .trim();
+      if (t) setDesc((d) => (d ? `${d} ${t}` : t));
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    rec.start();
+    recRef.current = rec;
+    setListening(true);
+  };
+
+  const saveTags = () => {
+    const tags = tagDraft
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    patch({ tags }, 'Tags saved');
+  };
+
+  const searchLinks = async (q: string) => {
+    setLinkQ(q);
+    if (q.trim().length < 2) return setLinkResults([]);
+    const r = await api.get(`/api/search?q=${encodeURIComponent(q)}&limit=6`).catch(() => null);
+    setLinkResults((r?.items ?? []).filter((i: any) => i.id !== id));
+  };
+
+  const addLink = async (other: string) => {
+    const r = await api.post(`/api/items/${id}/links`, { item_id: other }).catch((e) => (toast(e.message), null));
+    if (r) {
+      toast('Linked', r.event_id);
+      setLinkQ(null);
+      setLinkResults([]);
+      refresh();
+    }
+  };
+
+  const removeLink = async (other: string) => {
+    const r = await api.del(`/api/items/${id}/links/${other}`);
+    toast('Unlinked', r.event_id);
+    refresh();
+  };
+
+  const uploadReceipt = async (blob: Blob) => {
+    const form = new FormData();
+    form.append('photo', await downscale(blob), 'receipt.jpg');
+    const r = await api.upload(`/api/items/${id}/receipts`, form).catch((e) => (toast(e.message), null));
+    if (r) {
+      toast('Receipt attached');
+      refresh();
+    }
+  };
+
+  const detachReceipt = async (photoId: string) => {
+    const r = await api.del(`/api/items/${id}/receipts/${photoId}`);
+    toast('Receipt removed', r.event_id);
+    refresh();
+  };
+
+  const replacePhoto = async (photoId: string, blob: Blob) => {
+    const form = new FormData();
+    form.append('photo', await downscale(blob), 'photo.jpg');
+    const r = await api.upload(`/api/items/${id}/photos/${photoId}/replace`, form).catch((e) => (toast(e.message), null));
+    if (r) {
+      toast('Photo replaced', r.event_id);
+      refresh();
+    }
+  };
+
   return (
     <div className="page">
       <Breadcrumb trail={breadcrumb} />
 
       <div className="photo-strip">
         {photos.map((p: any) => (
-          <img key={p.id} src={p.url} alt="" />
+          <div key={p.id} className="photo-cell">
+            <img src={p.url} alt="" />
+            <label className="photo-replace" title="Re-shoot this photo" aria-label="Re-shoot this photo">
+              ↻
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) replacePhoto(p.id, f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
         ))}
         <CaptureInput onCapture={uploadPhoto} className="btn">+ Photo</CaptureInput>
       </div>
@@ -140,14 +285,27 @@ export function ItemPage() {
         onChange={(e) => setName(e.target.value)}
         onBlur={saveText}
       />
-      <textarea
-        className="input"
-        placeholder="Notes? (optional)"
-        rows={2}
-        value={desc}
-        onChange={(e) => setDesc(e.target.value)}
-        onBlur={saveText}
-      />
+      <div className="row">
+        <textarea
+          className="input"
+          placeholder="Notes? (optional)"
+          rows={2}
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          onBlur={saveText}
+          style={{ flex: 1 }}
+        />
+        {'SpeechRecognition' in window || 'webkitSpeechRecognition' in window ? (
+          <button
+            className={`btn${listening ? ' danger' : ''}`}
+            onClick={toggleVoice}
+            aria-pressed={listening}
+            title={listening ? 'Stop dictating' : 'Dictate a note'}
+          >
+            {listening ? 'Stop' : 'Dictate'}
+          </button>
+        ) : null}
+      </div>
 
       {(item.ai_status === 'pending' ||
         (item.ai_status === 'done' && (item.ai_name || item.ai_description))) && (
@@ -271,7 +429,130 @@ export function ItemPage() {
           />
         </label>
         <p className="muted">Low stock shows up quietly in the Inbox and digest.</p>
+
+        <label className="row">
+          <span className="muted">Bought</span>
+          <input
+            className="input"
+            type="date"
+            defaultValue={item.purchase_date ?? ''}
+            onBlur={(e) => patch({ purchase_date: e.target.value || null }, 'Saved')}
+          />
+          <input
+            className="input"
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="$"
+            style={{ maxWidth: '6rem' }}
+            defaultValue={item.purchase_price ?? ''}
+            onBlur={(e) =>
+              patch({ purchase_price: e.target.value === '' ? null : parseFloat(e.target.value) }, 'Saved')
+            }
+          />
+        </label>
+        <label className="row">
+          <span className="muted">Store</span>
+          <input
+            className="input"
+            placeholder="where'd it come from"
+            defaultValue={item.retailer ?? ''}
+            onBlur={(e) => patch({ retailer: e.target.value || null }, 'Saved')}
+          />
+        </label>
+        <label className="row">
+          <span className="muted">Serial #</span>
+          <input
+            className="input"
+            placeholder="for warranty claims"
+            defaultValue={item.serial_number ?? ''}
+            onBlur={(e) => patch({ serial_number: e.target.value || null }, 'Saved')}
+          />
+        </label>
+        <label className="row">
+          <span className="muted">Tags</span>
+          <input
+            className="input"
+            placeholder="comma, separated, words"
+            defaultValue={(item.tags ?? []).join(', ')}
+            onChange={(e) => setTagDraft(e.target.value)}
+            onFocus={(e) => setTagDraft(e.target.value)}
+            onBlur={saveTags}
+          />
+        </label>
+        <p className="muted">Tags are searchable - a couple of words beats a filing system.</p>
       </details>
+
+      <details className="opt-details">
+        <summary>Receipts {(receipts?.receipts ?? []).length > 0 && `(${(receipts?.receipts ?? []).length})`}</summary>
+          <div className="photo-strip">
+            {(receipts?.receipts ?? []).map((r: any) => (
+              <div key={r.photo_id} className="photo-cell">
+                <a href={r.url} target="_blank" rel="noreferrer">
+                  <img src={r.thumb} alt="receipt" />
+                </a>
+                <button
+                  className="photo-replace"
+                  title="Remove receipt link"
+                  aria-label="Remove receipt link"
+                  onClick={() => detachReceipt(r.photo_id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <CaptureInput onCapture={uploadReceipt} className="btn">+ Receipt</CaptureInput>
+          </div>
+          <p className="muted">One receipt photo can be linked to every item on it.</p>
+        </details>
+
+      <details className="opt-details">
+        <summary>Goes with {(links?.links ?? []).length > 0 && `(${(links?.links ?? []).length})`}</summary>
+        <div className="row">
+          {(links?.links ?? []).map((l: any) => (
+            <span key={l.id} className="badge link-chip">
+              <Link to={`/items/${l.id}`}>{l.name ?? 'unnamed'}</Link>
+              <button onClick={() => removeLink(l.id)} title="Unlink" aria-label={`Unlink ${l.name ?? 'item'}`}>×</button>
+            </span>
+          ))}
+        </div>
+        {linkQ === null ? (
+          <button className="btn" onClick={() => setLinkQ('')}>Link another item…</button>
+        ) : (
+          <>
+            <input
+              className="input"
+              autoFocus
+              placeholder="Search for the item"
+              value={linkQ}
+              onChange={(e) => searchLinks(e.target.value)}
+            />
+            {linkResults.map((r) => (
+              <button key={r.id} className="btn row" onClick={() => addLink(r.id)}>
+                {r.thumb && <img src={r.thumb} alt="" className="mini-thumb" />}
+                {r.name ?? 'unnamed'}
+              </button>
+            ))}
+          </>
+        )}
+        <p className="muted">Kits, chargers, matching parts - things you grab together.</p>
+      </details>
+
+      {(history?.events ?? []).length > 0 && (
+        <details className="opt-details">
+          <summary>History</summary>
+          <ul className="history">
+            {history!.events.map((e: any) => (
+              <li key={e.id} className={e.undone ? 'muted' : ''}>
+                <span className="muted">{new Date(e.created_at).toLocaleString()}</span>{' '}
+                {describeEvent(e)}
+                {e.user_name ? ` - ${e.user_name}` : e.actor ? ` - ${e.actor}` : ''}
+                {e.undone ? ' (undone)' : ''}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {(!item.owner_id || item.owner_id === user?.id) && (
         <label className="row">
