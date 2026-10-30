@@ -115,5 +115,7 @@ curl localhost:8080/api/health
   its own `/mcp/<slug>` URL **and** separate bearer token (revocable).
 - External barcode lookup is free-tier only (Open*Facts); misses return
   `product: null` - never error, never block filing.
-- AI/ML is optional and non-blocking: filing works with no models loaded;
-  CLIP embeds lazily in the background, `STACHE_NO_ML=1` disables it fully.
+- AI/ML is non-blocking: filing works with no models loaded; CLIP embeds
+  lazily in the background. With no `settings.ai` row the built-in local
+  provider (Florence-2) is enabled by default - an explicit "off" persists
+  and always wins. `STACHE_NO_ML=1` disables it fully for tiny hosts.

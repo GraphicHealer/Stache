@@ -5,7 +5,7 @@ import { db } from '../db';
 import { items, photos, settings } from '../db/schema';
 import { env } from '../env';
 import { lookupBarcode, type DetectedCode } from './barcodes';
-import { vlmGenerate } from './ml';
+import { mlDisabled, vlmGenerate } from './ml';
 
 export interface AiConfig {
   enabled: boolean;
@@ -18,8 +18,11 @@ export interface AiConfig {
 
 export async function getAiConfig(): Promise<AiConfig | null> {
   const [row] = await db.select().from(settings).where(eq(settings.key, 'ai'));
-  if (!row) return null;
-  return row.value as unknown as AiConfig;
+  if (row) return row.value as unknown as AiConfig;
+  // Out of the box the built-in Florence-2 suggests names - on-device, so
+  // private items are covered too. STACHE_NO_ML disables it for tiny hosts;
+  // any saved setting (including explicit "off") always wins.
+  return { enabled: !mlDisabled, provider: 'local', base_url: '', model: '' };
 }
 
 export async function setAiConfig(cfg: AiConfig): Promise<void> {

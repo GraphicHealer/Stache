@@ -41,7 +41,7 @@ function l2norm(v: ArrayLike<number>): number[] {
   return arr.map((x) => x / norm);
 }
 
-const mlDisabled = process.env.STACHE_NO_ML === '1';
+export const mlDisabled = process.env.STACHE_NO_ML === '1';
 
 async function rawImage(buf: Buffer) {
   const hf = await import('@huggingface/transformers');

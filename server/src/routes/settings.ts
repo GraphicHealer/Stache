@@ -68,7 +68,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     return {
       configured: !!cfg,
       enabled: cfg?.enabled ?? false,
-      provider: cfg?.provider ?? 'remote',
+      provider: cfg?.provider ?? 'local',
       local_ready: await vlmDownloaded(),
       base_url: cfg?.base_url ?? '',
       model: cfg?.model ?? '',
