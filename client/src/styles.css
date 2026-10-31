@@ -196,6 +196,10 @@ textarea.input { resize: vertical; }
 .label-code { font-family: ui-monospace, monospace; font-size: 0.7rem; font-weight: 700; }
 .label-name { font-weight: 700; font-size: 0.8rem; margin-top: 4px; overflow-wrap: anywhere; }
 .label-blank { border-bottom: 2px solid #000; height: 1.1em; margin: 6px 4mm 2px 0; }
+/* Avery cells render at true physical size on screen too - real preview. */
+.label-sheet.avery { grid-template-columns: repeat(auto-fill, 66.7mm); gap: 3.18mm; }
+.label-sheet.avery .label-cell { height: 25.4mm; overflow: hidden; border: 1px dashed var(--border); }
+.label-sheet.avery .label-qr { width: 22mm; }
 .label-list { margin-top: 8px; }
 .label-row { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid var(--panel); }
 
