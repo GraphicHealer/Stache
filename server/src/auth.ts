@@ -26,6 +26,10 @@ function makeAuth(secret: string) {
     secret,
     database: drizzleAdapter(db, { provider: 'sqlite' }),
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
+    // Secure cookies only make sense when the app is actually served over
+    // HTTPS. Self-hosted LAN access is plain http:// - a Secure cookie is
+    // never stored by the browser there, which silently breaks sign-in.
+    advanced: { useSecureCookies: env.baseUrl.startsWith('https://') },
     ...(env.baseUrl ? { baseURL: env.baseUrl } : {}),
     ...(env.trustedOrigins.length ? { trustedOrigins: env.trustedOrigins } : {}),
     // Keep the session token signed in the cookie so static/photo hits don't
