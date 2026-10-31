@@ -30,6 +30,7 @@ export function LabelsPage() {
   const qc = useQueryClient();
   const { toast } = useApp();
   const [sheet, setSheet] = useState<SheetLabel[]>([]);
+  const [template, setTemplate] = useState<'grid' | 'avery'>('grid');
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -125,6 +126,16 @@ export function LabelsPage() {
     }
   };
 
+  // Claimed labels print their area name; unclaimed get a write-in line.
+  const nameFor = (code: string) =>
+    (labels.find((l: any) => l.code === code)?.area_name as string | null) ?? null;
+
+  // @page margins + 3×10 layout for the Avery sheet - toggled via body class.
+  useEffect(() => {
+    document.body.classList.toggle('print-avery', template === 'avery');
+    return () => document.body.classList.remove('print-avery');
+  }, [template]);
+
   useEffect(() => {
     const latest = labels.filter(
       (l: any) => l.batch === Math.max(...labels.map((x: any) => x.batch)),
@@ -146,6 +157,26 @@ export function LabelsPage() {
         <button className="btn" disabled={busy} onClick={() => newBatch(48)}>+ 48</button>
         {sheet.length > 0 && <button className="btn has-icon" onClick={() => window.print()}><Icon name="printer" /> Print</button>}
       </div>
+      <div className="row">
+        <select
+          className="input"
+          style={{ width: 'auto' }}
+          value={template}
+          onChange={(e) => setTemplate(e.target.value as 'grid' | 'avery')}
+          aria-label="Sheet template"
+        >
+          <option value="grid">Plain grid</option>
+          <option value="avery">Avery 5160 (3×10)</option>
+        </select>
+        {claimed > 0 && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => render(labels.filter((l: any) => l.area_id).map((l: any) => l.code))}
+          >
+            Sheet of claimed labels
+          </button>
+        )}
+      </div>
       {progress && <p className="muted">{progress}</p>}
 
       {printers.length > 0 && sheet.length > 0 && (
@@ -159,13 +190,22 @@ export function LabelsPage() {
       )}
 
       {sheet.length > 0 && (
-        <div className="label-sheet">
-          {sheet.map((l) => (
-            <div key={l.code} className="label-cell">
-              <img src={l.dataUrl} alt={l.code} />
-              <div className="label-code">{l.code}</div>
-            </div>
-          ))}
+        <div className={`label-sheet${template === 'avery' ? ' avery' : ''}`}>
+          {sheet.map((l) => {
+            const name = nameFor(l.code);
+            return (
+              <div key={l.code} className="label-cell">
+                <img className="label-qr" src={l.dataUrl} alt={l.code} />
+                <div className="label-info">
+                  <div className="label-head">
+                    <img className="label-logo" src="/icon.svg" alt="" />
+                    <span className="label-code">{l.code}</span>
+                  </div>
+                  {name ? <div className="label-name">{name}</div> : <div className="label-blank" />}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

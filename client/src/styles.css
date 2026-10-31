@@ -188,9 +188,14 @@ textarea.input { resize: vertical; }
 
 /* Labels */
 .label-sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
-.label-cell { background: #fff; color: #000; border-radius: 8px; padding: 8px; text-align: center; }
-.label-cell img { width: 100%; display: block; }
-.label-code { font-family: ui-monospace, monospace; font-size: 0.8rem; font-weight: 700; }
+.label-cell { background: #fff; color: #000; border-radius: 8px; padding: 8px; display: flex; align-items: center; gap: 8px; }
+.label-qr { width: 34%; max-width: 100px; display: block; }
+.label-info { flex: 1; min-width: 0; }
+.label-head { display: flex; align-items: center; gap: 4px; }
+.label-logo { width: 14px; height: 14px; flex: none; }
+.label-code { font-family: ui-monospace, monospace; font-size: 0.7rem; font-weight: 700; }
+.label-name { font-weight: 700; font-size: 0.8rem; margin-top: 4px; overflow-wrap: anywhere; }
+.label-blank { border-bottom: 2px solid #000; height: 1.1em; margin: 6px 4mm 2px 0; }
 .label-list { margin-top: 8px; }
 .label-row { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid var(--panel); }
 
@@ -359,6 +364,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
   border: 1px solid var(--border); border-radius: 14px; background: var(--panel);
 }
 .filter-tray .input { margin: 0; min-width: 140px; }
+.icon-btn.filter-active { color: var(--accent); border-color: var(--accent); }
 
 /* Icon-only buttons */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; min-width: 48px; }
@@ -381,4 +387,10 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
   .content { overflow: visible !important; }
   .label-sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
   .label-cell { border: 1px dashed #999; border-radius: 0; }
+  /* Avery 5160 (Letter): 3×10 grid of 66.7×25.4mm labels, ~12.7mm top,
+     ~4.8mm side margins, 3.18mm column gap. Alignment is approximate. */
+  @page { margin: 12.7mm 4.8mm; }
+  body.print-avery .label-sheet { grid-template-columns: repeat(3, 66.7mm); column-gap: 3.18mm; row-gap: 0; }
+  body.print-avery .label-cell { height: 25.4mm; border: none; overflow: hidden; }
+  body.print-avery .label-qr { width: 22mm; }
 }

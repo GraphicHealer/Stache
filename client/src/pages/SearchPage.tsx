@@ -101,20 +101,17 @@ export function SearchPage() {
         <CaptureInput onCapture={searchByPhoto} className="btn icon-btn" aria-label="Search by photo" title="Search by photo">
           <Icon name="camera" />
         </CaptureInput>
-      </form>
-      <div className="row">
-        <button
-          className="btn has-icon"
-          onClick={() => setFiltersOpen((o) => !o)}
+        <IconBtn
+          icon="filter"
+          className={activeFilters ? 'filter-active' : ''}
+          label={activeFilters ? `Filters (${activeFilters} active)` : 'Filters'}
           aria-expanded={filtersOpen}
-        >
-          <Icon name="filter" />
-          Filters{activeFilters ? ` (${activeFilters})` : ''}
-        </button>
+          onClick={() => setFiltersOpen((o) => !o)}
+        />
         {activeFilters > 0 && !filtersOpen && (
           <IconBtn icon="x" label="Clear all filters" onClick={() => setParams(query ? { q: query } : {})} />
         )}
-      </div>
+      </form>
       {filtersOpen && (
         <div className="filter-tray">
           <select
