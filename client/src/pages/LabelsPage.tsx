@@ -267,7 +267,7 @@ export function LabelsPage() {
                   <img className="label-qr" src={l.dataUrl} alt={l.code} />
                   <div className="label-info">
                     <div className="label-head">
-                      <img className="label-logo" src="/icon.svg" alt="" />
+                      <img className="label-logo" src="/logo-mono.svg" alt="" />
                       <span className="label-code">{l.code}</span>
                     </div>
                     {name ? <div className="label-name">{name}</div> : <div className="label-blank" />}
