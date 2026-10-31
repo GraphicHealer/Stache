@@ -1,6 +1,6 @@
 {
   "name": "@stache/client",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "license": "AGPL-3.0",
   "private": true,
   "type": "module",
