@@ -33,6 +33,7 @@ export function LabelsPage() {
   const [template, setTemplate] = useState<'grid' | 'avery'>('grid');
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [sel, setSel] = useState<Set<string>>(new Set());
   const [form, setForm] = useState(EMPTY_FORM);
   const [progress, setProgress] = useState<string | null>(null);
 
@@ -189,26 +190,6 @@ export function LabelsPage() {
         </div>
       )}
 
-      {sheet.length > 0 && (
-        <div className={`label-sheet${template === 'avery' ? ' avery' : ''}`}>
-          {sheet.map((l) => {
-            const name = nameFor(l.code);
-            return (
-              <div key={l.code} className="label-cell">
-                <img className="label-qr" src={l.dataUrl} alt={l.code} />
-                <div className="label-info">
-                  <div className="label-head">
-                    <img className="label-logo" src="/icon.svg" alt="" />
-                    <span className="label-code">{l.code}</span>
-                  </div>
-                  {name ? <div className="label-name">{name}</div> : <div className="label-blank" />}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       <h2>Printers</h2>
       {printers.map((p) => (
         <div key={p.id} className="label-row">
@@ -274,11 +255,67 @@ export function LabelsPage() {
         <button className="btn" onClick={() => setAdding(true)}>+ Add printer</button>
       )}
 
-      <h2>All labels</h2>
+      {sheet.length > 0 && (
+        <>
+          <h2>Sheet preview</h2>
+          <p className="muted">First label at true size - the print includes all {sheet.length}.</p>
+          <div className={`label-sheet${template === 'avery' ? ' avery' : ''}`}>
+            {sheet.map((l) => {
+              const name = nameFor(l.code);
+              return (
+                <div key={l.code} className="label-cell">
+                  <img className="label-qr" src={l.dataUrl} alt={l.code} />
+                  <div className="label-info">
+                    <div className="label-head">
+                      <img className="label-logo" src="/icon.svg" alt="" />
+                      <span className="label-code">{l.code}</span>
+                    </div>
+                    {name ? <div className="label-name">{name}</div> : <div className="label-blank" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <div className="row spread">
+        <h2>All labels</h2>
+        {sel.size > 0 && (
+          <button
+            className="btn btn-small danger"
+            onClick={async () => {
+              if (!window.confirm(`Delete ${sel.size} unclaimed label code(s)?`)) return;
+              const r = await api.post('/api/labels/delete', { codes: [...sel] }).catch((e) => (toast(e.message), null));
+              if (r) {
+                toast(`Deleted ${r.deleted}${r.skipped ? `, ${r.skipped} claimed skipped` : ''}`);
+                setSel(new Set());
+                qc.invalidateQueries({ queryKey: ['labels'] });
+              }
+            }}
+          >
+            Delete {sel.size}
+          </button>
+        )}
+      </div>
       <div className="label-list">
         {labels.map((l: any) => (
           <div key={l.code} className="label-row">
-            <code>{l.code}</code>
+            <span className="row" style={{ margin: 0 }}>
+              {!l.area_id && (
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${l.code}`}
+                  checked={sel.has(l.code)}
+                  onChange={(e) => {
+                    const next = new Set(sel);
+                    e.target.checked ? next.add(l.code) : next.delete(l.code);
+                    setSel(next);
+                  }}
+                />
+              )}
+              <code>{l.code}</code>
+            </span>
             <span className={l.area_id ? '' : 'muted'}>
               {l.area_id ? (l.area_name ?? 'claimed') : 'unclaimed'}
             </span>

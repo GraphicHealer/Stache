@@ -247,13 +247,15 @@ export async function areaRoutes(app: FastifyInstance) {
     return { area: areaJson(updated), event_ids: eventIds };
   });
 
-  // Archive (soft delete). The label keeps resolving to this area.
+  // Archive (soft delete). The label is freed - it becomes unclaimed again
+  // so a reorganized bin can re-claim the same printed sticker.
   app.delete('/api/areas/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
     const ev = db.transaction((tx) => {
       tx.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, id)).run();
+      tx.update(labels).set({ areaId: null }).where(eq(labels.areaId, id)).run();
       return recordEventTx(tx, 'area.archived', 'area', id, { name: area.name }, req.user?.id);
     });
     return { ok: true, event_id: ev.id };

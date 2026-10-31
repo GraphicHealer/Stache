@@ -200,6 +200,8 @@ textarea.input { resize: vertical; }
 .label-sheet.avery { grid-template-columns: repeat(auto-fill, 66.7mm); gap: 3.18mm; }
 .label-sheet.avery .label-cell { height: 25.4mm; overflow: hidden; border: 1px dashed var(--border); }
 .label-sheet.avery .label-qr { width: 22mm; }
+/* On screen only the first cell is a preview; print shows them all. */
+.label-sheet .label-cell:nth-child(n+2) { display: none; }
 .label-list { margin-top: 8px; }
 .label-row { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid var(--panel); }
 
@@ -390,7 +392,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
   .shell { height: auto !important; display: block; }
   .content { overflow: visible !important; }
   .label-sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
-  .label-cell { border: 1px dashed #999; border-radius: 0; }
+  .label-cell { border: 1px dashed #999; border-radius: 0; display: flex !important; }
   /* Avery 5160 (Letter): 3×10 grid of 66.7×25.4mm labels, ~12.7mm top,
      ~4.8mm side margins, 3.18mm column gap. Alignment is approximate. */
   @page { margin: 12.7mm 4.8mm; }

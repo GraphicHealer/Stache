@@ -1,8 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { z } from 'zod';
 import { db, query, queryOne } from '../db';
 import { areas, labels } from '../db/schema';
 import { newLabelCode } from '../lib/labelcode';
+import { parseBody } from '../lib/validate';
+
+const DeleteLabelsSchema = z.object({
+  codes: z.array(z.string().max(20)).min(1).max(500),
+});
 
 export async function labelRoutes(app: FastifyInstance) {
   // All labels, with what each is attached to (for the print sheet + status).
@@ -40,6 +46,18 @@ export async function labelRoutes(app: FastifyInstance) {
     }
     await db.insert(labels).values(codes);
     return reply.code(201).send({ batch: batchRow.batch, labels: codes.map((c) => c.code) });
+  });
+
+  // Delete unclaimed codes (e.g. misprints). Claimed labels are attached to
+  // areas and can't be deleted here - archive the area instead.
+  app.post('/api/labels/delete', async (req, reply) => {
+    const body = parseBody(DeleteLabelsSchema, req.body, reply);
+    if (!body) return;
+    const codes = body.codes.map((c) => c.toUpperCase());
+    const r = await db
+      .delete(labels)
+      .where(and(inArray(labels.code, codes), isNull(labels.areaId)));
+    return { deleted: r.changes, skipped: codes.length - r.changes };
   });
 
   // What a scanned label resolves to.
