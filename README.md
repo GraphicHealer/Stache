@@ -84,6 +84,9 @@ Single container, no database service - the appdata folder holds everything. A r
 | `TZ` | `UTC` | Digest schedule timezone |
 | `BETTER_AUTH_SECRET` | auto-generated | Session secret (persisted in DB) |
 | `STACHE_NO_ML` | unset | `1` disables CLIP embeddings/photo similarity |
+| `STACHE_BASE_URL` | unset | Public `https://` URL behind a reverse proxy - Secure cookies + label/webhook links |
+| `STACHE_TRUST_PROXY` | unset | `1` behind a reverse proxy to trust `X-Forwarded-For` |
+| `STACHE_SETUP_TOKEN` | unset | If set, first-run sign-up requires this token |
 
 As a Home Assistant add-on the same image is used; the add-on's data dir maps to `/data`, so nothing else is needed.
 

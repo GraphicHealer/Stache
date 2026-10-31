@@ -43,6 +43,8 @@ optional AI provider URL reach services on the Unraid host, e.g. Ollama at
 | `TZ` | `UTC` | Digest "time of day" uses this |
 | `BETTER_AUTH_SECRET` | auto | Optional; persisted in the db if blank |
 | `STACHE_NO_ML` | unset | `1` disables embeddings/photo similarity |
+| `STACHE_BASE_URL` | unset | Public `https://` URL behind a reverse proxy - enables Secure cookies and fixes label/webhook links |
+| `STACHE_TRUST_PROXY` | unset | `1` behind a reverse proxy so real client IPs are trusted |
 
 ## Notes
 
