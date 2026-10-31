@@ -131,11 +131,8 @@ export function LabelsPage() {
   const nameFor = (code: string) =>
     (labels.find((l: any) => l.code === code)?.area_name as string | null) ?? null;
 
-  // @page margins + 3×10 layout for the Avery sheet - toggled via body class.
-  useEffect(() => {
-    document.body.classList.toggle('print-avery', template === 'avery');
-    return () => document.body.classList.remove('print-avery');
-  }, [template]);
+  // Printing happens on /print/labels - the sheet is handed over via
+  // sessionStorage so that page can render it without the app shell.
 
   useEffect(() => {
     const latest = labels.filter(
@@ -156,7 +153,23 @@ export function LabelsPage() {
         <button className="btn" disabled={busy} onClick={() => newBatch(12)}>+ 12</button>
         <button className="btn" disabled={busy} onClick={() => newBatch(24)}>+ 24</button>
         <button className="btn" disabled={busy} onClick={() => newBatch(48)}>+ 48</button>
-        {sheet.length > 0 && <button className="btn has-icon" onClick={() => window.print()}><Icon name="printer" /> Print</button>}
+        {sheet.length > 0 && (
+          <button
+            className="btn has-icon"
+            onClick={() => {
+              sessionStorage.setItem(
+                'stache:print-sheet',
+                JSON.stringify({
+                  template,
+                  labels: sheet.map((l) => ({ code: l.code, name: nameFor(l.code) })),
+                }),
+              );
+              window.open('/print/labels', '_blank');
+            }}
+          >
+            <Icon name="printer" /> Print
+          </button>
+        )}
       </div>
       <div className="row">
         <select

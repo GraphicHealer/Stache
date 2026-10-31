@@ -192,7 +192,7 @@ textarea.input { resize: vertical; }
 .label-qr { width: 34%; max-width: 100px; display: block; }
 .label-info { flex: 1; min-width: 0; }
 .label-head { display: flex; align-items: center; gap: 4px; }
-.label-logo { width: 14px; height: 14px; flex: none; }
+.label-logo { width: 20px; height: 20px; flex: none; }
 .label-code { font-family: ui-monospace, monospace; font-size: 0.7rem; font-weight: 700; }
 .label-name { font-weight: 700; font-size: 0.8rem; margin-top: 4px; overflow-wrap: anywhere; }
 .label-blank { border-bottom: 2px solid #000; height: 1.1em; margin: 6px 4mm 2px 0; }
@@ -384,24 +384,37 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
   font-size: 0.65rem; padding: 0 6px; font-weight: 800;
 }
 
-/* Print: only the label sheet */
+/* Dedicated print page (/print/labels). No app shell - margins live inside
+   the sheet so @page can be 0, which also kills browser headers/footers. */
+.print-doc { min-height: 100vh; background: #444; color: #eee; }
+.print-bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.print-bar span { flex: 1; font-size: 0.85rem; }
+.avery-page, .grid-page { background: #fff; color: #000; margin: 0 auto 16px; }
+/* Avery 5160 (Letter, 215.9×279.4mm): margins replicated as padding -
+   12.7mm top/bottom, 4.76mm sides. Sheet padding-bottom minus row pitch
+   keeps 10×25.4mm rows landing on the die-cut. */
+.avery-page { width: 215.9mm; min-height: 279.4mm; padding: 12.7mm 4.76mm; }
+.agrid { display: grid; grid-template-columns: repeat(3, 66.675mm); column-gap: 3.175mm; }
+.grid-page { width: 215.9mm; min-height: 279.4mm; padding: 10mm; }
+.ggrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
+.pcell { display: flex; align-items: center; gap: 1.5mm; height: 25.4mm; padding: 1.5mm; overflow: hidden; }
+.pqr { width: 21mm; flex: none; }
+.pinfo { flex: 1; min-width: 0; }
+.phead { display: flex; align-items: center; gap: 1.5mm; }
+.plogo { width: 6mm; height: 6mm; flex: none; }
+.pcode { font-family: ui-monospace, monospace; font-size: 3.4mm; font-weight: 700; }
+.pname { font-weight: 700; font-size: 3.4mm; margin-top: 1mm; overflow-wrap: anywhere; }
+.pblank { border-bottom: 0.6mm solid #000; height: 3mm; margin: 2mm 3mm 1mm 0; }
+.ggrid .pcell { height: auto; min-height: 30mm; border: 1px dashed #999; }
+.ggrid .pqr { width: 24mm; }
+
+@page avery { size: letter; margin: 0; }
+.avery-page { page: avery; }
+
 @media print {
-  body { background: #fff; }
-  .nav, .row, h1, h2, .muted, .label-list, .toasts { display: none !important; }
-  /* Fixed height + scroll would clip multi-page label sheets. */
-  .shell { height: auto !important; display: block; }
-  .content { overflow: visible !important; }
-  /* .page is 720px max + 16px padding - Avery sheets need the full page. */
-  .page { max-width: none; padding: 0; margin: 0; }
-  .label-sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; margin-top: 0; }
-  .label-cell { border: 1px dashed #999; border-radius: 0; display: flex !important; }
-  @page { margin: 10mm; }
-  /* Avery 5160 (Letter): 3×10 grid of 66.675×25.4mm labels, 12.7mm top,
-     4.76mm side margins, 3.175mm column gap, 0 row gap. Named page so
-     these margins only apply to the avery template. */
-  @page avery { margin: 12.7mm 4.76mm; }
-  body.print-avery { page: avery; }
-  body.print-avery .label-sheet { grid-template-columns: repeat(3, 66.675mm); column-gap: 3.175mm; row-gap: 0; }
-  body.print-avery .label-cell { height: 25.4mm; padding: 1.5mm; border: none; overflow: hidden; }
-  body.print-avery .label-qr { width: 21mm; }
+  @page { margin: 0; }
+  .print-bar { display: none !important; }
+  .print-doc { background: #fff; }
+  .avery-page, .grid-page { margin: 0; break-after: page; }
+  .avery-page:last-child, .grid-page:last-child { break-after: auto; }
 }

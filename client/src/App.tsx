@@ -15,6 +15,7 @@ import { OutPage } from './pages/OutPage';
 import { TrashPage } from './pages/TrashPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { LoginPage } from './pages/LoginPage';
+import { PrintLabels } from './pages/PrintLabels';
 
 /**
  * Hardware scanners act as keyboard wedges: they "type" the scan fast and
@@ -152,8 +153,11 @@ function MoreMenu() {
 export function App() {
   useWedgeScan();
   const { pending, user } = useApp();
+  const { pathname } = useLocation();
   if (user === undefined) return <div className="page"><p className="muted">…</p></div>;
   if (user === null) return <LoginPage />;
+  // Print views render bare - no shell, nav, or page chrome to leak into output.
+  if (pathname.startsWith('/print/')) return <PrintLabels />;
   return (
     <div className="shell">
       <main className="content">
