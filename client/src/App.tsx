@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { parseScan } from './scan';
 import { useApp } from './context';
 import { Home } from './pages/Home';
@@ -87,9 +87,17 @@ const NAV = [
     to: '/inbox', label: 'Inbox',
     icon: <svg {...ICON_PROPS}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.5 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.5A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.5z" /></svg>,
   },
+];
+
+// Secondary destinations behind "More" - useful but not everyday taps.
+const MORE = [
   {
-    to: '/out', label: 'Out',
+    to: '/out', label: 'Out & missing',
     icon: <svg {...ICON_PROPS}><path d="M12 3v10" /><path d="m8.5 6.5 3.5-3.5 3.5 3.5" /><path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" /></svg>,
+  },
+  {
+    to: '/review', label: 'Review',
+    icon: <svg {...ICON_PROPS}><path d="m9 11 3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>,
   },
   {
     to: '/labels', label: 'Labels',
@@ -104,6 +112,42 @@ const NAV = [
     icon: <svg {...ICON_PROPS}><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" /></svg>,
   },
 ];
+
+function MoreMenu() {
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => setOpen(false), [pathname]);
+  const active = MORE.some((m) => pathname.startsWith(m.to));
+  return (
+    <>
+      {open && (
+        <div className="more-overlay" onClick={() => setOpen(false)}>
+          <div className="more-menu" role="menu">
+            {MORE.map((m) => (
+              <NavLink key={m.to} to={m.to} className="more-link">
+                {m.icon}
+                <span>{m.label}</span>
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      )}
+      <button
+        className={`nav-link more-btn${active || open ? ' active' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+        aria-label="More pages"
+        aria-expanded={open}
+      >
+        <svg {...ICON_PROPS}>
+          <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        </svg>
+        <span>More</span>
+      </button>
+    </>
+  );
+}
 
 export function App() {
   useWedgeScan();
@@ -145,6 +189,7 @@ export function App() {
             {n.to === '/' && pending > 0 && <span className="nav-badge">{pending}</span>}
           </NavLink>
         ))}
+        <MoreMenu />
       </nav>
     </div>
   );
