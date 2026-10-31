@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, ItemGrid } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid } from '../components/Bits';
 
 export function AreaPage() {
   const { id = '' } = useParams();
@@ -169,8 +169,8 @@ export function AreaPage() {
         }}>
           File things here
         </button>
-        <CaptureInput onCapture={uploadPhoto}>Add photo</CaptureInput>
-        <button className="btn" onClick={rename}>Rename</button>
+        <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
+        <IconBtn icon="pencil" label="Rename area" onClick={rename} />
       </div>
       <div className="row">
         <button className="btn" onClick={() => setScanFor('move-area')}>Move area…</button>

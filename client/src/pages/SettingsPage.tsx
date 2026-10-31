@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { IconBtn } from '../components/Bits';
 
 const copy = (text: string) => navigator.clipboard?.writeText(text).catch(() => {});
 
@@ -158,17 +159,17 @@ export function SettingsPage() {
             {u.role === 'admin' && <span className="badge warn">admin</span>}
           </span>
           {isAdmin && u.id !== user?.id && u.role !== 'admin' && (
-            <button
-              className="btn btn-small btn-ghost"
+            <IconBtn
+              icon="trash"
+              className="btn-small btn-ghost"
+              label={`Remove ${u.name}`}
               onClick={async () => {
                 if (!window.confirm(`Remove ${u.name}? Their private items become invisible to everyone.`)) return;
                 await api.del(`/api/users/${u.id}`).catch((e) => (toast(e.message), null));
                 qc.invalidateQueries({ queryKey: ['users'] });
                 toast('Member removed');
               }}
-            >
-              Remove
-            </button>
+            />
           )}
         </div>
       ))}
@@ -307,22 +308,20 @@ export function SettingsPage() {
         <div key={c.id} className="suggest">
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <b>{c.name}</b>
-            <button
-              className="btn btn-ghost"
+            <IconBtn
+              icon="trash"
+              className="btn-ghost"
+              label={`Revoke ${c.name}`}
               onClick={async () => {
                 await api.del(`/api/settings/mcp/${c.id}`);
                 qc.invalidateQueries({ queryKey: ['settings-mcp'] });
                 toast('Revoked');
               }}
-            >
-              Revoke
-            </button>
+            />
           </div>
           <div className="row">
             <code className="mcp-url">{`${window.location.origin}/mcp/${c.slug}`}</code>
-            <button className="btn btn-small" onClick={() => copy(`${window.location.origin}/mcp/${c.slug}`)}>
-              Copy URL
-            </button>
+            <IconBtn icon="copy" className="btn-small" label="Copy connection URL" onClick={() => copy(`${window.location.origin}/mcp/${c.slug}`)} />
           </div>
           <p className="muted">
             {c.scope === 'read' ? 'Read only' : 'Read + write'} ·{' '}
@@ -367,8 +366,8 @@ export function SettingsPage() {
           </p>
           <div className="row">
             <code className="mcp-url">{newToken}</code>
-            <button className="btn btn-small" onClick={() => copy(newToken)}>Copy token</button>
-            <button className="btn btn-small btn-ghost" onClick={() => setNewToken(null)}>Done</button>
+            <IconBtn icon="copy" className="btn-small" label="Copy token" onClick={() => copy(newToken)} />
+            <IconBtn icon="x" className="btn-small btn-ghost" label="Dismiss token" onClick={() => setNewToken(null)} />
           </div>
         </div>
       )}
@@ -438,21 +437,21 @@ export function SettingsPage() {
           <p className="muted">For Home Assistant automations and sensors:</p>
           <div className="row">
             <code className="mcp-url">{`${window.location.origin}/api/webhooks/out-sensor?token=${digest.webhook_token}`}</code>
-            <button
-              className="btn btn-small"
+            <IconBtn
+              icon="copy"
+              className="btn-small"
+              label="Copy sensor URL"
               onClick={() => copy(`${window.location.origin}/api/webhooks/out-sensor?token=${digest.webhook_token}`)}
-            >
-              Copy sensor URL
-            </button>
+            />
           </div>
           <div className="row">
             <code className="mcp-url">{`${window.location.origin}/api/webhooks/digest?token=${digest.webhook_token}`}</code>
-            <button
-              className="btn btn-small"
+            <IconBtn
+              icon="copy"
+              className="btn-small"
+              label="Copy trigger URL"
               onClick={() => copy(`${window.location.origin}/api/webhooks/digest?token=${digest.webhook_token}`)}
-            >
-              Copy trigger URL
-            </button>
+            />
           </div>
           <p className="muted">Sensor = GET. Digest trigger = POST.</p>
         </>
@@ -698,8 +697,8 @@ export function SettingsPage() {
               <p><b>Decryption key (shown once):</b></p>
               <div className="row">
                 <code className="mcp-url">{backupKey}</code>
-                <button className="btn btn-small" onClick={() => copy(backupKey)}>Copy</button>
-                <button className="btn btn-small btn-ghost" onClick={() => setBackupKey(null)}>Done</button>
+                <IconBtn icon="copy" className="btn-small" label="Copy decryption key" onClick={() => copy(backupKey)} />
+                <IconBtn icon="x" className="btn-small btn-ghost" label="Dismiss key" onClick={() => setBackupKey(null)} />
               </div>
             </div>
           )}

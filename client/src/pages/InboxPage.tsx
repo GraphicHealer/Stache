@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { Icon } from '../components/Bits';
 
 interface InboxItem {
   id: string;
@@ -94,15 +95,15 @@ export function InboxPage() {
             </div>
           ) : (
             <div className="triage-actions">
-              <button className="btn" onClick={() => accept(current)}>✓ Right</button>
+              <button className="btn has-icon" onClick={() => accept(current)}><Icon name="check" /> Right</button>
               <button
-                className="btn"
+                className="btn has-icon"
                 onClick={() => { setEditing(true); setDraft(current.ai_name ?? ''); }}
               >
-                ✎ Fix
+                <Icon name="pencil" /> Fix
               </button>
-              <button className="btn btn-ghost" onClick={() => finish(current.id, 'later')}>
-                ⏭ Later
+              <button className="btn btn-ghost has-icon" onClick={() => finish(current.id, 'later')}>
+                <Icon name="later" /> Later
               </button>
             </div>
           )}

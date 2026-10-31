@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { api } from '../api';
 import { useApp } from '../context';
 import { dymoPrintLabels } from '../dymo';
+import { Icon, IconBtn } from '../components/Bits';
 
 interface SheetLabel {
   code: string;
@@ -143,7 +144,7 @@ export function LabelsPage() {
         <button className="btn" disabled={busy} onClick={() => newBatch(12)}>+ 12</button>
         <button className="btn" disabled={busy} onClick={() => newBatch(24)}>+ 24</button>
         <button className="btn" disabled={busy} onClick={() => newBatch(48)}>+ 48</button>
-        {sheet.length > 0 && <button className="btn" onClick={() => window.print()}>Print sheet</button>}
+        {sheet.length > 0 && <button className="btn has-icon" onClick={() => window.print()}><Icon name="printer" /> Print</button>}
       </div>
       {progress && <p className="muted">{progress}</p>}
 
@@ -175,13 +176,13 @@ export function LabelsPage() {
             <b>{p.name}</b> <span className="muted">{p.type}{p.host ? ` · ${p.host}` : ''}{p.queue ? ` · ${p.queue}` : ''}</span>
           </span>
           <span className="row" style={{ margin: 0 }}>
-            <button className="btn btn-small" onClick={() => testPrinter(p)}>Test</button>
-            <button
-              className="btn btn-small"
+            <IconBtn icon="printer" className="btn-small" label={`Send test label to ${p.name}`} onClick={() => testPrinter(p)} />
+            <IconBtn
+              icon="trash"
+              className="btn-small btn-ghost"
+              label={`Remove ${p.name}`}
               onClick={() => api.del(`/api/printers/${p.id}`).then(refetchPrinters)}
-            >
-              Remove
-            </button>
+            />
           </span>
         </div>
       ))}

@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn } from '../components/Bits';
 
 function describeEvent(e: { type: string; payload?: any }): string {
   const p = e.payload ?? {};
@@ -275,7 +275,7 @@ export function ItemPage() {
             </label>
           </div>
         ))}
-        <CaptureInput onCapture={uploadPhoto} className="btn">+ Photo</CaptureInput>
+        <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
       </div>
 
       <input
@@ -296,14 +296,13 @@ export function ItemPage() {
           style={{ flex: 1 }}
         />
         {'SpeechRecognition' in window || 'webkitSpeechRecognition' in window ? (
-          <button
-            className={`btn${listening ? ' danger' : ''}`}
+          <IconBtn
+            icon="mic"
+            className={listening ? 'danger' : ''}
             onClick={toggleVoice}
             aria-pressed={listening}
-            title={listening ? 'Stop dictating' : 'Dictate a note'}
-          >
-            {listening ? 'Stop' : 'Dictate'}
-          </button>
+            label={listening ? 'Stop dictating' : 'Dictate a note'}
+          />
         ) : null}
       </div>
 
@@ -501,7 +500,7 @@ export function ItemPage() {
                 </button>
               </div>
             ))}
-            <CaptureInput onCapture={uploadReceipt} className="btn">+ Receipt</CaptureInput>
+            <CaptureInput onCapture={uploadReceipt} className="btn has-icon"><Icon name="receipt" /> Receipt</CaptureInput>
           </div>
           <p className="muted">One receipt photo can be linked to every item on it.</p>
         </details>

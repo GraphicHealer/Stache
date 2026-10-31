@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
 import { downscale } from '../image';
-import { CaptureInput, ItemGrid } from '../components/Bits';
+import { CaptureInput, IconBtn, ItemGrid } from '../components/Bits';
 
 const path = (crumb: { name: string | null }[]) =>
   (crumb ?? []).map((c) => c.name ?? '?').join(' › ');
@@ -141,13 +141,13 @@ export function SearchPage() {
       {photoResults && (
         <p className="muted">
           Photo matches{' '}
-          <button className="btn btn-small" onClick={() => setPhotoResults(null)}>clear</button>
+          <IconBtn icon="x" className="btn-small" label="Clear photo results" onClick={() => setPhotoResults(null)} />
         </p>
       )}
       {barcode && (
         <p className="muted">
           Barcode {barcode}{' '}
-          <button className="btn btn-small" onClick={() => setParams({})}>clear</button>
+          <IconBtn icon="x" className="btn-small" label="Clear barcode filter" onClick={() => setParams({})} />
         </p>
       )}
       {isFetching && <p className="muted">Searching…</p>}

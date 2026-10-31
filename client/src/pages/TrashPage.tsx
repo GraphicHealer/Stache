@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../context';
+import { IconBtn } from '../components/Bits';
 
 /**
  * Trash + activity: hidden items and archived areas (restorable, or purgeable
@@ -60,8 +61,8 @@ export function TrashPage() {
             <span className="muted">hidden {new Date(i.hidden_at).toLocaleDateString()}</span>
           </div>
           <div className="out-actions">
-            <button className="btn btn-small" onClick={() => restoreItem(i.id)}>Restore</button>
-            <button className="btn btn-small btn-ghost" onClick={() => purgeItem(i.id)}>Purge</button>
+            <IconBtn icon="undo" className="btn-small" label="Restore item" onClick={() => restoreItem(i.id)} />
+            <IconBtn icon="trash" className="btn-small btn-ghost" label="Purge permanently" onClick={() => purgeItem(i.id)} />
           </div>
         </div>
       ))}
@@ -76,7 +77,7 @@ export function TrashPage() {
                 <span className="muted">hidden {new Date(a.archived_at).toLocaleDateString()}</span>
               </div>
               <div className="out-actions">
-                <button className="btn btn-small" onClick={() => restoreArea(a.id)}>Restore</button>
+                <IconBtn icon="undo" className="btn-small" label="Restore area" onClick={() => restoreArea(a.id)} />
               </div>
             </div>
           ))}
@@ -94,7 +95,7 @@ export function TrashPage() {
           </div>
           {!e.undone && (
             <div className="out-actions">
-              <button className="btn btn-small btn-ghost" onClick={() => undo(e.id)}>Undo</button>
+              <IconBtn icon="undo" className="btn-small btn-ghost" label="Undo this change" onClick={() => undo(e.id)} />
             </div>
           )}
         </div>
