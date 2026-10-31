@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { KebabMenu } from '../components/Bits';
 
 interface OutItem {
   id: string;
@@ -95,15 +96,19 @@ export function OutPage() {
                 </div>
                 <div className="out-actions">
                   <button className="btn btn-small" onClick={() => putBack([i.id])}>Put back</button>
-                  <button className="btn btn-small btn-ghost" onClick={() => snooze(i)}>
-                    {i.snoozed ? 'Unsnooze' : 'Snooze'}
-                  </button>
-                  <button
-                    className="btn btn-small btn-ghost"
-                    onClick={() => patch(i.id, { status: 'gone' }, 'Marked gone')}
-                  >
-                    Gone
-                  </button>
+                  <KebabMenu
+                    label={`Actions for ${i.name ?? 'item'}`}
+                    items={[
+                      { label: i.snoozed ? 'Unsnooze' : 'Snooze', onSelect: () => snooze(i) },
+                      'sep',
+                      {
+                        label: 'Gone',
+                        icon: 'trash',
+                        danger: true,
+                        onSelect: () => patch(i.id, { status: 'gone' }, 'Marked gone'),
+                      },
+                    ]}
+                  />
                 </div>
               </div>
             ))}

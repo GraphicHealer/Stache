@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu } from '../components/Bits';
 
 function describeEvent(e: { type: string; payload?: any }): string {
   const p = e.payload ?? {};
@@ -584,13 +584,21 @@ export function ItemPage() {
 
       <div className="row">
         <button className="btn" onClick={() => setScanning(true)}>Move…</button>
-        <button className="btn" onClick={notHere}>
-          Not here{item.not_here_count > 0 ? ` (${item.not_here_count})` : ''}
-        </button>
-        <button className="btn" disabled={splitBusy || !photos.length} onClick={startSplit}>
-          {splitBusy ? 'Looking…' : 'Split pile…'}
-        </button>
-        <button className="btn danger" onClick={hide}>Hide</button>
+        <KebabMenu
+          items={[
+            {
+              label: `Not here${item.not_here_count > 0 ? ` (${item.not_here_count})` : ''}`,
+              onSelect: notHere,
+            },
+            {
+              label: splitBusy ? 'Looking…' : 'Split pile…',
+              disabled: splitBusy || !photos.length,
+              onSelect: startSplit,
+            },
+            'sep',
+            { label: 'Hide', icon: 'trash', danger: true, onSelect: hide },
+          ]}
+        />
       </div>
 
       {split && (

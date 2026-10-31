@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu } from '../components/Bits';
 
 export function AreaPage() {
   const { id = '' } = useParams();
@@ -179,14 +179,18 @@ export function AreaPage() {
         </button>
         <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
         <IconBtn icon="pencil" label="Rename area" onClick={rename} />
-      </div>
-      <div className="row">
-        <button className="btn" onClick={() => setScanFor('move-area')}>Move area…</button>
-        <button className="btn" onClick={addSubarea}>+ Sub-area</button>
-        {items.length > 0 && !stocktake && (
-          <button className="btn" onClick={startStocktake}>Stocktake</button>
-        )}
-        <button className="btn danger" onClick={archive}>Hide</button>
+        <KebabMenu
+          label="Area actions"
+          items={[
+            { label: 'Move area…', onSelect: () => setScanFor('move-area') },
+            { label: '+ Sub-area', onSelect: addSubarea },
+            ...(items.length > 0 && !stocktake
+              ? [{ label: 'Stocktake', onSelect: startStocktake }]
+              : []),
+            'sep',
+            { label: 'Hide', icon: 'trash', danger: true, onSelect: archive },
+          ]}
+        />
       </div>
 
       {subareas.length > 0 && (

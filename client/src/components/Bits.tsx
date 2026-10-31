@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
@@ -28,6 +28,7 @@ const GLYPHS = {
   filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
   plus: <path d="M12 5v14M5 12h14" />,
   box: <><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></>,
+  dots: <><circle cx="12" cy="5" r="1.7" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" /><circle cx="12" cy="19" r="1.7" fill="currentColor" stroke="none" /></>,
 };
 
 export type IconName = keyof typeof GLYPHS;
@@ -153,6 +154,65 @@ function areaPaths(list: AreaRow[]) {
     return parts.join(' / ');
   };
   return list.map((a) => ({ id: a.id, label: path(a) })).sort((x, y) => x.label.localeCompare(y.label));
+}
+
+export interface KebabItem {
+  label: string;
+  icon?: IconName;
+  /** Destructive-ish actions - styled red, conventionally placed last. */
+  danger?: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+}
+
+/**
+ * Overflow (3-dot) menu for secondary/second-step actions on an item or
+ * object. Keeps the screen clean: primaries stay visible, the rest live
+ * here - destructive entries conventionally at the bottom.
+ */
+export function KebabMenu({
+  items,
+  label = 'More actions',
+}: {
+  items: (KebabItem | 'sep')[];
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="kebab">
+      <IconBtn
+        icon="dots"
+        label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      />
+      {open && (
+        <>
+          <div className="kebab-overlay" onClick={() => setOpen(false)} />
+          <div className="kebab-menu" role="menu">
+            {items.map((it, i) =>
+              it === 'sep' ? (
+                <hr key={i} className="menu-sep" />
+              ) : (
+                <button
+                  key={i}
+                  className={`more-link${it.danger ? ' danger' : ''}`}
+                  disabled={it.disabled}
+                  onClick={() => {
+                    setOpen(false);
+                    it.onSelect();
+                  }}
+                >
+                  {it.icon && <Icon name={it.icon} />}
+                  <span>{it.label}</span>
+                </button>
+              ),
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 /**

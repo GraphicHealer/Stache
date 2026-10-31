@@ -339,6 +339,20 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .picker-menu .more-link > span { flex: 1; }
 .picker-empty { padding: 10px 14px; }
 
+/* Per-item kebab (3-dot) menus */
+.kebab { position: relative; display: inline-flex; }
+.kebab-overlay { position: fixed; inset: 0; z-index: 45; }
+.kebab-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+  min-width: 200px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column;
+}
+.more-link.danger, .more-link.danger svg { color: var(--danger); }
+.more-link:disabled { opacity: 0.5; }
+.menu-sep { border: 0; border-top: 1px solid var(--border); margin: 4px 8px; }
+
 /* Collapsible search filters */
 .filter-tray {
   display: flex; flex-wrap: wrap; gap: 8px; padding: 10px;
