@@ -61,14 +61,7 @@ export function AreaPage() {
     return r?.area?.id ?? null;
   };
 
-  const onScan = async (text: string) => {
-    const mode = scanFor;
-    setScanFor(null);
-    const scan = parseScan(text);
-    if (!scan || scan.kind !== 'label' || !mode) return;
-    const dest = await resolveLabelArea(scan.code);
-    if (!dest) return;
-
+  const useDest = async (mode: NonNullable<typeof scanFor>, dest: string) => {
     if (mode === 'set-current') {
       setCurrentArea({ id: dest, name: null, thumb: null });
       toast('Set as current area');
@@ -96,6 +89,21 @@ export function AreaPage() {
     setSelecting(null);
     refresh();
     qc.invalidateQueries({ queryKey: ['area', dest] });
+  };
+
+  const onScan = async (text: string) => {
+    const mode = scanFor;
+    setScanFor(null);
+    const scan = parseScan(text);
+    if (!scan || scan.kind !== 'label' || !mode) return;
+    const dest = await resolveLabelArea(scan.code);
+    if (dest) await useDest(mode, dest);
+  };
+
+  const onPickBin = async (dest: string) => {
+    const mode = scanFor;
+    setScanFor(null);
+    if (mode) await useDest(mode, dest);
   };
 
   const rename = async () => {
@@ -302,6 +310,7 @@ export function AreaPage() {
           onResult={onScan}
           onClose={() => setScanFor(null)}
           hint={scanFor === 'move-area' ? 'Scan the new parent area' : 'Scan destination area'}
+          onPickBin={onPickBin}
         />
       )}
     </div>

@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '../api';
+import { useApp } from '../context';
 
 const ICP = {
   viewBox: '0 0 24 24',
@@ -22,6 +25,9 @@ const GLYPHS = {
   later: <><path d="m5 4 10 8-10 8V4z" /><path d="M19 5v14" /></>,
   printer: <><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></>,
   receipt: <><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z" /><path d="M8 7h8" /><path d="M8 11h8" /><path d="M8 15h5" /></>,
+  filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  box: <><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></>,
 };
 
 export type IconName = keyof typeof GLYPHS;
@@ -126,20 +132,90 @@ export function ItemGrid({
   );
 }
 
-/** Native-camera capture fallback usable inline anywhere. */
+interface AreaRow {
+  id: string;
+  name: string | null;
+  parent_id: string | null;
+}
+
+/** "Hall closet / Top shelf" paths for every live area, sorted for scanning. */
+function areaPaths(list: AreaRow[]) {
+  const byId = new Map(list.map((a) => [a.id, a]));
+  const path = (a: AreaRow): string => {
+    const parts = [a.name ?? 'Unnamed area'];
+    let p = a.parent_id;
+    for (let i = 0; p && i < 20; i++) {
+      const pa = byId.get(p);
+      if (!pa) break;
+      parts.unshift(pa.name ?? 'Unnamed area');
+      p = pa.parent_id;
+    }
+    return parts.join(' / ');
+  };
+  return list.map((a) => ({ id: a.id, label: path(a) })).sort((x, y) => x.label.localeCompare(y.label));
+}
+
+/**
+ * Manual alternative to scanning a label: pick a bin from the location
+ * tree (or create a new top-level one - no QR required).
+ */
+export function AreaPicker({
+  onPick,
+  onClose,
+}: {
+  onPick: (areaId: string) => void;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useApp();
+  const { data } = useQuery({
+    queryKey: ['areas', 'all'],
+    queryFn: () => api.get('/api/areas?all=1'),
+  });
+  const options = areaPaths((data?.areas ?? []) as AreaRow[]);
+
+  const createArea = async () => {
+    const name = window.prompt('New bin name? (optional)') ?? null;
+    if (name === null) return;
+    const r = await api.post('/api/areas', { name: name || null }).catch((e) => (toast(e.message), null));
+    if (!r?.area) return;
+    qc.invalidateQueries({ queryKey: ['areas'] });
+    onPick(r.area.id);
+  };
+
+  return (
+    <div className="more-overlay" onClick={onClose}>
+      <div className="picker-menu" role="dialog" aria-label="Pick a bin" onClick={(e) => e.stopPropagation()}>
+        <button className="more-link" onClick={createArea}>
+          <Icon name="plus" />
+          <span>New bin…</span>
+        </button>
+        {options.map((o) => (
+          <button key={o.id} className="more-link" onClick={() => onPick(o.id)}>
+            <Icon name="box" />
+            <span>{o.label}</span>
+          </button>
+        ))}
+        {!data && <p className="muted picker-empty">Loading…</p>}
+        {data && !options.length && <p className="muted picker-empty">No bins yet - make one above.</p>}
+      </div>
+    </div>
+  );
+}
 export function CaptureInput({
   onCapture,
   className = 'btn',
   children,
+  ...rest
 }: {
   onCapture: (b: Blob) => void;
   className?: string;
   children: React.ReactNode;
-}) {
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const ref = useRef<HTMLInputElement>(null);
   return (
     <>
-      <button className={className} onClick={() => ref.current?.click()}>
+      <button className={className} onClick={() => ref.current?.click()} {...rest}>
         {children}
       </button>
       <input

@@ -119,6 +119,11 @@ export function ItemPage() {
     if (r?.area?.id) patch({ area_id: r.area.id }, 'Moved');
   };
 
+  const onPickBin = (dest: string) => {
+    setScanning(false);
+    patch({ area_id: dest }, 'Moved');
+  };
+
   const uploadPhoto = async (blob: Blob) => {
     const form = new FormData();
     form.append('photo', await downscale(blob), 'photo.jpg');
@@ -655,7 +660,7 @@ export function ItemPage() {
       )}
 
       {scanning && (
-        <Scanner onResult={onScan} onClose={() => setScanning(false)} hint="Scan destination area" />
+        <Scanner onResult={onScan} onClose={() => setScanning(false)} hint="Scan destination area" onPickBin={onPickBin} />
       )}
     </div>
   );

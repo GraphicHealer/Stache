@@ -85,6 +85,22 @@ export function Home() {
     }
   };
 
+  // Shared by scan + manual pick: an area id either becomes the filing
+  // destination or receives the staged photo.
+  const useArea = async (areaId: string, name: string | null) => {
+    if (stagedPhoto) {
+      const b = stagedPhoto;
+      setStagedPhoto(null);
+      await filePhoto(b, areaId);
+    } else {
+      setCurrentArea({ id: areaId, name, thumb: null });
+      toast(`Filing into ${name ?? 'area'}`);
+    }
+    api.get(`/api/areas/${areaId}/out`)
+      .then((o) => { if (o.items?.length) setBackPrompt({ items: o.items }); })
+      .catch(() => {});
+  };
+
   const onScan = async (text: string) => {
     setScanning(false);
     const scan = parseScan(text);
@@ -100,22 +116,17 @@ export function Home() {
         return;
       }
       if (r.status === 'area' && r.area) {
-        if (stagedPhoto) {
-          const b = stagedPhoto;
-          setStagedPhoto(null);
-          await filePhoto(b, r.area.id);
-        } else {
-          setCurrentArea({ id: r.area.id, name: r.area.name, thumb: null });
-          toast(`Filing into ${r.area.name ?? 'area'}`);
-        }
-        // Scanned a container that expects things back - offer to clear them.
-        api.get(`/api/areas/${r.area.id}/out`)
-          .then((o) => { if (o.items?.length) setBackPrompt({ items: o.items }); })
-          .catch(() => {});
+        await useArea(r.area.id, r.area.name);
       }
     } catch (e) {
       toast(`Scan failed: ${(e as Error).message}`);
     }
+  };
+
+  const onPickBin = async (areaId: string) => {
+    setScanning(false);
+    const r = await api.get(`/api/areas/${areaId}`).catch(() => null);
+    await useArea(areaId, r?.area?.name ?? null);
   };
 
   return (
@@ -169,7 +180,7 @@ export function Home() {
         </button>
       </div>
 
-      {scanning && <Scanner formats={ALL_FORMATS} onResult={onScan} onClose={() => setScanning(false)} hint={hint} />}
+      {scanning && <Scanner formats={ALL_FORMATS} onResult={onScan} onClose={() => setScanning(false)} hint={hint} onPickBin={onPickBin} />}
 
       {backPrompt && (
         <div className="code-prompt card">

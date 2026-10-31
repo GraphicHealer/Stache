@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AreaPicker } from './Bits';
 
 interface Props {
   onResult: (text: string) => void;
@@ -6,6 +7,11 @@ interface Props {
   hint?: string;
   /** Symbologies to detect. Defaults to QR only. */
   formats?: string[];
+  /**
+   * Optional manual escape hatch: shows a "pick a bin" button that opens the
+   * area tree instead of scanning a label. The callback gets the area id.
+   */
+  onPickBin?: (areaId: string) => void;
 }
 
 interface ScannerControls {
@@ -18,9 +24,10 @@ const ALL_FORMATS = [
 ];
 
 /** Full-screen camera scanner. Native BarcodeDetector, @zxing fallback (QR only). */
-export function Scanner({ onResult, onClose, hint, formats = ['qr_code'] }: Props) {
+export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPickBin }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const qrOnly = formats.length === 1 && formats[0] === 'qr_code';
   const cb = useRef(onResult);
   cb.current = onResult;
@@ -114,9 +121,19 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'] }: Prop
     <div className="scanner-overlay">
       <video ref={videoRef} className="scanner-video" muted playsInline />
       {(hint || error) && <div className="scanner-hint">{error ?? hint}</div>}
-      <button className="btn scanner-close" onClick={onClose}>
-        Cancel
-      </button>
+      <div className="scanner-actions">
+        {onPickBin && (
+          <button className="btn" onClick={() => setPicking(true)}>
+            Pick a bin
+          </button>
+        )}
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+      {picking && onPickBin && (
+        <AreaPicker onPick={onPickBin} onClose={() => setPicking(false)} />
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
 import { downscale } from '../image';
-import { CaptureInput, IconBtn, ItemGrid } from '../components/Bits';
+import { CaptureInput, Icon, IconBtn, ItemGrid } from '../components/Bits';
 
 const path = (crumb: { name: string | null }[]) =>
   (crumb ?? []).map((c) => c.name ?? '?').join(' › ');
@@ -23,6 +23,8 @@ export function SearchPage() {
   const { toast } = useApp();
   const [photoResults, setPhotoResults] = useState<any[] | null>(null);
   const [photoSearching, setPhotoSearching] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilters = [status, areaId, priv, tag].filter(Boolean).length;
 
   const { data: areaList } = useQuery({
     queryKey: ['areas'],
@@ -96,47 +98,64 @@ export function SearchPage() {
           onChange={(e) => setQ(e.target.value)}
           autoFocus
         />
-        <CaptureInput onCapture={searchByPhoto}>By photo</CaptureInput>
+        <CaptureInput onCapture={searchByPhoto} className="btn icon-btn" aria-label="Search by photo" title="Search by photo">
+          <Icon name="camera" />
+        </CaptureInput>
       </form>
       <div className="row">
-        <select
-          className="input"
-          style={{ width: 'auto', flex: 1 }}
-          value={status}
-          onChange={(e) => setFilter('status', e.target.value)}
+        <button
+          className="btn has-icon"
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
         >
-          <option value="">Any status</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select
-          className="input"
-          style={{ width: 'auto', flex: 1 }}
-          value={areaId}
-          onChange={(e) => setFilter('area_id', e.target.value)}
-        >
-          <option value="">Any area</option>
-          {(areaList?.areas ?? []).map((a: any) => (
-            <option key={a.id} value={a.id}>{a.name ?? 'unnamed'}</option>
-          ))}
-        </select>
-        <select
-          className="input"
-          style={{ width: 'auto', flex: 1 }}
-          value={priv}
-          onChange={(e) => setFilter('private', e.target.value)}
-        >
-          <option value="">Shared + private</option>
-          <option value="0">Shared only</option>
-          <option value="1">Private only</option>
-        </select>
-        <input
-          className="input"
-          style={{ width: 'auto', flex: 1 }}
-          placeholder="tag"
-          value={tag}
-          onChange={(e) => setFilter('tag', e.target.value)}
-        />
+          <Icon name="filter" />
+          Filters{activeFilters ? ` (${activeFilters})` : ''}
+        </button>
+        {activeFilters > 0 && !filtersOpen && (
+          <IconBtn icon="x" label="Clear all filters" onClick={() => setParams(query ? { q: query } : {})} />
+        )}
       </div>
+      {filtersOpen && (
+        <div className="filter-tray">
+          <select
+            className="input"
+            style={{ flex: 1 }}
+            value={status}
+            onChange={(e) => setFilter('status', e.target.value)}
+          >
+            <option value="">Any status</option>
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select
+            className="input"
+            style={{ flex: 1 }}
+            value={areaId}
+            onChange={(e) => setFilter('area_id', e.target.value)}
+          >
+            <option value="">Any area</option>
+            {(areaList?.areas ?? []).map((a: any) => (
+              <option key={a.id} value={a.id}>{a.name ?? 'unnamed'}</option>
+            ))}
+          </select>
+          <select
+            className="input"
+            style={{ flex: 1 }}
+            value={priv}
+            onChange={(e) => setFilter('private', e.target.value)}
+          >
+            <option value="">Shared + private</option>
+            <option value="0">Shared only</option>
+            <option value="1">Private only</option>
+          </select>
+          <input
+            className="input"
+            style={{ flex: 1 }}
+            placeholder="tag"
+            value={tag}
+            onChange={(e) => setFilter('tag', e.target.value)}
+          />
+        </div>
+      )}
       {photoSearching && <p className="muted">Looking for similar things…</p>}
       {photoResults && (
         <p className="muted">

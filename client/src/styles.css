@@ -118,7 +118,10 @@ textarea.input { resize: vertical; }
   position: absolute; top: 16px; left: 0; right: 0;
   text-align: center; font-weight: 600; text-shadow: 0 1px 4px #000;
 }
-.scanner-close { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); }
+.scanner-actions {
+  position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px;
+}
 
 /* Breadcrumbs */
 .breadcrumb { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -322,6 +325,26 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .more-link svg { width: 22px; height: 22px; color: var(--muted); flex: none; }
 .more-link:active { background: var(--bg); }
 .more-link.active, .more-link.active svg { color: var(--accent); }
+
+/* Area picker sheet */
+.picker-menu {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  width: min(92vw, 400px); max-height: 55vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+  padding: 6px; box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column;
+}
+.picker-menu .more-link { text-align: left; }
+.picker-menu .more-link > span { flex: 1; }
+.picker-empty { padding: 10px 14px; }
+
+/* Collapsible search filters */
+.filter-tray {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 10px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--panel);
+}
+.filter-tray .input { margin: 0; min-width: 140px; }
 
 /* Icon-only buttons */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; min-width: 48px; }
