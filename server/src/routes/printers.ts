@@ -128,10 +128,27 @@ export async function printerRoutes(app: FastifyInstance) {
     return { ok: true, id: body.id };
   });
 
+  const rowJson = (r: typeof printers.$inferSelect) => ({
+    id: r.id,
+    name: r.name,
+    type: r.type,
+    builtin: false,
+    host: r.host,
+    port: r.port,
+    queue: r.queue,
+    dpi: r.dpi,
+    label_w_mm: r.labelWmm,
+    label_h_mm: r.labelHmm,
+    media_type: r.mediaType,
+    sheet: r.sheet,
+    created_at: r.createdAt,
+  });
+
   app.get('/api/printers', async () => ({
+    default_id: await defaultPrinterId(),
     printers: [
       await pcPrinter(),
-      ...(await db.select().from(printers).orderBy(asc(printers.createdAt))),
+      ...(await db.select().from(printers).orderBy(asc(printers.createdAt))).map(rowJson),
     ],
   }));
 
