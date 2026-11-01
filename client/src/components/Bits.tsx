@@ -314,14 +314,14 @@ export function PrintDialog({
   const { toast } = useApp();
   const [copies, setCopies] = useState('1');
   const [printerId, setPrinterId] = useState('pc');
+  const userPicked = useRef(false);
   useEffect(() => {
-    if (open)
-      setPrinterId((id) =>
-        printers.some((p) => p.id === id)
-          ? id
-          : defaultId && printers.some((p) => p.id === defaultId)
-            ? defaultId
-            : printers[0]?.id ?? 'pc',
+    if (open) userPicked.current = false;
+  }, [open]);
+  useEffect(() => {
+    if (open && !userPicked.current && printers.length)
+      setPrinterId(
+        defaultId && printers.some((p) => p.id === defaultId) ? defaultId : printers[0].id,
       );
   }, [open, printers, defaultId]);
   if (!open || !labels.length) return null;
@@ -363,7 +363,7 @@ export function PrintDialog({
       <div className="dlg" role="dialog" aria-label="Print labels" onClick={(e) => e.stopPropagation()}>
         <h2>Print {labels.length === 1 ? 'label' : `${labels.length} labels`}</h2>
         <label className="muted">Printer</label>
-        <select className="input" value={printerId} onChange={(e) => setPrinterId(e.target.value)}>
+        <select className="input" value={printerId} onChange={(e) => { userPicked.current = true; setPrinterId(e.target.value); }}>
           {printers.map((p: any) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
