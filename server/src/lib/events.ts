@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, query } from '../db';
-import { areas, events, itemLinks, itemReceipts, items, photos } from '../db/schema';
+import { areas, events, itemLinks, itemReceipts, items, labels, photos } from '../db/schema';
 import { env } from '../env';
 
 export type EventType =
@@ -24,6 +24,9 @@ export type EventType =
   | 'item.receipt_detached'
   | 'item.merged'
   | 'item.photo_replaced'
+  | 'label.assigned'
+  | 'label.unassigned'
+  | 'area.merged'
   | 'stocktake';
 
 /** Audit trail: who did it. NULL = MCP/system action. */
@@ -31,7 +34,7 @@ type UserId = string | null;
 
 export async function recordEvent(
   type: EventType,
-  entityType: 'area' | 'item' | 'multi',
+  entityType: 'area' | 'item' | 'multi' | 'label',
   entityId: string,
   payload: Record<string, unknown> = {},
   userId: UserId = null,
@@ -53,7 +56,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export function recordEventTx(
   tx: Tx,
   type: EventType,
-  entityType: 'area' | 'item' | 'multi',
+  entityType: 'area' | 'item' | 'multi' | 'label',
   entityId: string,
   payload: Record<string, unknown> = {},
   userId: UserId = null,
@@ -204,6 +207,29 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
     case 'item.unlinked': {
       const [a, b] = [entityId, p.other_id].sort();
       await db.insert(itemLinks).values({ aId: a, bId: b }).onConflictDoNothing();
+      break;
+    }
+    case 'label.assigned': {
+      await db
+        .update(labels)
+        .set({ areaId: (p.prev_area_id as string | null) ?? null })
+        .where(eq(labels.code, entityId));
+      break;
+    }
+    case 'label.unassigned': {
+      await db
+        .update(labels)
+        .set({ areaId: (p.prev_area_id as string | null) ?? null })
+        .where(eq(labels.code, entityId));
+      break;
+    }
+    case 'area.merged': {
+      // Move everything back to the source area and un-archive it.
+      const from = entityId;
+      await db.update(items).set({ areaId: from }).where(inArray(items.id, (p.item_ids ?? []) as string[]));
+      await db.update(areas).set({ parentId: from }).where(inArray(areas.id, (p.subarea_ids ?? []) as string[]));
+      await db.update(labels).set({ areaId: from }).where(inArray(labels.code, (p.label_codes ?? []) as string[]));
+      await db.update(areas).set({ archivedAt: null }).where(eq(areas.id, from));
       break;
     }
     case 'item.receipt_attached':

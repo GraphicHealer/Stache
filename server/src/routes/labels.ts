@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db, query, queryOne } from '../db';
 import { areas, labels } from '../db/schema';
 import { newLabelCode } from '../lib/labelcode';
+import { recordEventTx } from '../lib/events';
 import { parseBody } from '../lib/validate';
 
 const DeleteLabelsSchema = z.object({
@@ -76,6 +77,39 @@ export async function labelRoutes(app: FastifyInstance) {
       .delete(labels)
       .where(and(inArray(labels.code, codes), isNull(labels.areaId)));
     return { deleted: r.changes, skipped: codes.length - r.changes };
+  });
+
+  // Attach a code to an existing bin (claim or reassign between bins).
+  app.post('/api/labels/:code/assign', async (req, reply) => {
+    const { code: raw } = req.params as { code: string };
+    const code = raw.toUpperCase();
+    const body = (req.body ?? {}) as { area_id?: string };
+    if (!body.area_id) return reply.badRequest('area_id required');
+    const [label] = await db.select().from(labels).where(eq(labels.code, code));
+    if (!label) return reply.notFound('unknown label');
+    const [area] = await db.select().from(areas).where(eq(areas.id, body.area_id));
+    if (!area || area.archivedAt) return reply.badRequest('area not found');
+    const prevAreaId = label.areaId;
+    db.transaction((tx) => {
+      tx.update(labels).set({ areaId: area.id }).where(eq(labels.code, code)).run();
+      if (!area.labelCode) tx.update(areas).set({ labelCode: code }).where(eq(areas.id, area.id)).run();
+      recordEventTx(tx, 'label.assigned', 'label', code, { area_id: area.id, prev_area_id: prevAreaId }, req.user?.id);
+    });
+    return { ok: true, area: { id: area.id, name: area.name } };
+  });
+
+  // Detach a code from its bin - back to unclaimed.
+  app.post('/api/labels/:code/unassign', async (req, reply) => {
+    const { code: raw } = req.params as { code: string };
+    const code = raw.toUpperCase();
+    const [label] = await db.select().from(labels).where(eq(labels.code, code));
+    if (!label) return reply.notFound('unknown label');
+    db.transaction((tx) => {
+      tx.update(labels).set({ areaId: null }).where(eq(labels.code, code)).run();
+      tx.update(areas).set({ labelCode: null }).where(eq(areas.labelCode, code)).run();
+      recordEventTx(tx, 'label.unassigned', 'label', code, { prev_area_id: label.areaId }, req.user?.id);
+    });
+    return { ok: true };
   });
 
   // What a scanned label resolves to.

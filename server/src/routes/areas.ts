@@ -172,11 +172,18 @@ export async function areaRoutes(app: FastifyInstance) {
       return a?.name ?? null;
     };
 
+    const areaLabels = await db
+      .select({ code: labels.code })
+      .from(labels)
+      .where(eq(labels.areaId, id))
+      .orderBy(asc(labels.code));
+
     return {
       area: areaJson(
         area,
         cover ? { thumbUrl: thumbUrl(cover), url: photoUrl(cover) } : null,
       ),
+      label_codes: areaLabels.map((l) => l.code),
       archived: !!area.archivedAt,
       breadcrumb: crumb,
       deep,
@@ -253,6 +260,35 @@ export async function areaRoutes(app: FastifyInstance) {
       return { updated: u, eventIds: ids };
     });
     return { area: areaJson(updated), event_ids: eventIds };
+  });
+
+  // Merge this area into another: items, sub-areas, and label codes all
+  // move; the source is archived. Fully undoable via the recorded ids.
+  app.post('/api/areas/:id/merge', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { into_id } = (req.body ?? {}) as { into_id?: string };
+    if (!into_id || into_id === id) return reply.badRequest('into_id required (and must differ)');
+    const [src] = await db.select().from(areas).where(eq(areas.id, id));
+    const [dst] = await db.select().from(areas).where(eq(areas.id, into_id));
+    if (!src || src.archivedAt) return reply.notFound('area not found');
+    if (!dst || dst.archivedAt) return reply.badRequest('destination area not found');
+    const chain = await breadcrumb(into_id);
+    if (chain.some((c) => c.id === id)) return reply.badRequest('cannot merge into a descendant');
+
+    const itemIds = (await db.select({ id: items.id }).from(items).where(eq(items.areaId, id))).map((r) => r.id);
+    const subIds = (await db.select({ id: areas.id }).from(areas).where(eq(areas.parentId, id))).map((r) => r.id);
+    const labelCodes = (await db.select({ code: labels.code }).from(labels).where(eq(labels.areaId, id))).map((r) => r.code);
+
+    const ev = db.transaction((tx) => {
+      if (itemIds.length) tx.update(items).set({ areaId: into_id }).where(inArray(items.id, itemIds)).run();
+      if (subIds.length) tx.update(areas).set({ parentId: into_id }).where(inArray(areas.id, subIds)).run();
+      if (labelCodes.length) tx.update(labels).set({ areaId: into_id }).where(inArray(labels.code, labelCodes)).run();
+      tx.update(areas).set({ archivedAt: new Date(), labelCode: null }).where(eq(areas.id, id)).run();
+      return recordEventTx(tx, 'area.merged', 'area', id, {
+        into_id, name: src.name, item_ids: itemIds, subarea_ids: subIds, label_codes: labelCodes,
+      }, req.user?.id);
+    });
+    return { ok: true, event_id: ev.id, into: { id: dst.id, name: dst.name } };
   });
 
   // Archive (soft delete). The label is freed - it becomes unclaimed again

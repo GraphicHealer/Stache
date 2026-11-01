@@ -17,6 +17,7 @@ export function LabelPage() {
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('');
+  const [existingId, setExistingId] = useState('');
   const [busy, setBusy] = useState(false);
   const photoUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : ''), [photo]);
   useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, [photoUrl]);
@@ -127,6 +128,40 @@ export function LabelPage() {
       <button className="btn btn-big" disabled={busy} onClick={claim}>
         {busy ? 'Claiming…' : 'Done'}
       </button>
+      {parentOptions.length > 0 && (
+        <>
+          <p className="muted" style={{ textAlign: 'center', marginTop: 20 }}>
+            or this code belongs to a bin you already have
+          </p>
+          <div className="row">
+            <select className="input" style={{ flex: 1 }} value={existingId}
+              onChange={(e) => setExistingId(e.target.value)} aria-label="Existing bin">
+              <option value="">Pick a bin…</option>
+              {parentOptions.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              className="btn btn-ghost"
+              disabled={busy || !existingId}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await api.post(`/api/labels/${code}/assign`, { area_id: existingId });
+                  qc.invalidateQueries({ queryKey: ['labels'] });
+                  toast('Label linked');
+                  nav(`/areas/${existingId}`, { replace: true });
+                } catch (e) {
+                  toast(`Failed: ${(e as Error).message}`);
+                  setBusy(false);
+                }
+              }}
+            >
+              Add to existing bin
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

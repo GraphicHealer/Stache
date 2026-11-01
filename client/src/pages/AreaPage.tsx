@@ -20,7 +20,7 @@ export function AreaPage() {
   const [stocktakeReview, setStocktakeReview] = useState(false);
   const [markMissing, setMarkMissing] = useState(true);
   const [deep, setDeep] = useState(false);
-  const [scanFor, setScanFor] = useState<null | 'set-current' | 'move-items' | 'move-area'>(null);
+  const [scanFor, setScanFor] = useState<null | 'set-current' | 'move-items' | 'move-area' | 'merge'>(null);
 
   const stocktakeKey = `stache:stocktake:${id}`;
 
@@ -72,6 +72,17 @@ export function AreaPage() {
       const r = await api.patch(`/api/areas/${id}`, { parent_id: dest });
       toast('Area moved', r.event_ids?.[0]);
       refresh();
+      return;
+    }
+    if (mode === 'merge') {
+      const r = await api
+        .post(`/api/areas/${id}/merge`, { into_id: dest })
+        .catch((e) => (toast(`Merge failed: ${(e as Error).message}`), null));
+      if (r) {
+        toast(`Merged into ${r.into?.name ?? 'area'}`, r.event_id);
+        qc.invalidateQueries({ queryKey: ['areas'] });
+        nav(`/areas/${dest}`, { replace: true });
+      }
       return;
     }
     // move-items - one toast for the batch (undo only exists per item, so a
@@ -164,7 +175,9 @@ export function AreaPage() {
         {area.cover_thumb ? <img className="area-cover" src={area.cover_url} alt="" /> : null}
         <div>
           <h1 onClick={rename} className="editable">{area.name ?? 'unnamed area'}</h1>
-          {area.label_code && <span className="badge">{area.label_code}</span>}
+          {(data.label_codes ?? [area.label_code].filter(Boolean)).map((c: string) => (
+            <span key={c} className="badge">{c}</span>
+          ))}
           {data.archived && <span className="badge warn">hidden</span>}
         </div>
       </div>
@@ -183,6 +196,7 @@ export function AreaPage() {
           label="Area actions"
           items={[
             { label: 'Move area…', onSelect: () => setScanFor('move-area') },
+            { label: 'Merge into…', onSelect: () => setScanFor('merge') },
             { label: '+ Sub-area', onSelect: addSubarea },
             ...(items.length > 0 && !stocktake
               ? [{ label: 'Stocktake', onSelect: startStocktake }]
@@ -330,7 +344,7 @@ export function AreaPage() {
         <Scanner
           onResult={onScan}
           onClose={() => setScanFor(null)}
-          hint={scanFor === 'move-area' ? 'Scan the new parent area' : 'Scan destination area'}
+          hint={scanFor === 'merge' ? 'Scan (or pick) the bin to merge into' : scanFor === 'move-area' ? 'Scan the new parent area' : 'Scan destination area'}
           onPickBin={onPickBin}
         />
       )}
