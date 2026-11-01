@@ -22,6 +22,7 @@ export function AreaPage() {
   const [deep, setDeep] = useState(false);
   const [scanFor, setScanFor] = useState<null | 'set-current' | 'move-items' | 'move-area' | 'merge'>(null);
   const [printDlg, setPrintDlg] = useState(false);
+  const [printCode, setPrintCode] = useState<string | null>(null);
 
   const stocktakeKey = `stache:stocktake:${id}`;
 
@@ -208,7 +209,22 @@ export function AreaPage() {
         <KebabMenu
           label="Area actions"
           items={[
-            { label: 'Print QR code', icon: 'printer', onSelect: () => setPrintDlg(true) },
+            { label: 'Print QR code', icon: 'printer', onSelect: async () => {
+              if (!area.label_code && !(data.label_codes ?? []).length) {
+                try {
+                  const r = await api.post('/api/labels/batch', { count: 1 });
+                  const code = r?.labels?.[0];
+                  if (!code) throw new Error('no code minted');
+                  await api.post(`/api/labels/${code}/assign`, { area_id: area.id });
+                  setPrintCode(code);
+                  await qc.invalidateQueries({ queryKey: ['area', id] });
+                } catch (e) {
+                  toast(`Couldn't create a label: ${(e as Error).message}`);
+                  return;
+                }
+              }
+              setPrintDlg(true);
+            } },
             { label: 'Move area…', onSelect: () => setScanFor('move-area') },
             { label: 'Merge into…', onSelect: () => setScanFor('merge') },
             { label: '+ Sub-area', onSelect: addSubarea },
@@ -377,7 +393,7 @@ export function AreaPage() {
         printers={printerData?.printers ?? []}
         defaultId={printerData?.default_id}
         presets={templatesData?.templates ?? []}
-        labels={[area.label_code ?? (data.label_codes ?? [])[0]].filter((c): c is string => !!c).map((code: string) => ({
+        labels={[printCode ?? area.label_code ?? (data.label_codes ?? [])[0]].filter((c): c is string => !!c).map((code: string) => ({
           code,
           name: area.name ?? null,
           path: (breadcrumb ?? []).slice(0, -1).map((c: any) => c.name ?? 'unnamed').join(' / ') || null,
