@@ -261,7 +261,7 @@ export async function printLabels(
   codes: string[],
   origin: string,
 ): Promise<void> {
-  if (p.type === 'zpl') return printZpl(p, codes, origin);
+  if (p.type === 'zpl' || p.type === 'zpl-legacy') return printZpl(p, codes, origin);
   if (p.type === 'cups')
     return p.mediaType === 'sheet' ? printCupsSheet(p, codes, origin) : printCups(p, codes, origin);
   throw new Error(`printer type ${p.type} is printed from the browser`);

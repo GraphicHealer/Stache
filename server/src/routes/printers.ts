@@ -32,7 +32,7 @@ const SheetChoiceSchema = z
 
 const PrinterCreateSchema = z.object({
   name: z.string().min(1).max(100),
-  type: z.enum(['zpl', 'cups', 'dymo']),
+  type: z.enum(['zpl', 'zpl-legacy', 'cups', 'dymo']),
   host: z.string().max(255).nullish(),
   port: z.union([z.number().int().min(1).max(65535), z.string()]).optional(),
   queue: z.string().max(255).nullish(),
@@ -262,16 +262,58 @@ export async function printerRoutes(app: FastifyInstance) {
     };
   };
 
+  // Legacy Zebras (GX420d etc.) don't do SGD getvar - the ^HH host
+  // verification dump carries PRINT WIDTH / LABEL LENGTH / head dpmm.
+  const probeZebraLegacy = async (host: string, port: number) => {
+    const text = await new Promise<string>((resolve, reject) => {
+      const sock = net.createConnection({ host, port, timeout: 4000 });
+      let buf = '';
+      const done = (e?: Error) => {
+        sock.destroy();
+        if (e) reject(e);
+        else resolve(buf);
+      };
+      sock.on('timeout', () => done(new Error('printer timed out')));
+      sock.on('error', done);
+      sock.on('connect', () => sock.write('^XA^HH^XZ'));
+      sock.on('data', (d) => {
+        buf += d.toString('utf8');
+        if (buf.length > 64_000) done();
+      });
+      setTimeout(() => done(), 4000);
+    });
+    const num = (re: RegExp) => parseFloat(text.match(re)?.[1] ?? '') || 0;
+    const dpmm = num(/(\d+)\s*\/MM/i) || 8;
+    const lenDots = num(/^\s*(\d+)\s+LABEL LENGTH/im);
+    const widthDots = num(/^\s*(\d+)\s+PRINT WIDTH/im);
+    return {
+      dpi: Math.round(dpmm * 25.4),
+      label_h_mm: lenDots ? Math.round((lenDots / dpmm) * 10) / 10 : null,
+      label_w_mm: widthDots ? Math.round((widthDots / dpmm) * 10) / 10 : null,
+      media_type: null,
+      raw: {},
+    };
+  };
+
   // Probe without a saved printer (used by the add-printer form).
   app.post('/api/printers/probe', { preHandler: requireAdmin }, async (req, reply) => {
     const body = parseBody(
-      z.object({ host: z.string().min(1), port: z.number().optional(), calibrate: z.boolean().optional() }),
+      z.object({
+        host: z.string().min(1),
+        port: z.number().optional(),
+        calibrate: z.boolean().optional(),
+        type: z.enum(['zpl', 'zpl-legacy']).optional(),
+      }),
       req.body,
       reply,
     );
     if (!body) return;
     try {
-      return { ok: true, ...(await probeZebra(body.host, body.port ?? 9100, !!body.calibrate)) };
+      const r =
+        body.type === 'zpl-legacy'
+          ? await probeZebraLegacy(body.host, body.port ?? 9100)
+          : await probeZebra(body.host, body.port ?? 9100, !!body.calibrate);
+      return { ok: true, ...r };
     } catch (e) {
       return reply.badRequest(`probe failed: ${(e as Error).message}`);
     }
@@ -283,9 +325,13 @@ export async function printerRoutes(app: FastifyInstance) {
     const { calibrate } = (req.body ?? {}) as { calibrate?: boolean };
     const [p] = await db.select().from(printers).where(eq(printers.id, id));
     if (!p) return reply.notFound('printer not found');
-    if (p.type !== 'zpl' || !p.host) return reply.badRequest('only network ZPL printers support detect');
+    if ((p.type !== 'zpl' && p.type !== 'zpl-legacy') || !p.host)
+      return reply.badRequest('only network ZPL printers support detect');
     try {
-      const r = await probeZebra(p.host, p.port || 9100, !!calibrate);
+      const r =
+        p.type === 'zpl-legacy'
+          ? await probeZebraLegacy(p.host, p.port || 9100)
+          : await probeZebra(p.host, p.port || 9100, !!calibrate);
       const set: Record<string, unknown> = {};
       if (r.label_h_mm) set.labelHmm = r.label_h_mm;
       if (r.label_w_mm) set.labelWmm = r.label_w_mm;

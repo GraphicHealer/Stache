@@ -15,7 +15,7 @@ interface SheetLabel {
 interface Printer {
   id: string;
   name: string;
-  type: 'zpl' | 'cups' | 'dymo' | 'pc';
+  type: 'zpl' | 'zpl-legacy' | 'cups' | 'dymo' | 'pc';
   builtin?: boolean;
   host: string | null;
   port: number;
@@ -220,7 +220,7 @@ export function LabelsPage() {
     try {
       const body = target
         ? { calibrate }
-        : { host: form.host, port: parseInt(form.port, 10) || 9100, calibrate };
+        : { host: form.host, port: parseInt(form.port, 10) || 9100, calibrate, type: form.type };
       const r = target
         ? await api.post(`/api/printers/${target.id}/detect`, body)
         : await api.post('/api/printers/probe', body);
@@ -355,7 +355,7 @@ export function LabelsPage() {
                 <input className="input" style={{ flex: 1 }} placeholder="Printer name"
                   value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
               </div>
-              {editForm.type === 'zpl' && (
+              {(editForm.type === 'zpl' || editForm.type === 'zpl-legacy') && (
                 <div className="row">
                   <input className="input" style={{ flex: 1 }} placeholder="IP address"
                     value={editForm.host} onChange={(e) => setEditForm({ ...editForm, host: e.target.value })} />
@@ -418,11 +418,13 @@ export function LabelsPage() {
                   }
                 }}>Save</button>
                 <button className="btn" onClick={() => testPrinter(p)}>Test</button>
-                {p.type === 'zpl' && (
+                {(p.type === 'zpl' || p.type === 'zpl-legacy') && (
                   <>
                     <button className="btn" onClick={() => probe(false, p)}>Read values</button>
-                    <button className="btn" onClick={() => probe(true, p)}
-                      title="Feeds ~1 label to measure the gap">Calibrate</button>
+                    {p.type === 'zpl' && (
+                      <button className="btn" onClick={() => probe(true, p)}
+                        title="Feeds ~1 label to measure the gap">Calibrate</button>
+                    )}
                   </>
                 )}
                 <button className="btn" onClick={() => setEditId(null)}>Cancel</button>
@@ -480,6 +482,7 @@ export function LabelsPage() {
             <select className="input" style={{ width: 'auto' }} value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value })}>
               <option value="zpl">Zebra / ZPL (network)</option>
+              <option value="zpl-legacy">Zebra legacy / ^HH (GX420d etc.)</option>
               <option value="cups">CUPS queue</option>
               <option value="dymo">DYMO (DYMO Connect)</option>
             </select>
@@ -487,7 +490,7 @@ export function LabelsPage() {
               placeholder={form.type === 'dymo' ? 'DYMO printer name (e.g. LabelWriter 450)' : 'Printer name'}
               value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
-          {form.type === 'zpl' && (
+          {(form.type === 'zpl' || form.type === 'zpl-legacy') && (
             <>
               <div className="row">
                 <input className="input" style={{ flex: 1 }} placeholder="IP address"
