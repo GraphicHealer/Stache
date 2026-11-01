@@ -6,6 +6,7 @@ import { useApp } from '../context';
 import { dymoPrintLabels } from '../dymo';
 import { Icon, IconBtn, PrintDialog } from '../components/Bits';
 import { resolveSheet, type SheetChoice, type SheetPreset } from '../lib/sheets';
+import { labelMetrics } from '../lib/labelmetrics';
 
 interface SheetLabel {
   code: string;
@@ -227,8 +228,17 @@ export function LabelsPage() {
       toast(`Detected ${r.label_w_mm ?? '?'}×${r.label_h_mm ?? '?'}mm @ ${r.dpi}dpi`);
       const fill = (set: (v: any) => void, f: any) =>
         set({ ...f, label_w_mm: r.label_w_mm ? String(r.label_w_mm) : f.label_w_mm, label_h_mm: r.label_h_mm ? String(r.label_h_mm) : f.label_h_mm, dpi: String(r.dpi ?? f.dpi) });
-      if (target) fill(setEditForm, editForm);
-      else fill(setForm, form);
+      if (target) {
+        fill(setEditForm, editForm);
+        await api.patch(`/api/printers/${target.id}`, {
+          label_w_mm: r.label_w_mm ?? undefined,
+          label_h_mm: r.label_h_mm ?? undefined,
+          dpi: r.dpi ?? undefined,
+        }).catch(() => {});
+        toast('Detected values saved');
+      } else {
+        fill(setForm, form);
+      }
       refetchPrinters();
     } catch (e) {
       toast(`Detect failed: ${(e as Error).message}`);
@@ -555,11 +565,14 @@ export function LabelsPage() {
             {sheet.slice(0, 1).map((l) => {
               const name = nameFor(l.code);
               const path = pathFor(l.code);
+              const pvW = defP?.media_type === 'sheet' && defSpec ? defSpec.cellW : (defP?.label_w_mm ?? 57);
+              const pvH = defP?.media_type === 'sheet' && defSpec ? defSpec.cellH : (defP?.label_h_mm ?? 32);
+              const m = labelMetrics(pvW, pvH);
               return (
-                <div key={l.code} className="label-cell">
+                <div key={l.code} className={`label-cell${m.vertical ? ' vertical' : ''}`} style={{ width: `${pvW}mm`, height: `${pvH}mm` }}>
                   <div className="label-qrcol">
-                    <img className="label-qr" src={l.dataUrl} alt={l.code} />
-                    <span className="label-code">{l.code}</span>
+                    <img className="label-qr" src={l.dataUrl} alt={l.code} style={{ width: `${m.qr}mm` }} />
+                    <span className="label-code" style={{ fontSize: `${m.code}mm` }}>{l.code}</span>
                   </div>
                   <div className="label-info">
                     {name ? (
@@ -569,9 +582,9 @@ export function LabelsPage() {
                             {path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path}
                           </div>
                         )}
-                        <div className="label-name">{name}</div>
+                        <div className="label-name" style={{ fontSize: `${m.name}mm` }}>{name}</div>
                         {categoryFor(l.code) && (
-                          <div className="label-tags">{categoryFor(l.code)}</div>
+                          <div className="label-tags" style={{ fontSize: `${m.category}mm` }}>{categoryFor(l.code)}</div>
                         )}
                       </>
                     ) : (
@@ -581,7 +594,7 @@ export function LabelsPage() {
                         <div className="label-blank" />
                       </>
                     )}
-                    <img className="label-logo" src="/logo-mono.svg" alt="" />
+                    <img className="label-logo" src="/logo-mono.svg" alt="" style={{ width: `${m.logo}mm` }} />
                   </div>
                 </div>
               );

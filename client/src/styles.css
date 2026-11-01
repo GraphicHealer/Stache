@@ -430,3 +430,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .model-banner-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
 .model-banner-bar > div { height: 100%; background: var(--accent, #d9a441); transition: width 0.5s; min-width: 6px; }
 @media (min-width: 720px) { .model-banner { bottom: 20px; } }
+
+/* Tall labels: QR stacked over centered text. */
+.pcell.vertical, .label-cell.vertical { flex-direction: column; align-items: center; }
+.pcell.vertical .pinfo, .label-cell.vertical .label-info { text-align: center; align-items: center; }

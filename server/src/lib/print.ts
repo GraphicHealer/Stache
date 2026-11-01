@@ -156,6 +156,17 @@ const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** One cell as an SVG tile: QR + code column, text, logo bottom-right. */
+function labelMetrics(w: number, h: number) {
+  const vertical = h > w * 1.4;
+  const s = Math.min(3, Math.max(1, Math.min(w, h) / 25.4));
+  return {
+    vertical,
+    qr: vertical ? Math.min(w * 0.55, h * 0.42) : Math.min(h * 0.82, w * 0.4),
+    code: 2.1 * s, path: 2.3 * s, name: 3.4 * s, cat: 2.3 * s,
+    logo: Math.min(10 * s, h * 0.25, w * 0.3),
+  };
+}
+
 async function cellSvg(
   info: CellInfo,
   origin: string,
@@ -164,7 +175,7 @@ async function cellSvg(
 ): Promise<Buffer> {
   const cw = px(spec.cellW);
   const ch = px(spec.cellH);
-  const qrSide = Math.min(ch - px(4), px(spec.cellW) * 0.4);
+  const qrSide = px(labelMetrics(spec.cellW, spec.cellH).qr);
   const qr = await QRCode.toBuffer(`${origin}/l/${info.code}`, { errorCorrectionLevel: 'M', margin: 0 });
   const qrB64 = `data:image/png;base64,${qr.toString('base64')}`;
   const textX = qrSide + px(1.5);
@@ -173,28 +184,30 @@ async function cellSvg(
     const max = Math.floor(widthMm / (mmFont * 0.62));
     return esc(s.length > max && max > 3 ? `${s.slice(0, max - 1)}…` : s);
   };
-  const fullW = spec.cellW - spec.cellH - 2;
-  const lastW = fullW - 11;
+  const m = labelMetrics(spec.cellW, spec.cellH);
+  const textW = spec.cellW - (m.vertical ? 6 : m.qr + 6);
   let text = '';
   if (info.name) {
-    let y = px(5);
+    let y = m.vertical ? px(m.qr + 6) : px(5);
+    const anchor = m.vertical ? 'middle' : undefined;
+    const tx = m.vertical ? Math.round(cw / 2) : textX;
     if (info.path) {
-      text += `<text x="${textX}" y="${y}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.path, 2.3, fullW)}</text>`;
-      y += px(4);
+      text += `<text x="${tx}" y="${y}" font-family="sans-serif" font-size="${font(m.path)}" fill="#333"${anchor ? ` text-anchor="${anchor}"` : ''}>${clip(info.path, m.path, textW)}</text>`;
+      y += px(m.path + 1.7);
     }
-    text += `<text x="${textX}" y="${y + px(2)}" font-family="sans-serif" font-size="${font(3.4)}" font-weight="bold">${clip(info.name, 3.4, info.category ? fullW : lastW)}</text>`;
+    text += `<text x="${tx}" y="${y + px(2)}" font-family="sans-serif" font-size="${font(m.name)}" font-weight="bold"${anchor ? ` text-anchor="${anchor}"` : ''}>${clip(info.name, m.name, info.category ? textW : textW - m.logo - 2)}</text>`;
     if (info.category)
-      text += `<text x="${textX}" y="${y + px(5)}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.category, 2.3, lastW)}</text>`;
+      text += `<text x="${tx}" y="${y + px(m.name + 1.7)}" font-family="sans-serif" font-size="${font(m.cat)}" fill="#333"${anchor ? ` text-anchor="${anchor}"` : ''}>${clip(info.category, m.cat, textW - m.logo - 2)}</text>`;
   } else {
     const lines = [0.36, 0.62, 0.88].map((f) => Math.round(ch * f));
     text = lines
       .map(
         (y, i) =>
-          `<line x1="${textX}" y1="${y}" x2="${cw - px(i === 2 ? 11 : 3)}" y2="${y}" stroke="#000" stroke-width="${Math.max(1, px(0.4))}" />`,
+          `<line x1="${m.vertical ? px(4) : textX}" y1="${y}" x2="${cw - px(i === 2 ? m.logo + 1 : 4)}" y2="${y}" stroke="#000" stroke-width="${Math.max(1, px(0.4))}" />`,
       )
       .join('');
   }
-  const logoSide = px(10);
+  const logoSide = px(m.logo);
   let logo = '';
   try {
     const logoBuf = await fs.readFile(path.join(process.cwd(), 'client', 'dist', 'logo-mono.svg'));
@@ -202,10 +215,13 @@ async function cellSvg(
   } catch {
     // logo asset missing - cells still print fine without it
   }
+  const qrX = m.vertical ? Math.round((cw - qrSide) / 2) : 0;
+  const qrY = m.vertical ? px(2) : Math.round((ch - qrSide) / 2) - px(2);
+  const codeX = m.vertical ? Math.round(cw / 2) : Math.round(qrSide / 2);
   return Buffer.from(
     `<svg width="${cw}" height="${ch}" xmlns="http://www.w3.org/2000/svg">
-      <image href="${qrB64}" x="0" y="${Math.round((ch - qrSide) / 2) - px(2)}" width="${qrSide}" height="${qrSide}"/>
-      <text x="${Math.round(qrSide / 2)}" y="${Math.round((ch + qrSide) / 2) + px(1)}" font-family="monospace" font-size="${font(2.1)}" fill="#444" text-anchor="middle">${esc(info.code)}</text>
+      <image href="${qrB64}" x="${qrX}" y="${qrY}" width="${qrSide}" height="${qrSide}"/>
+      <text x="${codeX}" y="${qrY + qrSide + px(1)}" font-family="monospace" font-size="${font(m.code)}" fill="#444" text-anchor="middle">${esc(info.code)}</text>
       ${text}${logo}
     </svg>`,
   );

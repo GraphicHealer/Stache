@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
+import { resolveSheet } from '../lib/sheets';
+import { labelMetrics } from '../lib/labelmetrics';
 import { Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import type { SheetSpec } from '../lib/sheets';
@@ -92,10 +94,12 @@ export function PrintLabels() {
     );
   }
 
-  const cell = (l: PrintLabel) => (
+  const cell = (l: PrintLabel) => {
+    const m = labelMetrics(spec?.cellW ?? sheet.labelW, spec?.cellH ?? sheet.labelH);
+    return (
     <div
       key={l.code}
-      className="pcell"
+      className={`pcell${m.vertical ? ' vertical' : ''}`}
       style={spec ? { height: `${spec.cellH}mm` } : undefined}
     >
       <div className="pqrcol">
@@ -104,18 +108,18 @@ export function PrintLabels() {
             className="pqr"
             src={qrs[l.code]}
             alt=""
-            style={spec ? { width: `${Math.min(spec.cellH - 4, spec.cellW * 0.4)}mm` } : undefined}
+            style={{ width: `${m.qr}mm` }}
             onLoad={() => setLoaded((n) => n + 1)}
           />
         )}
-        <span className="pcode">{l.code}</span>
+        <span className="pcode" style={{ fontSize: `${m.code}mm` }}>{l.code}</span>
       </div>
       <div className="pinfo">
         {l.name ? (
           <>
-            {parentPath(l.path, l.name) && <div className="ppath">{parentPath(l.path, l.name)}</div>}
-            <div className="pname">{l.name}</div>
-            {l.category && <div className="ptags">{l.category}</div>}
+            {parentPath(l.path, l.name) && <div className="ppath" style={{ fontSize: `${m.path}mm` }}>{parentPath(l.path, l.name)}</div>}
+            <div className="pname" style={{ fontSize: `${m.name}mm` }}>{l.name}</div>
+            {l.category && <div className="ptags" style={{ fontSize: `${m.category}mm` }}>{l.category}</div>}
           </>
         ) : (
           <>
@@ -124,10 +128,11 @@ export function PrintLabels() {
             <div className="pblank" />
           </>
         )}
-        <img className="plogo" src="/logo-mono.svg" alt="" />
+        <img className="plogo" src="/logo-mono.svg" alt="" style={{ width: `${m.logo}mm` }} />
       </div>
     </div>
   );
+  }
 
   const labelPage = (l: PrintLabel) => (
     <div
@@ -140,7 +145,7 @@ export function PrintLabels() {
           src={qrs[l.code]}
           alt=""
           onLoad={() => setLoaded((n) => n + 1)}
-          style={{ width: `${Math.min(sheet.labelW, sheet.labelH) * 0.62}mm` }}
+          style={{ width: `${labelMetrics(sheet.labelW, sheet.labelH).qr}mm` }}
         />
       )}
       <span className="pcode">{l.code}</span>
