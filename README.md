@@ -39,7 +39,7 @@ Open `http://<host>:8080`, create the first household account, then head to `/la
 
 Requirements: Docker + Docker Compose. One container (`ghcr.io/graphichealer/stache`) - the embedded SQLite database, photos, and AI model cache all live in the `data` volume (Docker names it `stache_data`) at `/data`. Backup is copying that volume.
 
-**Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or search, not at boot - once warm the app sits around 450-550MB. On very small hosts, set `STACHE_NO_ML=1` to disable embeddings entirely; everything else keeps working.
+**Memory:** the app idles around 200MB. CLIP (photo similarity) loads lazily on the first photo upload or search, not at boot - once warm the app sits around 450-550MB. The local VLM level is set with `STACHE_ML_LEVEL`: `0` disables ML entirely (tiny hosts), `1` uses lightweight Florence-2, `2` (default) runs SmolVLM2-500M which reads your item names as context, `3` runs Moondream2. `STACHE_NO_ML=1` still works as an alias for `0`.
 
 **One caveat on plain HTTP:** the live camera viewfinder, clipboard copy buttons, and offline PWA features need a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts) - `localhost` counts, `http://192.168.x.x` does not. Over plain `http://<lan-ip>:8080` the app still works (photo capture falls back to the file picker), but for the full experience front it with HTTPS: a reverse proxy like Caddy/NPM, a Tailscale cert, or your Home Assistant ingress URL.
 

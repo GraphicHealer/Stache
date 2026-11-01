@@ -5,7 +5,7 @@ import { db } from '../db';
 import { items, photos, settings } from '../db/schema';
 import { env } from '../env';
 import { lookupBarcode, type DetectedCode } from './barcodes';
-import { mlDisabled, vlmGenerate } from './ml';
+import { mlDisabled, mlLevel, vlmAsk, vlmGenerate } from './ml';
 
 export interface AiConfig {
   enabled: boolean;
@@ -136,7 +136,21 @@ async function suggestOne(itemId: string): Promise<void> {
     ocr_text?: string | null;
   } = {};
 
-  if (cfg.provider === 'local') {
+  // Context is shared by remote providers and the prompted local VLM:
+  // confirmed barcode wins; detected-but-unconfirmed codes are hints only.
+  const context: string[] = [];
+  const codeToLookup = item.barcode ?? (item.detectedCodes as DetectedCode[] | null)?.[0]?.text;
+  if (codeToLookup) {
+    const product = await lookupBarcode(codeToLookup).catch(() => null);
+    context.push(
+      `Barcode ${codeToLookup} was seen on or with this item` +
+        (product ? ` - it resolves to "${product.name}"${product.brand ? ` by ${product.brand}` : ''}` : '') +
+        '.',
+    );
+  }
+  if (item.name) context.push(`The owner called it "${item.name}".`);
+
+  if (cfg.provider === 'local' && mlLevel <= 1) {
     const short = await vlmGenerate(buf, '<CAPTION>', 40);
     const detailed = await vlmGenerate(buf, '<MORE_DETAILED_CAPTION>', 100);
     const ocr = await vlmGenerate(buf, '<OCR>', 128).catch(() => null);
@@ -149,23 +163,15 @@ async function suggestOne(itemId: string): Promise<void> {
       tags: localTags(item.name, description, ocrText),
       ocr_text: ocrText,
     };
+  } else if (cfg.provider === 'local') {
+    // Prompted local VLM (SmolVLM2 / Moondream2): same question as remote,
+    // answered on-device with the owner's name as real context.
+    const question = `${context.join(' ')} ${PROMPT}`.trim();
+    const raw = await vlmAsk(buf, question, 320);
+    const jsonText = raw.replace(/```(?:json)?/g, '').trim();
+    parsed = JSON.parse(jsonText.match(/\{[\s\S]*\}/)?.[0] ?? '{}') as typeof parsed;
   } else {
     const dataUrl = `data:image/webp;base64,${buf.toString('base64')}`;
-
-    // Product context: confirmed barcode wins; detected-but-unconfirmed codes
-    // are passed as hints only.
-    const context: string[] = [];
-    const codeToLookup = item.barcode ?? (item.detectedCodes as DetectedCode[] | null)?.[0]?.text;
-    if (codeToLookup) {
-      const product = await lookupBarcode(codeToLookup).catch(() => null);
-      context.push(
-        `Barcode ${codeToLookup} was seen on or with this item` +
-          (product ? ` - it resolves to "${product.name}"${product.brand ? ` by ${product.brand}` : ''}` : '') +
-          '.',
-      );
-    }
-    if (item.name) context.push(`The owner called it "${item.name}".`);
-
     const userContent: any[] = [];
     if (context.length) userContent.push({ type: 'text', text: context.join(' ') });
     userContent.push({ type: 'image_url', image_url: { url: dataUrl } });
@@ -211,6 +217,25 @@ export async function detectObjects(photoFile: string, isPrivate = false): Promi
   if (isPrivate && cfg.provider !== 'local')
     throw new Error('private items can only use the built-in model');
   const buf = await fs.readFile(photoFile);
+
+  if (cfg.provider === 'local' && mlLevel >= 2) {
+    // Prompted VLM answers the same JSON split prompt remote providers get.
+    const raw = await vlmAsk(buf, SPLIT_PROMPT, 320);
+    const arr = JSON.parse(raw.replace(/```(?:json)?/g, '').match(/\[[\s\S]*\]/)?.[0] ?? '[]') as any[];
+    return (Array.isArray(arr) ? arr : [])
+      .filter((o) => Array.isArray(o?.box) && o.box.length === 4)
+      .map((o): DetectedObject => ({
+        label: String(o.label ?? 'object').slice(0, 120),
+        box: [
+          Math.max(0, Math.min(1000, Number(o.box[0]) || 0)),
+          Math.max(0, Math.min(1000, Number(o.box[1]) || 0)),
+          Math.max(0, Math.min(1000, Number(o.box[2]) || 0)),
+          Math.max(0, Math.min(1000, Number(o.box[3]) || 0)),
+        ],
+      }))
+      .filter((o) => o.box[2] - o.box[0] > 15 && o.box[3] - o.box[1] > 15)
+      .slice(0, 12);
+  }
 
   if (cfg.provider === 'local') {
     // Florence-2 <OD> returns pixel-space [x1,y1,x2,y2] boxes + real labels.

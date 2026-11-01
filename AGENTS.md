@@ -73,7 +73,7 @@ curl localhost:8080/api/health
   `lower()` or `LIKE`); recursive CTEs and `json_extract` work; vec0 KNN is
   `embedding MATCH ? AND k = ?`; FTS5 query strings come from `ftsQuery()`.
 - **Memory**: CLIP loads lazily on first embed (~200MB boot, ~450-500MB warm,
-  q8 + 2 threads). `STACHE_NO_ML=1` disables ML entirely for tiny hosts.
+  q8 + 2 threads). `STACHE_ML_LEVEL` picks the stack: `0` off, `1` CLIP + Florence-2 (light, no text context), `2` (default) CLIP + SmolVLM2-500M (prompted VLM - owner's name is real context), `3` CLIP + Moondream2. `STACHE_NO_ML=1` still maps to 0.
 - **Zebra wedge scans** = rapid keystrokes ending in Enter (`parseScan`).
 - `/data` must stay writable by the `node` user (db + photos + model cache).
 - Docker daemon access may need `sg docker -c "..."` in a stale shell.
@@ -118,4 +118,4 @@ curl localhost:8080/api/health
 - AI/ML is non-blocking: filing works with no models loaded; CLIP embeds
   lazily in the background. With no `settings.ai` row the built-in local
   provider (Florence-2) is enabled by default - an explicit "off" persists
-  and always wins. `STACHE_NO_ML=1` disables it fully for tiny hosts.
+  and always wins. `STACHE_ML_LEVEL=0` disables it fully for tiny hosts.

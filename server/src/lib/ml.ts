@@ -8,7 +8,13 @@ import { env } from '../env';
  * In-process CLIP (ViT-B/32, q8) via transformers.js + onnxruntime-node.
  * Loads lazily on first embed - never at boot, so a cold start stays light.
  * Models download once into DATA_DIR/models (~350MB disk).
- * STACHE_NO_ML=1 disables it entirely (very low-RAM hosts).
+ *
+ * STACHE_ML_LEVEL picks the stack (all lazy-loaded):
+ *   0 - no ML at all (extremely small hosts)
+ *   1 - CLIP + Florence-2 (light VLM, no text context)
+ *   2 - CLIP + SmolVLM2 500M (prompted VLM - default)
+ *   3 - CLIP + Moondream2 (heavier prompted VLM)
+ * Legacy STACHE_NO_ML=1 still means "off".
  */
 const MODEL = 'Xenova/clip-vit-base-patch32';
 
@@ -41,7 +47,11 @@ function l2norm(v: ArrayLike<number>): number[] {
   return arr.map((x) => x / norm);
 }
 
-export const mlDisabled = process.env.STACHE_NO_ML === '1';
+const rawLevel = process.env.STACHE_ML_LEVEL ?? (process.env.STACHE_NO_ML === '1' ? '0' : '2');
+const parsedLevel = parseInt(rawLevel, 10);
+/** 0=off, 1=Florence-2, 2=SmolVLM2 (default), 3=Moondream2. CLIP rides along at >=1. */
+export const mlLevel = Number.isNaN(parsedLevel) ? 2 : Math.min(3, Math.max(0, parsedLevel));
+export const mlDisabled = mlLevel === 0;
 
 async function rawImage(buf: Buffer) {
   const hf = await import('@huggingface/transformers');
@@ -54,7 +64,7 @@ async function rawImage(buf: Buffer) {
 }
 
 async function loadClip(): Promise<Clip> {
-  if (mlDisabled) throw new Error('ML disabled via STACHE_NO_ML');
+  if (mlDisabled) throw new Error('ML disabled (STACHE_ML_LEVEL=0)');
   const hf = await import('@huggingface/transformers');
   hf.env.cacheDir = path.join(env.dataDir, 'models');
   const [processor, tokenizer, vision, textModel] = await Promise.all([
@@ -208,17 +218,35 @@ export async function nearestToItem(itemId: string, limit = 12, viewerId: string
 }
 
 // ---------------------------------------------------------------------------
-// Built-in VLM: Florence-2 for captioning / OCR / object detection. Same lazy
-// pattern as CLIP - downloads into DATA_DIR/models on first use only.
+// Built-in VLM per level. Same lazy pattern as CLIP - downloads into
+// DATA_DIR/models on first use only.
+//   1 - Florence-2: fixed-task captioning/OCR/OD, fast, no free-text prompts
+//   2 - SmolVLM2-500M: chat VLM, takes the owner's name/barcode as context
+//   3 - Moondream2: bigger prompted VLM for hosts with headroom
 // ---------------------------------------------------------------------------
-const VLM_MODEL = 'onnx-community/Florence-2-base-ft';
-const VLM_OPTS = {
-  dtype: {
-    embed_tokens: 'fp32',
-    vision_encoder: 'fp32',
-    encoder_model: 'fp32',
-    decoder_model_merged: 'q4',
-  } as const,
+const VLM_KINDS = { 1: 'florence', 2: 'smolvlm', 3: 'moondream' } as const;
+const VLM_MODEL =
+  VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3] === 'florence'
+    ? 'onnx-community/Florence-2-base-ft'
+    : VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3] === 'smolvlm'
+      ? 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'
+      : 'Xenova/moondream2';
+export const vlmKind = VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3];
+const VLM_OPTS: any = {
+  dtype: (
+    vlmKind === 'florence'
+      ? {
+          embed_tokens: 'fp32',
+          vision_encoder: 'fp32',
+          encoder_model: 'fp32',
+          decoder_model_merged: 'q4',
+        }
+      : {
+          embed_tokens: 'q8',
+          vision_encoder: 'q8',
+          decoder_model_merged: 'q4',
+        }
+  ) as Record<string, string>,
   session_options: SESSION_OPTS,
 };
 
@@ -226,11 +254,13 @@ type Vlm = { model: any; processor: any; tokenizer: any };
 let vlmPromise: Promise<Vlm> | null = null;
 
 async function loadVlm(): Promise<Vlm> {
-  if (mlDisabled) throw new Error('ML disabled via STACHE_NO_ML');
+  if (mlDisabled) throw new Error('ML disabled (STACHE_ML_LEVEL=0)');
   const hf = await import('@huggingface/transformers');
   hf.env.cacheDir = path.join(env.dataDir, 'models');
   const [model, processor, tokenizer] = await Promise.all([
-    hf.AutoModelForImageTextToText.from_pretrained(VLM_MODEL, VLM_OPTS),
+    (vlmKind === 'moondream'
+      ? hf.Moondream1ForConditionalGeneration.from_pretrained(VLM_MODEL, VLM_OPTS)
+      : hf.AutoModelForImageTextToText.from_pretrained(VLM_MODEL, VLM_OPTS)),
     hf.AutoProcessor.from_pretrained(VLM_MODEL),
     hf.AutoTokenizer.from_pretrained(VLM_MODEL),
   ]);
@@ -247,8 +277,42 @@ export function ensureVlm(): Promise<Vlm> {
   return vlmPromise;
 }
 
+/**
+ * Ask the prompted VLM a free-text question about a photo (levels 2-3).
+ * Returns the raw answer text. Shares the serialized inference queue.
+ */
+export async function vlmAsk(buf: Buffer, question: string, maxNewTokens = 256): Promise<string> {
+  return serialize(async () => {
+    const vlm = await ensureVlm();
+    const image = await rawImage(buf);
+    if (vlmKind === 'moondream') {
+      const q = `<image>\n\nQuestion: ${question}\n\nAnswer:`;
+      const textInputs = vlm.tokenizer(q);
+      const visionInputs = await vlm.processor(image);
+      const ids = await vlm.model.generate({
+        ...textInputs,
+        ...visionInputs,
+        do_sample: false,
+        max_new_tokens: maxNewTokens,
+      });
+      const decoded = vlm.tokenizer.batch_decode(ids, { skip_special_tokens: true })[0] as string;
+      const i = decoded.indexOf('Answer:');
+      return (i >= 0 ? decoded.slice(i + 7) : decoded).trim();
+    }
+    const messages = [
+      { role: 'user', content: [{ type: 'image' }, { type: 'text', text: question }] },
+    ];
+    const promptText = vlm.processor.apply_chat_template(messages, { add_generation_prompt: true });
+    const inputs = await vlm.processor(promptText, image);
+    const ids = await vlm.model.generate({ ...inputs, do_sample: false, max_new_tokens: maxNewTokens });
+    const decoded = vlm.tokenizer.batch_decode(ids, { skip_special_tokens: true })[0] as string;
+    const idx = decoded.lastIndexOf('Assistant:');
+    return (idx >= 0 ? decoded.slice(idx + 10) : decoded).trim();
+  });
+}
+
 /** Run one Florence-2 task (`<CAPTION>`, `<OCR>`, `<OD>`, ...) on a photo.
- * Shares the same serialized queue as CLIP inference. */
+ * Shares the same serialized queue as CLIP inference. Level 1 only. */
 export async function vlmGenerate(buf: Buffer, task: string, maxNewTokens = 100): Promise<any> {
   return serialize(async () => {
     const vlm = await ensureVlm();
@@ -275,7 +339,7 @@ export async function vlmDownloaded(): Promise<boolean> {
     const dir = path.join(env.dataDir, 'models');
     const walk = async (d: string, depth: number): Promise<boolean> => {
       for (const e of await fs.readdir(d, { withFileTypes: true })) {
-        if (/florence/i.test(e.name)) return true;
+        if (/florence|smolvlm|moondream/i.test(e.name)) return true;
         if (e.isDirectory() && depth < 3 && (await walk(path.join(d, e.name), depth + 1))) return true;
       }
       return false;

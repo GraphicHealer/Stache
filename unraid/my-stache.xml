@@ -17,7 +17,7 @@
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/stache" Mode="rw" Description="SQLite database + photos + AI model cache. Back up this folder." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/stache</Config>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Timezone used by the digest schedule" Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
   <Config Name="BETTER_AUTH_SECRET" Target="BETTER_AUTH_SECRET" Default="" Mode="" Description="Session secret. Optional - auto-generated and persisted if left blank." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
-  <Config Name="STACHE_NO_ML" Target="STACHE_NO_ML" Default="" Mode="" Description="Set to 1 to disable CLIP embeddings (very low-RAM hosts)" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="STACHE_ML_LEVEL" Target="STACHE_ML_LEVEL" Default="2" Mode="" Description="0=ML off (tiny hosts), 1=light Florence-2, 2=SmolVLM2 prompted VLM (default), 3=Moondream2" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
   <Config Name="STACHE_BASE_URL" Target="STACHE_BASE_URL" Default="" Mode="" Description="Public https:// URL when served through a reverse proxy. Enables Secure cookies + correct label/webhook links." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
   <Config Name="STACHE_TRUST_PROXY" Target="STACHE_TRUST_PROXY" Default="" Mode="" Description="Set to 1 when behind a reverse proxy so real client IPs are trusted (X-Forwarded-For)" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>
