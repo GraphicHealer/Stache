@@ -402,8 +402,9 @@ export function LabelsPage() {
                   <span className="muted">×</span>
                   <input className="input" style={{ width: 80 }} value={editForm.label_h_mm}
                     onChange={(e) => setEditForm({ ...editForm, label_h_mm: e.target.value })} />
+                  <label className="muted">dpi</label>
                   <input className="input" style={{ width: 80 }} value={editForm.dpi}
-                    onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })} placeholder="dpi" />
+                    onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })} aria-label="dots per inch" />
                 </div>
               )}
               <div className="row">
@@ -544,8 +545,9 @@ export function LabelsPage() {
               <span className="muted">×</span>
               <input className="input" style={{ width: 80 }} value={form.label_h_mm}
                 onChange={(e) => setForm({ ...form, label_h_mm: e.target.value })} />
+              <label className="muted">dpi</label>
               <input className="input" style={{ width: 80 }} value={form.dpi}
-                onChange={(e) => setForm({ ...form, dpi: e.target.value })} placeholder="dpi" />
+                onChange={(e) => setForm({ ...form, dpi: e.target.value })} aria-label="dots per inch" />
             </div>
           )}
           <div className="row">
