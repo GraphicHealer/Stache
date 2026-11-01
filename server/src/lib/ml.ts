@@ -12,7 +12,7 @@ import { env } from '../env';
  * STACHE_ML_LEVEL picks the stack (all lazy-loaded):
  *   0 - no ML at all (extremely small hosts)
  *   1 - CLIP + Florence-2 (light VLM, no text context)
- *   2 - CLIP + SmolVLM2 500M (prompted VLM - default)
+ *   2 - CLIP + LFM2.5-VL-450M (prompted VLM - default)
  *   3 - CLIP + Moondream2 (heavier prompted VLM)
  * Legacy STACHE_NO_ML=1 still means "off".
  */
@@ -49,7 +49,7 @@ function l2norm(v: ArrayLike<number>): number[] {
 
 const rawLevel = process.env.STACHE_ML_LEVEL ?? (process.env.STACHE_NO_ML === '1' ? '0' : '2');
 const parsedLevel = parseInt(rawLevel, 10);
-/** 0=off, 1=Florence-2, 2=SmolVLM2 (default), 3=Moondream2. CLIP rides along at >=1. */
+/** 0=off, 1=Florence-2, 2=LFM2.5-VL (default), 3=Moondream2. CLIP rides along at >=1. */
 export const mlLevel = Number.isNaN(parsedLevel) ? 2 : Math.min(3, Math.max(0, parsedLevel));
 export const mlDisabled = mlLevel === 0;
 
@@ -221,15 +221,15 @@ export async function nearestToItem(itemId: string, limit = 12, viewerId: string
 // Built-in VLM per level. Same lazy pattern as CLIP - downloads into
 // DATA_DIR/models on first use only.
 //   1 - Florence-2: fixed-task captioning/OCR/OD, fast, no free-text prompts
-//   2 - SmolVLM2-500M: chat VLM, takes the owner's name/barcode as context
+//   2 - LFM2.5-VL-450M: edge-tuned chat VLM, name/barcode as context, OD
 //   3 - Moondream2: bigger prompted VLM for hosts with headroom
 // ---------------------------------------------------------------------------
-const VLM_KINDS = { 1: 'florence', 2: 'smolvlm', 3: 'moondream' } as const;
+const VLM_KINDS = { 1: 'florence', 2: 'lfm2vl', 3: 'moondream' } as const;
 const VLM_MODEL =
   VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3] === 'florence'
     ? 'onnx-community/Florence-2-base-ft'
-    : VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3] === 'smolvlm'
-      ? 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'
+    : VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3] === 'lfm2vl'
+      ? 'LiquidAI/LFM2.5-VL-450M-ONNX'
       : 'Xenova/moondream2';
 export const vlmKind = VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3];
 const VLM_OPTS: any = {
@@ -241,11 +241,17 @@ const VLM_OPTS: any = {
           encoder_model: 'fp32',
           decoder_model_merged: 'q4',
         }
-      : {
-          embed_tokens: 'q8',
-          vision_encoder: 'q8',
-          decoder_model_merged: 'q4',
-        }
+      : vlmKind === 'lfm2vl'
+        ? {
+            embed_tokens: 'fp16',
+            vision_encoder: 'q4',
+            decoder_model_merged: 'q4',
+          }
+        : {
+            embed_tokens: 'fp32',
+            vision_encoder: 'fp16',
+            decoder_model_merged: 'q4',
+          }
   ) as Record<string, string>,
   session_options: SESSION_OPTS,
 };
@@ -303,11 +309,13 @@ export async function vlmAsk(buf: Buffer, question: string, maxNewTokens = 256):
       { role: 'user', content: [{ type: 'image' }, { type: 'text', text: question }] },
     ];
     const promptText = vlm.processor.apply_chat_template(messages, { add_generation_prompt: true });
-    const inputs = await vlm.processor(promptText, image);
+    // Arg order differs per processor: LFM2-VL takes (images, text).
+    const inputs = await vlm.processor(image, promptText);
     const ids = await vlm.model.generate({ ...inputs, do_sample: false, max_new_tokens: maxNewTokens });
-    const decoded = vlm.tokenizer.batch_decode(ids, { skip_special_tokens: true })[0] as string;
-    const idx = decoded.lastIndexOf('Assistant:');
-    return (idx >= 0 ? decoded.slice(idx + 10) : decoded).trim();
+    // Decode only the generated tokens - marker text differs per model.
+    const promptLen = (inputs.input_ids?.dims?.at(-1) as number) ?? 0;
+    const gen = promptLen ? ids.slice(null, [promptLen, null]) : ids;
+    return (vlm.tokenizer.batch_decode(gen, { skip_special_tokens: true })[0] as string).trim();
   });
 }
 
@@ -339,7 +347,7 @@ export async function vlmDownloaded(): Promise<boolean> {
     const dir = path.join(env.dataDir, 'models');
     const walk = async (d: string, depth: number): Promise<boolean> => {
       for (const e of await fs.readdir(d, { withFileTypes: true })) {
-        if (/florence|smolvlm|moondream/i.test(e.name)) return true;
+        if (/florence|smolvlm|moondream|lfm2/i.test(e.name)) return true;
         if (e.isDirectory() && depth < 3 && (await walk(path.join(d, e.name), depth + 1))) return true;
       }
       return false;

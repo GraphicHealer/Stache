@@ -42,7 +42,7 @@ optional AI provider URL reach services on the Unraid host, e.g. Ollama at
 | `/data` path | `/mnt/user/appdata/stache` | DB + photos + models. Back this up |
 | `TZ` | `UTC` | Digest "time of day" uses this |
 | `BETTER_AUTH_SECRET` | auto | Optional; persisted in the db if blank |
-| `STACHE_ML_LEVEL` | `2` | `0` disables ML, `1` light Florence-2, `2` SmolVLM2 (default), `3` Moondream2 |
+| `STACHE_ML_LEVEL` | `2` | `0` disables ML, `1` light Florence-2, `2` LFM2.5-VL (default), `3` Moondream2 |
 | `STACHE_BASE_URL` | unset | Public `https://` URL behind a reverse proxy - enables Secure cookies and fixes label/webhook links |
 | `STACHE_TRUST_PROXY` | unset | `1` behind a reverse proxy so real client IPs are trusted |
 

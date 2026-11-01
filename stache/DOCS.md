@@ -43,4 +43,4 @@ The token URL is shown in Stache Settings - copy it from there.
 All AI is off by default. Configure an OpenAI-compatible endpoint
 (Ollama, LM Studio, hosted) in Settings for suggested names, OCR,
 photo similarity, and pile splitting. To save memory on small hosts,
-set `STACHE_ML_LEVEL=0` via the environment to disable local embeddings/AI (`1`=light Florence-2, `2`=SmolVLM2 default, `3`=Moondream2).
+set `STACHE_ML_LEVEL=0` via the environment to disable local embeddings/AI (`1`=light Florence-2, `2`=LFM2.5-VL default, `3`=Moondream2).
