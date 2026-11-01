@@ -191,8 +191,9 @@ textarea.input { resize: vertical; }
 .label-cell { position: relative; background: #fff; color: #000; border-radius: 8px; padding: 8px; display: flex; align-items: center; gap: 8px; }
 .label-qrcol { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; width: 34%; max-width: 100px; }
 .label-qr { width: 100%; display: block; }
-.label-info { flex: 1; min-width: 0; padding-right: 48px; }
-.label-logo { position: absolute; right: 4px; bottom: 4px; width: 42px; height: 42px; }
+.label-info { flex: 1; min-width: 0; }
+.label-info > :last-child { padding-right: 38px; }
+.label-logo { position: absolute; right: 4px; bottom: 4px; width: 34px; height: 34px; }
 .label-code { font-family: ui-monospace, monospace; font-size: 0.55rem; color: #555; }
 .label-path { font-size: 0.6rem; color: #555; overflow-wrap: anywhere; }
 .label-tags { font-size: 0.6rem; color: #555; margin-top: 1px; overflow-wrap: anywhere; }
@@ -398,9 +399,10 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .pqrcol { display: flex; flex-direction: column; align-items: center; gap: 0.4mm; flex: none; }
 .pqr { width: 19mm; display: block; }
 .pcode { font-family: ui-monospace, monospace; font-size: 2.1mm; color: #444; }
-.pinfo { flex: 1; min-width: 0; padding-right: 14mm; }
-/* Logo sits in the bottom-right corner; pinfo padding keeps text off it. */
-.plogo { position: absolute; right: 0.8mm; bottom: 0.5mm; width: 12mm; height: 12mm; }
+.pinfo { flex: 1; min-width: 0; }
+/* Only the last line clears the bottom-right logo; earlier lines span full width. */
+.pinfo > :last-child { padding-right: 11mm; }
+.plogo { position: absolute; right: 0.8mm; bottom: 0.5mm; width: 10mm; height: 10mm; }
 .ppath { font-size: 2.3mm; color: #333; margin-bottom: 0.4mm; overflow-wrap: anywhere; }
 .ptags { font-size: 2.3mm; color: #333; margin-top: 0.4mm; overflow-wrap: anywhere; }
 .pname { font-weight: 700; font-size: 3.4mm; overflow-wrap: anywhere; }

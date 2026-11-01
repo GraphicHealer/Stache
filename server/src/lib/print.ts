@@ -169,30 +169,32 @@ async function cellSvg(
   const qrB64 = `data:image/png;base64,${qr.toString('base64')}`;
   const textX = qrSide + px(1.5);
   const font = (mm: number) => Math.max(6, Math.round(px(mm)));
-  const clip = (s: string, mmFont: number) => {
-    const max = Math.floor((spec.cellW - spec.cellH - 16) / (mmFont * 0.62));
+  const clip = (s: string, mmFont: number, widthMm: number) => {
+    const max = Math.floor(widthMm / (mmFont * 0.62));
     return esc(s.length > max && max > 3 ? `${s.slice(0, max - 1)}…` : s);
   };
+  const fullW = spec.cellW - spec.cellH - 2;
+  const lastW = fullW - 11;
   let text = '';
   if (info.name) {
     let y = px(5);
     if (info.path) {
-      text += `<text x="${textX}" y="${y}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.path, 2.3)}</text>`;
+      text += `<text x="${textX}" y="${y}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.path, 2.3, fullW)}</text>`;
       y += px(4);
     }
-    text += `<text x="${textX}" y="${y + px(2)}" font-family="sans-serif" font-size="${font(3.4)}" font-weight="bold">${clip(info.name, 3.4)}</text>`;
+    text += `<text x="${textX}" y="${y + px(2)}" font-family="sans-serif" font-size="${font(3.4)}" font-weight="bold">${clip(info.name, 3.4, info.tags.length ? fullW : lastW)}</text>`;
     if (info.tags.length)
-      text += `<text x="${textX}" y="${y + px(5)}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.tags.join(', '), 2.3)}</text>`;
+      text += `<text x="${textX}" y="${y + px(5)}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.tags.join(', '), 2.3, lastW)}</text>`;
   } else {
     const lines = [0.36, 0.62, 0.88].map((f) => Math.round(ch * f));
     text = lines
       .map(
-        (y) =>
-          `<line x1="${textX}" y1="${y}" x2="${cw - px(8)}" y2="${y}" stroke="#000" stroke-width="${Math.max(1, px(0.4))}" />`,
+        (y, i) =>
+          `<line x1="${textX}" y1="${y}" x2="${cw - px(i === 2 ? 11 : 3)}" y2="${y}" stroke="#000" stroke-width="${Math.max(1, px(0.4))}" />`,
       )
       .join('');
   }
-  const logoSide = px(12);
+  const logoSide = px(10);
   let logo = '';
   try {
     const logoBuf = await fs.readFile(path.join(process.cwd(), 'client', 'dist', 'logo-mono.svg'));
