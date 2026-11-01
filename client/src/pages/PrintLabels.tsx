@@ -91,7 +91,6 @@ export function PrintLabels() {
         <span className="pcode">{l.code}</span>
       </div>
       <div className="pinfo">
-        <img className="plogo" src="/logo-mono.svg" alt="" />
         {l.name ? (
           <>
             {parentPath(l.path, l.name) && <div className="ppath">{parentPath(l.path, l.name)}</div>}
@@ -106,6 +105,7 @@ export function PrintLabels() {
           </>
         )}
       </div>
+      <img className="plogo" src="/logo-mono.svg" alt="" />
     </div>
   );
 

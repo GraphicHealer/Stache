@@ -312,7 +312,6 @@ export function LabelsPage() {
                     <span className="label-code">{l.code}</span>
                   </div>
                   <div className="label-info">
-                    <img className="label-logo" src="/logo-mono.svg" alt="" />
                     {name ? (
                       <>
                         {path && path !== name && (
@@ -333,6 +332,7 @@ export function LabelsPage() {
                       </>
                     )}
                   </div>
+                  <img className="label-logo" src="/logo-mono.svg" alt="" />
                 </div>
               );
             })}

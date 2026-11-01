@@ -192,7 +192,7 @@ textarea.input { resize: vertical; }
 .label-qrcol { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; width: 34%; max-width: 100px; }
 .label-qr { width: 100%; display: block; }
 .label-info { flex: 1; min-width: 0; }
-.label-logo { width: 20px; height: 20px; flex: none; margin-bottom: 4px; }
+.label-logo { width: 26px; height: 26px; flex: none; align-self: center; }
 .label-code { font-family: ui-monospace, monospace; font-size: 0.55rem; color: #555; }
 .label-path { font-size: 0.6rem; color: #555; overflow-wrap: anywhere; }
 .label-tags { font-size: 0.6rem; color: #555; margin-top: 1px; overflow-wrap: anywhere; }
@@ -404,7 +404,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .pqr { width: 19mm; display: block; }
 .pcode { font-family: ui-monospace, monospace; font-size: 2.1mm; color: #444; }
 .pinfo { flex: 1; min-width: 0; }
-.plogo { width: 5mm; height: 5mm; margin-bottom: 1mm; }
+.plogo { width: 7mm; height: 7mm; flex: none; }
 .ppath { font-size: 2.3mm; color: #333; margin-bottom: 0.4mm; overflow-wrap: anywhere; }
 .ptags { font-size: 2.3mm; color: #333; margin-top: 0.4mm; overflow-wrap: anywhere; }
 .pname { font-weight: 700; font-size: 3.4mm; overflow-wrap: anywhere; }
