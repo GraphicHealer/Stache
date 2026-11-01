@@ -222,63 +222,83 @@ export async function printerRoutes(app: FastifyInstance) {
     }
   });
 
-  // Read label size from a Zebra over the same TCP port ZPL prints to.
-  // SGD getvar reports label length + head resolution; ~JC first runs the
-  // printer's own media calibration (feeds a label to measure it).
+  // Ask a Zebra what it has loaded, over the same TCP port ZPL prints to.
+  // Individual SGD getvars (works on old firmware - allcv doesn't exist
+  // everywhere); values come back positionally. ~JC first runs the printer's
+  // own media calibration - it feeds a label to measure the gap.
+  const probeZebra = async (host: string, port: number, calibrate: boolean) => {
+    const names = ['head.resolution', 'zpl.label_length', 'print.width', 'media.type'];
+    const cmds = names.map((n) => `! U1 getvar "${n}"`).join('\r\n') + '\r\n';
+    const lines = await new Promise<string[]>((resolve, reject) => {
+      const sock = net.createConnection({ host, port, timeout: 5000 });
+      let buf = '';
+      const done = (e?: Error) => {
+        sock.destroy();
+        if (e) reject(e);
+        else resolve(buf.split('\n').map((l) => l.trim().replace(/^"|"$/g, '')).filter(Boolean));
+      };
+      sock.on('timeout', () => done(new Error('printer timed out')));
+      sock.on('error', done);
+      sock.on('connect', () => sock.write((calibrate ? '~JC\r\n' : '') + cmds));
+      sock.on('data', (d) => {
+        buf += d.toString('utf8');
+        if (buf.length > 64_000) done();
+      });
+      setTimeout(() => done(), 4000);
+    });
+    const v: Record<string, string> = {};
+    names.forEach((n, i) => {
+      if (lines[i] && !/^(error|ERROR)/.test(lines[i])) v[n] = lines[i];
+    });
+    const dpmm = parseFloat(v['head.resolution'] ?? '') || 8;
+    const lenDots = parseFloat(v['zpl.label_length'] ?? '') || 0;
+    const widthDots = parseFloat(v['print.width'] ?? '') || 0;
+    return {
+      dpi: Math.round(dpmm * 25.4),
+      label_h_mm: lenDots ? Math.round((lenDots / dpmm) * 10) / 10 : null,
+      label_w_mm: widthDots ? Math.round((widthDots / dpmm) * 10) / 10 : null,
+      media_type: v['media.type'] ?? null,
+      raw: v,
+    };
+  };
+
+  // Probe without a saved printer (used by the add-printer form).
+  app.post('/api/printers/probe', { preHandler: requireAdmin }, async (req, reply) => {
+    const body = parseBody(
+      z.object({ host: z.string().min(1), port: z.number().optional(), calibrate: z.boolean().optional() }),
+      req.body,
+      reply,
+    );
+    if (!body) return;
+    try {
+      return { ok: true, ...(await probeZebra(body.host, body.port ?? 9100, !!body.calibrate)) };
+    } catch (e) {
+      return reply.badRequest(`probe failed: ${(e as Error).message}`);
+    }
+  });
+
+  // Probe a saved printer and persist the detected size/dpi.
   app.post('/api/printers/:id/detect', async (req, reply) => {
     const { id } = req.params as { id: string };
     const { calibrate } = (req.body ?? {}) as { calibrate?: boolean };
     const [p] = await db.select().from(printers).where(eq(printers.id, id));
     if (!p) return reply.notFound('printer not found');
     if (p.type !== 'zpl' || !p.host) return reply.badRequest('only network ZPL printers support detect');
-
-    const vars = await new Promise<Record<string, string>>((resolve, reject) => {
-      const sock = net.createConnection({ host: p.host!, port: p.port || 9100, timeout: 5000 });
-      let buf = '';
-      const done = (e?: Error) => {
-        sock.destroy();
-        if (e) reject(e);
-        else {
-          const out: Record<string, string> = {};
-          for (const line of buf.split('\n')) {
-            const m = line.match(/^([A-Za-z0-9_.]+)\s*[=:]\s*(.+)$/);
-            if (m) out[m[1].toLowerCase()] = m[2].trim();
-          }
-          resolve(out);
-        }
+    try {
+      const r = await probeZebra(p.host, p.port || 9100, !!calibrate);
+      const set: Record<string, unknown> = {};
+      if (r.label_h_mm) set.labelHmm = r.label_h_mm;
+      if (r.label_w_mm) set.labelWmm = r.label_w_mm;
+      if (r.dpi) set.dpi = r.dpi;
+      if (Object.keys(set).length) await db.update(printers).set(set).where(eq(printers.id, id));
+      return {
+        ok: true,
+        ...r,
+        note: "width is the printer's configured print width - length is what's actually sensed",
       };
-      sock.on('timeout', () => done(new Error('printer timed out')));
-      sock.on('error', done);
-      sock.on('connect', () => {
-        sock.write((calibrate ? '~JC\r\n' : '') + '! U1 getvar "allcv"\r\n');
-      });
-      sock.on('data', (d) => {
-        buf += d.toString('utf8');
-        if (buf.length > 64_000) done();
-      });
-      setTimeout(() => done(), 4000);
-    }).catch((e) => ({ __error: (e as Error).message }));
-
-    if ('__error' in vars) return reply.badRequest(`detect failed: ${vars.__error}`);
-    const dpmm = parseFloat(vars['head.resolution'] ?? '') || 8;
-    const dpi = Math.round(dpmm * 25.4);
-    const lenDots = parseFloat(vars['zpl.label_length'] ?? '') || 0;
-    const widthDots = parseFloat(vars['print.width'] ?? '') || 0;
-    const label_h_mm = lenDots ? Math.round((lenDots / dpmm) * 10) / 10 : null;
-    const label_w_mm = widthDots ? Math.round((widthDots / dpmm) * 10) / 10 : null;
-    const set: Record<string, unknown> = {};
-    if (label_h_mm) set.labelHmm = label_h_mm;
-    if (label_w_mm) set.labelWmm = label_w_mm;
-    if (dpi) set.dpi = dpi;
-    if (Object.keys(set).length) await db.update(printers).set(set).where(eq(printers.id, id));
-    return {
-      ok: true,
-      dpi,
-      label_h_mm,
-      label_w_mm,
-      media_type: vars['media.type'] ?? null,
-      note: "width is the printer's configured print width - length is what's actually sensed",
-    };
+    } catch (e) {
+      return reply.badRequest(`detect failed: ${(e as Error).message}`);
+    }
   });
 
   // Print specific label codes to a printer.

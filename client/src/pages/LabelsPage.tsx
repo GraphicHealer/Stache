@@ -97,6 +97,9 @@ export function LabelsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [progress, setProgress] = useState<string | null>(null);
   const [editPc, setEditPc] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editSheet, setEditSheet] = useState<SheetForm>(EMPTY_SHEET);
   const [pcForm, setPcForm] = useState<{ media: 'label' | 'sheet'; sheet: SheetForm; w: string; h: string; dpi: string }>({
     media: 'sheet', sheet: EMPTY_SHEET, w: '57', h: '32', dpi: '300',
   });
@@ -212,6 +215,26 @@ export function LabelsPage() {
     }
   };
 
+  // Read size/dpi from a Zebra - saved printer via /detect, unsaved via /probe.
+  const probe = async (calibrate: boolean, target?: Printer) => {
+    try {
+      const body = target
+        ? { calibrate }
+        : { host: form.host, port: parseInt(form.port, 10) || 9100, calibrate };
+      const r = target
+        ? await api.post(`/api/printers/${target.id}/detect`, body)
+        : await api.post('/api/printers/probe', body);
+      toast(`Detected ${r.label_w_mm ?? '?'}×${r.label_h_mm ?? '?'}mm @ ${r.dpi}dpi`);
+      const fill = (set: (v: any) => void, f: any) =>
+        set({ ...f, label_w_mm: r.label_w_mm ? String(r.label_w_mm) : f.label_w_mm, label_h_mm: r.label_h_mm ? String(r.label_h_mm) : f.label_h_mm, dpi: String(r.dpi ?? f.dpi) });
+      if (target) fill(setEditForm, editForm);
+      else fill(setForm, form);
+      refetchPrinters();
+    } catch (e) {
+      toast(`Detect failed: ${(e as Error).message}`);
+    }
+  };
+
   const testPrinter = async (p: Printer) => {
     if (p.type === 'dymo') {
       await printTo(p, ['ST-SAMPLE22']);
@@ -294,25 +317,28 @@ export function LabelsPage() {
                 />
               ) : (
                 <>
-                  <IconBtn icon="printer" className="btn-small" label={`Send test label to ${p.name}`} onClick={() => testPrinter(p)} />
-                  {p.type === 'zpl' && (
-                    <button
-                      className="btn btn-small"
-                      title="Ask the printer what label size is loaded"
-                      onClick={async () => {
-                        const cal = window.confirm('Run media calibration? It feeds ~1 label to measure it. Cancel = read current values only.');
-                        try {
-                          const r = await api.post(`/api/printers/${p.id}/detect`, { calibrate: cal });
-                          toast(`Detected ${r.label_w_mm ?? '?'}×${r.label_h_mm ?? '?'}mm @ ${r.dpi}dpi`);
-                          refetchPrinters();
-                        } catch (e) {
-                          toast(`Detect failed: ${(e as Error).message}`);
-                        }
-                      }}
-                    >
-                      Size?
-                    </button>
-                  )}
+                  <IconBtn
+                    icon="pencil"
+                    className="btn-small"
+                    label={`Edit ${p.name}`}
+                    onClick={() => {
+                      const open = editId === p.id;
+                      setEditId(open ? null : p.id);
+                      if (!open) {
+                        setEditForm({
+                          name: p.name, type: p.type, host: p.host ?? '', port: String(p.port ?? 9100),
+                          queue: p.queue ?? '', dpi: String(p.dpi ?? 203),
+                          label_w_mm: String(p.label_w_mm ?? 57), label_h_mm: String(p.label_h_mm ?? 32),
+                          media: p.media_type === 'sheet' ? 'sheet' : 'label',
+                        });
+                        setEditSheet(
+                          p.sheet?.preset || p.sheet?.custom
+                            ? { preset: p.sheet?.custom ? 'custom' : p.sheet!.preset!, custom: p.sheet?.custom ? Object.fromEntries(Object.entries(p.sheet.custom).map(([k, v]) => [k, String(v)])) : {} }
+                            : EMPTY_SHEET,
+                        );
+                      }
+                    }}
+                  />
                   <IconBtn
                     icon="trash"
                     className="btn-small btn-ghost"
@@ -323,6 +349,86 @@ export function LabelsPage() {
               )}
             </span>
           </div>
+          {editId === p.id && (
+            <div className="printer-form">
+              <div className="row">
+                <input className="input" style={{ flex: 1 }} placeholder="Printer name"
+                  value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              {editForm.type === 'zpl' && (
+                <div className="row">
+                  <input className="input" style={{ flex: 1 }} placeholder="IP address"
+                    value={editForm.host} onChange={(e) => setEditForm({ ...editForm, host: e.target.value })} />
+                  <input className="input" style={{ width: 90 }} placeholder="9100"
+                    value={editForm.port} onChange={(e) => setEditForm({ ...editForm, port: e.target.value })} />
+                </div>
+              )}
+              {editForm.type === 'cups' && (
+                <>
+                  <div className="row">
+                    <input className="input" style={{ flex: 1 }} placeholder="Queue name"
+                      value={editForm.queue} onChange={(e) => setEditForm({ ...editForm, queue: e.target.value })} />
+                    <input className="input" style={{ flex: 1 }} placeholder="CUPS server (optional)"
+                      value={editForm.host} onChange={(e) => setEditForm({ ...editForm, host: e.target.value })} />
+                  </div>
+                  <div className="row">
+                    <label className="muted">Media</label>
+                    <select className="input" style={{ width: 'auto' }} value={editForm.media}
+                      onChange={(e) => setEditForm({ ...editForm, media: e.target.value })}>
+                      <option value="label">Single labels (label printer)</option>
+                      <option value="sheet">Sheet (laser / Avery-style)</option>
+                    </select>
+                  </div>
+                  {editForm.media === 'sheet' && (
+                    <SheetPicker value={editSheet} onChange={setEditSheet} presets={presets} />
+                  )}
+                </>
+              )}
+              {(editForm.type !== 'cups' || editForm.media === 'label') && (
+                <div className="row">
+                  <label className="muted">Label mm</label>
+                  <input className="input" style={{ width: 80 }} value={editForm.label_w_mm}
+                    onChange={(e) => setEditForm({ ...editForm, label_w_mm: e.target.value })} />
+                  <span className="muted">×</span>
+                  <input className="input" style={{ width: 80 }} value={editForm.label_h_mm}
+                    onChange={(e) => setEditForm({ ...editForm, label_h_mm: e.target.value })} />
+                  <input className="input" style={{ width: 80 }} value={editForm.dpi}
+                    onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })} placeholder="dpi" />
+                </div>
+              )}
+              <div className="row">
+                <button className="btn" onClick={async () => {
+                  try {
+                    await api.patch(`/api/printers/${p.id}`, {
+                      name: editForm.name, type: editForm.type,
+                      host: editForm.host || null,
+                      port: parseInt(editForm.port, 10) || 9100,
+                      queue: editForm.queue || null,
+                      dpi: parseInt(editForm.dpi, 10) || 203,
+                      label_w_mm: parseFloat(editForm.label_w_mm) || 57,
+                      label_h_mm: parseFloat(editForm.label_h_mm) || 32,
+                      media_type: editForm.type === 'cups' ? editForm.media : 'label',
+                      sheet: editForm.type === 'cups' && editForm.media === 'sheet' ? sheetChoice(editSheet) : null,
+                    });
+                    setEditId(null);
+                    refetchPrinters();
+                    toast('Printer saved');
+                  } catch (e) {
+                    toast(`Failed: ${(e as Error).message}`);
+                  }
+                }}>Save</button>
+                <button className="btn" onClick={() => testPrinter(p)}>Test</button>
+                {p.type === 'zpl' && (
+                  <>
+                    <button className="btn" onClick={() => probe(false, p)}>Read values</button>
+                    <button className="btn" onClick={() => probe(true, p)}
+                      title="Feeds ~1 label to measure the gap">Calibrate</button>
+                  </>
+                )}
+                <button className="btn" onClick={() => setEditId(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
           {p.id === 'pc' && editPc && (
             <div className="printer-form">
               <div className="row">
@@ -382,12 +488,19 @@ export function LabelsPage() {
               value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
           {form.type === 'zpl' && (
-            <div className="row">
-              <input className="input" style={{ flex: 1 }} placeholder="IP address"
-                value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
-              <input className="input" style={{ width: 90 }} placeholder="9100"
-                value={form.port} onChange={(e) => setForm({ ...form, port: e.target.value })} />
-            </div>
+            <>
+              <div className="row">
+                <input className="input" style={{ flex: 1 }} placeholder="IP address"
+                  value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
+                <input className="input" style={{ width: 90 }} placeholder="9100"
+                  value={form.port} onChange={(e) => setForm({ ...form, port: e.target.value })} />
+              </div>
+              <div className="row">
+                <button className="btn" disabled={!form.host} onClick={() => probe(false)}>Read values</button>
+                <button className="btn" disabled={!form.host} onClick={() => probe(true)}
+                  title="Feeds ~1 label to measure the gap">Calibrate</button>
+              </div>
+            </>
           )}
           {form.type === 'cups' && (
             <>
