@@ -301,20 +301,29 @@ export function PrintDialog({
   labels,
   printers,
   presets,
+  defaultId,
   onClose,
 }: {
   open: boolean;
   labels: { code: string; name: string | null; path: string | null; category: string | null }[];
   printers: any[];
   presets: any[];
+  defaultId?: string;
   onClose: () => void;
 }) {
   const { toast } = useApp();
   const [copies, setCopies] = useState('1');
   const [printerId, setPrinterId] = useState('pc');
   useEffect(() => {
-    if (open) setPrinterId((id) => (printers.some((p) => p.id === id) ? id : printers[0]?.id ?? 'pc'));
-  }, [open, printers]);
+    if (open)
+      setPrinterId((id) =>
+        printers.some((p) => p.id === id)
+          ? id
+          : defaultId && printers.some((p) => p.id === defaultId)
+            ? defaultId
+            : printers[0]?.id ?? 'pc',
+      );
+  }, [open, printers, defaultId]);
   if (!open || !labels.length) return null;
 
   const run = async () => {
@@ -339,6 +348,7 @@ export function PrintDialog({
       if (p.type === 'dymo') {
         const { dymoPrintLabels } = await import('../dymo');
         await dymoPrintLabels(p.name, repeated, window.location.origin);
+        api.post('/api/labels/mark-printed', { codes: repeated }).catch(() => {});
       } else {
         await api.post('/api/labels/print', { printer_id: p.id, codes: repeated });
       }

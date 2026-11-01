@@ -108,6 +108,25 @@ function printerBody(body: Record<string, any>) {
 }
 
 export async function printerRoutes(app: FastifyInstance) {
+  const defaultPrinterId = async () => {
+    const [row] = await db.select().from(settings).where(eq(settings.key, 'default_printer'));
+    return (row?.value as { id?: string } | null)?.id ?? PC_ID;
+  };
+
+  app.post('/api/printers/default', { preHandler: requireAdmin }, async (req, reply) => {
+    const body = parseBody(z.object({ id: z.string() }), req.body, reply);
+    if (!body) return;
+    if (body.id !== PC_ID) {
+      const [p] = await db.select().from(printers).where(eq(printers.id, body.id));
+      if (!p) return reply.notFound('printer not found');
+    }
+    await db
+      .insert(settings)
+      .values({ key: 'default_printer', value: { id: body.id } as any })
+      .onConflictDoUpdate({ target: settings.key, set: { value: { id: body.id } as any } });
+    return { ok: true, id: body.id };
+  });
+
   app.get('/api/printers', async () => ({
     printers: [
       await pcPrinter(),
@@ -221,8 +240,11 @@ export async function printerRoutes(app: FastifyInstance) {
       ),
     );
     try {
-      await printLabels(p, codes.filter((c) => existing.has(c)), originOf(req, await publicBaseUrl()));
-      return { ok: true, printed: codes.filter((c) => existing.has(c)).length };
+      const valid = codes.filter((c) => existing.has(c));
+      await printLabels(p, valid, originOf(req, await publicBaseUrl()));
+      if (valid.length)
+        await db.update(labels).set({ printedAt: new Date() }).where(inArray(labels.code, valid));
+      return { ok: true, printed: valid.length };
     } catch (e) {
       return reply.badRequest(`print failed: ${(e as Error).message}`);
     }

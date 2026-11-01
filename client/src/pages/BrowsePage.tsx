@@ -82,6 +82,7 @@ export function BrowsePage() {
         open={printDlg}
         onClose={() => { setPrintDlg(false); setSelecting(null); }}
         printers={printers}
+        defaultId={printerData?.default_id}
         presets={presets}
         labels={selectedCodes.map((code: string) => {
           const l: any = labelByCode.get(code);

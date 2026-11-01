@@ -22,6 +22,7 @@ export async function labelRoutes(app: FastifyInstance) {
         area_name: areas.name,
         area_tags: areas.tags,
         area_category: areas.category,
+        printed: labels.printedAt,
         created_at: labels.createdAt,
       })
       .from(labels)
@@ -81,6 +82,15 @@ export async function labelRoutes(app: FastifyInstance) {
   });
 
   // Attach a code to an existing bin (claim or reassign between bins).
+  // Browser paths (print page, dymo client-side) mark codes as printed.
+  app.post('/api/labels/mark-printed', async (req, reply) => {
+    const body = parseBody(z.object({ codes: z.array(z.string()).min(1).max(500) }), req.body, reply);
+    if (!body) return;
+    const codes = body.codes.map((c) => c.toUpperCase());
+    await db.update(labels).set({ printedAt: new Date() }).where(inArray(labels.code, codes));
+    return { ok: true };
+  });
+
   app.post('/api/labels/:code/assign', async (req, reply) => {
     const { code: raw } = req.params as { code: string };
     const code = raw.toUpperCase();

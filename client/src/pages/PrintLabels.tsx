@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { api } from '../api';
 import { Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import type { SheetSpec } from '../lib/sheets';
@@ -50,6 +51,8 @@ export function PrintLabels() {
 
   useEffect(() => {
     document.title = 'Stache labels';
+    if (sheet?.labels?.length)
+      api.post('/api/labels/mark-printed', { codes: sheet.labels.map((l) => l.code) }).catch(() => {});
     const origin = window.location.origin;
     let live = true;
     Promise.all(

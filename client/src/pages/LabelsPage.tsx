@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { api } from '../api';
 import { useApp } from '../context';
 import { dymoPrintLabels } from '../dymo';
-import { Icon, IconBtn } from '../components/Bits';
+import { Icon, IconBtn, PrintDialog } from '../components/Bits';
 import { resolveSheet, type SheetChoice, type SheetPreset } from '../lib/sheets';
 
 interface SheetLabel {
@@ -91,7 +91,9 @@ export function LabelsPage() {
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
-  const [customCount, setCustomCount] = useState('');
+  const [addN, setAddN] = useState('');
+  const [printDlg, setPrintDlg] = useState(false);
+  const [defaultId, setDefaultId] = useState('pc');
   const [form, setForm] = useState(EMPTY_FORM);
   const [progress, setProgress] = useState<string | null>(null);
   const [editPc, setEditPc] = useState(false);
@@ -117,6 +119,7 @@ export function LabelsPage() {
   const claimed = labels.filter((l: any) => l.area_id).length;
   const unclaimed = labels.filter((l: any) => !l.area_id);
   const sheetCodes = sheet.map((l) => l.code);
+  const printCodes = sel.size ? [...sel] : sheetCodes;
 
   const render = async (codes: string[]) => {
     const origin = window.location.origin;
@@ -232,6 +235,17 @@ export function LabelsPage() {
   // sessionStorage so that page can render it without the app shell.
 
   useEffect(() => {
+    if (printerData?.default_id) setDefaultId(printerData.default_id);
+  }, [printerData?.default_id]);
+
+  const defP = printers.find((p) => p.id === defaultId) ?? printers[0];
+  const defSpec = defP?.media_type === 'sheet' ? resolveSheet(defP.sheet ?? null, presets) : null;
+  const cap = defSpec && defSpec.cols && defSpec.rows ? defSpec.cols * defSpec.rows : 1;
+  useEffect(() => {
+    setAddN(String(cap));
+  }, [cap]);
+
+  useEffect(() => {
     const latest = labels.filter(
       (l: any) => l.batch === Math.max(...labels.map((x: any) => x.batch)),
     );
@@ -246,59 +260,6 @@ export function LabelsPage() {
         {labels.length} generated · {claimed} in use. QR codes point at{' '}
         <code>{window.location.origin}/l/…</code> - print from the address you'll scan against.
       </p>
-      <div className="row">
-        <button className="btn" disabled={busy} onClick={() => newBatch(12)}>+ 12</button>
-        <button className="btn" disabled={busy} onClick={() => newBatch(24)}>+ 24</button>
-        <button className="btn" disabled={busy} onClick={() => newBatch(30)}>+ 30</button>
-        <button className="btn" disabled={busy} onClick={() => newBatch(48)}>+ 48</button>
-        <input
-          className="input"
-          style={{ width: 72 }}
-          inputMode="numeric"
-          placeholder="n"
-          aria-label="Custom label count"
-          value={customCount}
-          onChange={(e) => setCustomCount(e.target.value)}
-          onKeyDown={(e) => {
-            const n = parseInt(customCount, 10);
-            if (e.key === 'Enter' && n > 0) { setCustomCount(''); newBatch(n); }
-          }}
-        />
-        <button
-          className="btn"
-          disabled={busy || !(parseInt(customCount, 10) > 0)}
-          onClick={() => { const n = parseInt(customCount, 10); setCustomCount(''); newBatch(n); }}
-        >
-          +
-        </button>
-        {sheet.length > 0 && (
-          <button className="btn has-icon" onClick={() => openPrint(sheetCodes)}>
-            <Icon name="printer" /> Print
-          </button>
-        )}
-      </div>
-      <div className="row">
-        {claimed > 0 && (
-          <button
-            className="btn btn-ghost"
-            onClick={() => render(labels.filter((l: any) => l.area_id).map((l: any) => l.code))}
-          >
-            Sheet of claimed labels
-          </button>
-        )}
-      </div>
-      {progress && <p className="muted">{progress}</p>}
-
-      {printers.length > 0 && sheet.length > 0 && (
-        <div className="row">
-          {printers.map((p) => (
-            <button key={p.id} className="btn" disabled={busy} onClick={() => printTo(p, sheetCodes)}>
-              → {p.name}
-            </button>
-          ))}
-        </div>
-      )}
-
       <h2>Printers</h2>
       {printers.map((p) => (
         <div key={p.id}>
@@ -454,10 +415,10 @@ export function LabelsPage() {
 
       {sheet.length > 0 && (
         <>
-          <h2>Sheet preview</h2>
+          <h2>Label preview</h2>
           <p className="muted">First label at true size - the print includes all {sheet.length}.</p>
           <div className="label-sheet avery">
-            {sheet.map((l) => {
+            {sheet.slice(0, 1).map((l) => {
               const name = nameFor(l.code);
               const path = pathFor(l.code);
               return (
@@ -494,6 +455,55 @@ export function LabelsPage() {
           </div>
         </>
       )}
+
+      <div className="row">
+        <label className="muted" htmlFor="default-printer">Default printer</label>
+        <select
+          id="default-printer"
+          className="input"
+          style={{ width: 'auto' }}
+          value={defaultId}
+          onChange={async (e) => {
+            setDefaultId(e.target.value);
+            await api.post('/api/printers/default', { id: e.target.value }).catch(() => {});
+          }}
+        >
+          {printers.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="row">
+        <input
+          className="input"
+          style={{ width: 72 }}
+          inputMode="numeric"
+          aria-label="Number of labels to add"
+          value={addN}
+          onChange={(e) => setAddN(e.target.value)}
+        />
+        <button
+          className="btn"
+          disabled={busy || !(parseInt(addN, 10) > 0)}
+          onClick={() => { const n = parseInt(addN, 10); newBatch(n); }}
+        >
+          Add {parseInt(addN, 10) > 0 ? addN : 'N'}
+        </button>
+        {printCodes.length > 0 && (
+          <button className="btn has-icon" onClick={() => setPrintDlg(true)}>
+            <Icon name="printer" /> Print {printCodes.length}
+          </button>
+        )}
+        {claimed > 0 && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => render(labels.filter((l: any) => l.area_id).map((l: any) => l.code))}
+          >
+            Claimed labels
+          </button>
+        )}
+      </div>
+      {progress && <p className="muted">{progress}</p>}
 
       <div className="row spread">
         <h2>Unclaimed labels</h2>
@@ -543,11 +553,27 @@ export function LabelsPage() {
               />
               <code>{l.code}</code>
             </span>
-            <span className="muted">unclaimed</span>
+            {l.printed ? <span className="pill">printed</span> : <span className="muted">unclaimed</span>}
           </div>
         ))}
         {unclaimed.length === 0 && <p className="muted">No unclaimed codes - every label is in use.</p>}
       </div>
+      <PrintDialog
+        open={printDlg}
+        onClose={() => {
+          setPrintDlg(false);
+          qc.invalidateQueries({ queryKey: ['labels'] });
+        }}
+        printers={printers}
+        presets={presets}
+        defaultId={defaultId}
+        labels={printCodes.map((code) => ({
+          code,
+          name: nameFor(code),
+          path: pathFor(code),
+          category: categoryFor(code),
+        }))}
+      />
     </div>
   );
 }

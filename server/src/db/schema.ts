@@ -15,6 +15,7 @@ export const labels = sqliteTable('labels', {
   code: text('code').primaryKey(),
   batch: integer('batch').notNull().default(1),
   areaId: text('area_id'),
+  printedAt: ts('printed_at'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 });
 

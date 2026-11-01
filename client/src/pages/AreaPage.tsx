@@ -376,6 +376,7 @@ export function AreaPage() {
         open={printDlg}
         onClose={() => setPrintDlg(false)}
         printers={printerData?.printers ?? []}
+        defaultId={printerData?.default_id}
         presets={templatesData?.templates ?? []}
         labels={[area.label_code ?? (data.label_codes ?? [])[0]].filter((c): c is string => !!c).map((code: string) => ({
           code,

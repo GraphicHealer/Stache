@@ -423,3 +423,5 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .dlg-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 70; padding: 16px; }
 .dlg { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 8px; }
 .dlg h2 { margin: 0; }
+
+.pill { font-size: 0.68rem; border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; color: var(--muted); }
