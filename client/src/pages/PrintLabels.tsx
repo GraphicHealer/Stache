@@ -121,8 +121,8 @@ export function PrintLabels() {
             <div className="pblank" />
           </>
         )}
+        <img className="plogo" src="/logo-mono.svg" alt="" />
       </div>
-      <img className="plogo" src="/logo-mono.svg" alt="" />
     </div>
   );
 

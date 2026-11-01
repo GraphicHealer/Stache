@@ -486,8 +486,8 @@ export function LabelsPage() {
                         <div className="label-blank" />
                       </>
                     )}
+                    <img className="label-logo" src="/logo-mono.svg" alt="" />
                   </div>
-                  <img className="label-logo" src="/logo-mono.svg" alt="" />
                 </div>
               );
             })}
