@@ -161,9 +161,9 @@ function labelMetrics(w: number, h: number) {
   const s = Math.min(3, Math.max(1, Math.min(w, h) / 25.4));
   return {
     vertical,
-    qr: vertical ? Math.min(w * 0.55, h * 0.42) : Math.min(h * 0.82, w * 0.4),
+    qr: vertical ? Math.min(w * 0.72, h * 0.42) : Math.min(h * 0.82, w * 0.4),
     code: 2.1 * s, path: 2.3 * s, name: 3.4 * s, cat: 2.3 * s,
-    logo: vertical ? Math.min(h * 0.16, w * 0.55, 32) : Math.min(10 * s, h * 0.25, w * 0.3),
+    logo: vertical ? Math.min(h * 0.15, w * 0.45, 30) : Math.min(10 * s, h * 0.25, w * 0.3),
   };
 }
 
@@ -188,7 +188,7 @@ async function cellSvg(
   const textW = spec.cellW - (m.vertical ? 6 : m.qr + 6);
   let text = '';
   if (info.name) {
-    let y = m.vertical ? px(m.qr + 6) : px(5);
+    let y = m.vertical ? px(m.logo + 6) : px(5);
     const anchor = m.vertical ? 'middle' : undefined;
     const tx = m.vertical ? Math.round(cw / 2) : textX;
     if (info.path) {
@@ -199,8 +199,8 @@ async function cellSvg(
     if (info.category)
       text += `<text x="${tx}" y="${y + px(m.name + 1.7)}" font-family="sans-serif" font-size="${font(m.cat)}" fill="#333"${anchor ? ` text-anchor="${anchor}"` : ''}>${clip(info.category, m.cat, textW - m.logo - 2)}</text>`;
   } else {
-    // Vertical blanks: lines sit between QR and the centered logo, full width.
-    const lines = (m.vertical ? [0.5, 0.65, 0.8] : [0.36, 0.62, 0.88]).map((f) =>
+    // Vertical blanks: lines fill the middle band between logo and QR.
+    const lines = (m.vertical ? [0.28, 0.38, 0.48] : [0.36, 0.62, 0.88]).map((f) =>
       Math.round(ch * f),
     );
     text = lines
@@ -214,12 +214,12 @@ async function cellSvg(
   let logo = '';
   try {
     const logoBuf = await fs.readFile(path.join(process.cwd(), 'client', 'dist', 'logo-mono.svg'));
-    logo = `<image href="data:image/svg+xml;base64,${logoBuf.toString('base64')}" x="${m.vertical ? Math.round((cw - logoSide) / 2) : cw - logoSide - px(0.8)}" y="${ch - logoSide - px(0.5)}" width="${logoSide}" height="${logoSide}"/>`;
+    logo = `<image href="data:image/svg+xml;base64,${logoBuf.toString('base64')}" x="${m.vertical ? Math.round((cw - logoSide) / 2) : cw - logoSide - px(0.8)}" y="${m.vertical ? px(1) : ch - logoSide - px(0.5)}" width="${logoSide}" height="${logoSide}"/>`;
   } catch {
     // logo asset missing - cells still print fine without it
   }
   const qrX = m.vertical ? Math.round((cw - qrSide) / 2) : 0;
-  const qrY = m.vertical ? px(2) : Math.round((ch - qrSide) / 2) - px(2);
+  const qrY = m.vertical ? ch - qrSide - px(m.code + 2.5) : Math.round((ch - qrSide) / 2) - px(2);
   const codeX = m.vertical ? Math.round(cw / 2) : Math.round(qrSide / 2);
   return Buffer.from(
     `<svg width="${cw}" height="${ch}" xmlns="http://www.w3.org/2000/svg">

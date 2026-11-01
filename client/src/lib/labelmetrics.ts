@@ -20,13 +20,13 @@ export function labelMetrics(wMm: number, hMm: number): LabelMetrics {
   const s = Math.min(3, Math.max(1, Math.min(wMm, hMm) / 25.4));
   return {
     vertical,
-    qr: vertical ? Math.min(wMm * 0.55, hMm * 0.42) : Math.min(hMm * 0.82, wMm * 0.4),
+    qr: vertical ? Math.min(wMm * 0.72, hMm * 0.42) : Math.min(hMm * 0.82, wMm * 0.4),
     code: 2.1 * s,
     path: 2.3 * s,
     name: 3.4 * s,
     category: 2.3 * s,
     logo: vertical
-      ? Math.min(hMm * 0.16, wMm * 0.55, 32)
+      ? Math.min(hMm * 0.15, wMm * 0.45, 30)
       : Math.min(10 * s, hMm * 0.25, wMm * 0.3),
     logoCenter: vertical,
     padding: Math.min(3 * s, 8),
