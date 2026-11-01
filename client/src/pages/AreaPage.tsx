@@ -7,6 +7,7 @@ import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
 import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu } from '../components/Bits';
+import { resolveSheet } from '../lib/sheets';
 
 export function AreaPage() {
   const { id = '' } = useParams();
@@ -51,6 +52,42 @@ export function AreaPage() {
   if (error || !data) return <div className="page"><p className="muted">Area not found.</p></div>;
 
   const { area, breadcrumb, subareas, items, photos } = data;
+
+  const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
+  const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
+
+  // Print this bin's label(s) - N copies, bin info pre-filled.
+  const printQr = () => {
+    const codes: string[] = data.label_codes ?? (area.label_code ? [area.label_code] : []);
+    if (!codes.length) return toast('No labels on this bin');
+    const copies = parseInt(window.prompt('How many copies of each label?', '1') ?? '', 10) || 0;
+    if (copies < 1) return;
+    const pc = (printerData?.printers ?? []).find((p: any) => p.id === 'pc');
+    const spec = pc?.media_type === 'sheet' ? resolveSheet(pc.sheet, templatesData?.templates ?? []) : null;
+    const parent = (breadcrumb ?? []).slice(0, -1).map((c: any) => c.name ?? 'unnamed').join(' / ') || null;
+    const labels: { code: string; name: string | null; path: string | null; category: string | null }[] = [];
+    for (const code of codes)
+      for (let i = 0; i < copies; i++)
+        labels.push({ code, name: area.name ?? null, path: parent, category: area.category ?? null });
+    sessionStorage.setItem('stache:print-sheet', JSON.stringify({
+      mode: pc?.media_type === 'label' ? 'label' : 'sheet',
+      spec,
+      labelW: pc?.label_w_mm ?? 57,
+      labelH: pc?.label_h_mm ?? 32,
+      labels,
+    }));
+    window.open('/print/labels', '_blank');
+  };
+
+  const suggestTags = async () => {
+    const r = await api.get(`/api/areas/${id}/suggest-tags`).catch(() => null);
+    const sug: string[] = r?.suggestions ?? [];
+    if (!sug.length) return toast('No suggestions from this bin\'s items');
+    const merged = [...new Set([...(area.tags ?? []), ...sug])];
+    const res = await api.patch(`/api/areas/${id}`, { tags: merged });
+    toast(`Added: ${sug.join(', ')}`, res.event_ids?.[0]);
+    refresh();
+  };
 
   const resolveLabelArea = async (code: string): Promise<string | null> => {
     const r = await api.get(`/api/labels/${code}`).catch(() => null);
@@ -195,6 +232,7 @@ export function AreaPage() {
         <KebabMenu
           label="Area actions"
           items={[
+            { label: 'Print QR code', icon: 'printer', onSelect: printQr },
             { label: 'Move area…', onSelect: () => setScanFor('move-area') },
             { label: 'Merge into…', onSelect: () => setScanFor('merge') },
             { label: '+ Sub-area', onSelect: addSubarea },
@@ -219,6 +257,23 @@ export function AreaPage() {
             if (JSON.stringify(tags) === JSON.stringify(area.tags ?? [])) return;
             const r = await api.patch(`/api/areas/${id}`, { tags });
             toast('Tags saved', r.event_ids?.[0]);
+            refresh();
+          }}
+        />
+        <button className="btn btn-small btn-ghost" onClick={suggestTags} title="Suggest tags from items in this bin">Suggest</button>
+      </label>
+      <label className="row" style={{ gap: 8 }}>
+        <span className="muted">Category</span>
+        <input
+          className="input"
+          style={{ flex: 1 }}
+          placeholder="prints on the label, e.g. Christmas"
+          defaultValue={area.category ?? ''}
+          onBlur={async (e) => {
+            const v = e.target.value.trim() || null;
+            if (v === (area.category ?? null)) return;
+            const r = await api.patch(`/api/areas/${id}`, { category: v });
+            toast('Category saved', r.event_ids?.[0]);
             refresh();
           }}
         />

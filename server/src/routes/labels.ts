@@ -21,6 +21,7 @@ export async function labelRoutes(app: FastifyInstance) {
         area_id: labels.areaId,
         area_name: areas.name,
         area_tags: areas.tags,
+        area_category: areas.category,
         created_at: labels.createdAt,
       })
       .from(labels)

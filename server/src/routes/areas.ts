@@ -22,6 +22,7 @@ const CreateAreaSchema = z.object({
   name: z.string().max(200).nullish(),
   parent_id: z.string().nullish(),
   label_code: z.string().regex(LABEL_CODE_RE, 'invalid label code').nullish(),
+  category: z.string().max(100).nullish(),
 }).passthrough();
 
 const PatchAreaSchema = z.object({
@@ -29,6 +30,7 @@ const PatchAreaSchema = z.object({
   parent_id: z.string().nullish(),
   cover_photo_id: z.string().nullish(),
   tags: z.array(z.string().max(50)).max(50).nullable().optional(),
+  category: z.string().max(100).nullish(),
 }).passthrough();
 
 const StocktakeSchema = z.object({
@@ -54,6 +56,7 @@ function areaJson(
     archived_at: a.archivedAt,
     last_audit_at: a.lastAuditAt,
     tags: a.tags ?? [],
+    category: a.category,
     ...(itemCount !== undefined ? { item_count: itemCount } : {}),
   };
 }
@@ -103,7 +106,7 @@ export async function areaRoutes(app: FastifyInstance) {
       created = db.transaction((tx) => {
         const [a] = tx
           .insert(areas)
-          .values({ name: body.name ?? null, parentId: body.parent_id ?? null, labelCode })
+          .values({ name: body.name ?? null, parentId: body.parent_id ?? null, labelCode, category: body.category ?? null })
           .returning()
           .all();
         if (labelCode) {
@@ -243,6 +246,9 @@ export async function areaRoutes(app: FastifyInstance) {
     if (JSON.stringify(nextTags) !== JSON.stringify(prevTags)) {
       evs.push({ type: 'area.updated', payload: { prev: { tags: prevTags }, next: { tags: nextTags } } });
     }
+    if (body.category !== undefined && body.category !== area.category) {
+      evs.push({ type: 'area.updated', payload: { prev: { category: area.category }, next: { category: body.category } } });
+    }
 
     const { updated, eventIds } = db.transaction((tx) => {
       const ids = evs.map((e) => recordEventTx(tx, e.type, 'area', id, e.payload, req.user?.id).id);
@@ -253,6 +259,7 @@ export async function areaRoutes(app: FastifyInstance) {
           parentId: body.parent_id === undefined ? area.parentId : body.parent_id,
           coverPhotoId: body.cover_photo_id === undefined ? area.coverPhotoId : body.cover_photo_id,
           tags: body.tags === undefined ? area.tags : nextTags,
+          category: body.category === undefined ? area.category : body.category,
         })
         .where(eq(areas.id, id))
         .returning()
@@ -260,6 +267,33 @@ export async function areaRoutes(app: FastifyInstance) {
       return { updated: u, eventIds: ids };
     });
     return { area: areaJson(updated), event_ids: eventIds };
+  });
+
+  // Suggest tags for the bin: most common ai_tags + user tags on its items,
+  // minus what's already on the area. Local-AI assisted, no remote calls.
+  app.get('/api/areas/:id/suggest-tags', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    const ids = await descendantAreaIds(id);
+    const rows = await db
+      .select({ aiTags: items.aiTags, tags: items.tags })
+      .from(items)
+      .where(and(inArray(items.areaId, ids), isNull(items.hiddenAt)));
+    const have = new Set(((area.tags as string[] | null) ?? []).map((t) => t.toLowerCase()));
+    const freq = new Map<string, number>();
+    const bump = (t: unknown) => {
+      if (typeof t === 'string' && t.trim() && !have.has(t.toLowerCase())) {
+        const k = t.trim().toLowerCase();
+        freq.set(k, (freq.get(k) ?? 0) + 1);
+      }
+    };
+    for (const r of rows) {
+      for (const t of (r.aiTags as string[] | null) ?? []) bump(t);
+      for (const t of (r.tags as string[] | null) ?? []) bump(t);
+    }
+    const suggestions = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+    return { suggestions };
   });
 
   // Merge this area into another: items, sub-areas, and label codes all

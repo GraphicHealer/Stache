@@ -118,13 +118,13 @@ interface CellInfo {
   code: string;
   name: string | null;
   path: string | null;
-  tags: string[];
+  category: string | null;
 }
 
 /** code -> bin details for sheet cells (same lookup the labels API uses). */
 async function cellInfos(codes: string[]): Promise<Map<string, CellInfo>> {
   const rows = await db
-    .select({ code: labels.code, areaId: labels.areaId, name: areas.name, tags: areas.tags })
+    .select({ code: labels.code, areaId: labels.areaId, name: areas.name, category: areas.category })
     .from(labels)
     .leftJoin(areas, eq(labels.areaId, areas.id))
     .where(inArray(labels.code, codes));
@@ -147,7 +147,7 @@ async function cellInfos(codes: string[]): Promise<Map<string, CellInfo>> {
     const path = r?.areaId ? pathFor(r.areaId) : '';
     const name = r?.name ?? null;
     const parent = name && path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : null;
-    out.set(c, { code: c, name, path: parent || null, tags: (r?.tags as string[] | null) ?? [] });
+    out.set(c, { code: c, name, path: parent || null, category: r?.category ?? null });
   }
   return out;
 }
@@ -182,9 +182,9 @@ async function cellSvg(
       text += `<text x="${textX}" y="${y}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.path, 2.3, fullW)}</text>`;
       y += px(4);
     }
-    text += `<text x="${textX}" y="${y + px(2)}" font-family="sans-serif" font-size="${font(3.4)}" font-weight="bold">${clip(info.name, 3.4, info.tags.length ? fullW : lastW)}</text>`;
-    if (info.tags.length)
-      text += `<text x="${textX}" y="${y + px(5)}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.tags.join(', '), 2.3, lastW)}</text>`;
+    text += `<text x="${textX}" y="${y + px(2)}" font-family="sans-serif" font-size="${font(3.4)}" font-weight="bold">${clip(info.name, 3.4, info.category ? fullW : lastW)}</text>`;
+    if (info.category)
+      text += `<text x="${textX}" y="${y + px(5)}" font-family="sans-serif" font-size="${font(2.3)}" fill="#333">${clip(info.category, 2.3, lastW)}</text>`;
   } else {
     const lines = [0.36, 0.62, 0.88].map((f) => Math.round(ch * f));
     text = lines

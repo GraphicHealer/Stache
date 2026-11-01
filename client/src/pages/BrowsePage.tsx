@@ -44,7 +44,7 @@ export function BrowsePage() {
           labelH: p.label_h_mm ?? 32,
           labels: selectedCodes.map((code: string) => {
             const l: any = labelByCode.get(code);
-            return { code, name: l?.area_name ?? null, path: l?.area_path ?? null, tags: l?.area_tags ?? [] };
+            return { code, name: l?.area_name ?? null, path: l?.area_path ?? null, category: l?.area_category ?? null };
           }),
         }),
       );

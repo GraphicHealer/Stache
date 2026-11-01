@@ -18,6 +18,7 @@ export function LabelPage() {
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('');
   const [existingId, setExistingId] = useState('');
+  const [category, setCategory] = useState('');
   const [busy, setBusy] = useState(false);
   const photoUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : ''), [photo]);
   useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, [photoUrl]);
@@ -70,6 +71,7 @@ export function LabelPage() {
       const { area } = await api.post('/api/areas', {
         label_code: code,
         name: name || null,
+        category: category || null,
         parent_id: parentId || null,
       });
       if (photo) {
@@ -106,6 +108,18 @@ export function LabelPage() {
         placeholder="Name it? (optional)"
         value={name}
         onChange={(e) => setName(e.target.value)}
+      />
+      <input
+        className="input"
+        placeholder="Category? (prints on the label, optional)"
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+      />
+      <input
+        className="input"
+        placeholder="Category? (prints on the label)"
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
       />
       {parentOptions.length > 0 && (
         <>

@@ -293,6 +293,7 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
       if ('name' in prev) set.name = prev.name;
       if ('cover_photo_id' in prev) set.coverPhotoId = prev.cover_photo_id;
       if ('tags' in prev) set.tags = prev.tags;
+      if ('category' in prev) set.category = prev.category;
       if (Object.keys(set).length)
         await db.update(areas).set(set).where(eq(areas.id, entityId));
       break;

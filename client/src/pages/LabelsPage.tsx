@@ -180,7 +180,7 @@ export function LabelsPage() {
           code,
           name: nameFor(code),
           path: pathFor(code),
-          tags: tagsFor(code),
+          category: categoryFor(code),
         })),
       }),
     );
@@ -226,7 +226,7 @@ export function LabelsPage() {
   const labelFor = (code: string) => labels.find((l: any) => l.code === code);
   const nameFor = (code: string) => (labelFor(code)?.area_name as string | null) ?? null;
   const pathFor = (code: string) => (labelFor(code)?.area_path as string | null) ?? null;
-  const tagsFor = (code: string) => (labelFor(code)?.area_tags as string[] | null) ?? [];
+  const categoryFor = (code: string) => (labelFor(code)?.area_category as string | null) ?? null;
 
   // Printing happens on /print/labels - the sheet is handed over via
   // sessionStorage so that page can render it without the app shell.
@@ -475,8 +475,8 @@ export function LabelsPage() {
                           </div>
                         )}
                         <div className="label-name">{name}</div>
-                        {tagsFor(l.code).length > 0 && (
-                          <div className="label-tags">{tagsFor(l.code).join(', ')}</div>
+                        {categoryFor(l.code) && (
+                          <div className="label-tags">{categoryFor(l.code)}</div>
                         )}
                       </>
                     ) : (

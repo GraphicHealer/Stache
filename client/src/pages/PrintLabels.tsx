@@ -8,7 +8,7 @@ interface PrintLabel {
   code: string;
   name: string | null;
   path: string | null;
-  tags: string[];
+  category: string | null;
 }
 
 interface PrintSheet {
@@ -112,7 +112,7 @@ export function PrintLabels() {
           <>
             {parentPath(l.path, l.name) && <div className="ppath">{parentPath(l.path, l.name)}</div>}
             <div className="pname">{l.name}</div>
-            {l.tags?.length > 0 && <div className="ptags">{l.tags.join(', ')}</div>}
+            {l.category && <div className="ptags">{l.category}</div>}
           </>
         ) : (
           <>
