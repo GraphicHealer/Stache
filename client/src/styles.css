@@ -436,3 +436,11 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .pcell.vertical .pinfo, .label-cell.vertical .label-info { text-align: center; align-items: center; }
 .pcell.vertical .plogo, .label-cell.vertical .label-logo { position: absolute; left: 50%; transform: translateX(-50%); bottom: 1.5mm; }
 .pcell.vertical .pblank, .label-cell.vertical .label-blank { width: 86%; margin: 0 7%; }
+
+/* Vertical cells: kill the grid layout outright - plain column flow. */
+.pcell.vertical .pinfo,
+.label-cell.vertical .label-info { display: flex !important; flex-direction: column; align-items: stretch; gap: 2mm; width: 100%; padding: 0; }
+.pcell.vertical .pinfo > *,
+.label-cell.vertical .label-info > * { grid-column: auto !important; grid-row: auto !important; }
+.pcell.vertical .pinfo > :last-child,
+.label-cell.vertical .label-info > :last-child { padding-right: 0 !important; }
