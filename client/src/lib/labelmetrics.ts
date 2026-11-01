@@ -8,6 +8,8 @@ export interface LabelMetrics {
   name: number;
   category: number;
   logo: number;
+  /** Vertical labels get a bigger logo, centered at the bottom. */
+  logoCenter: boolean;
   padding: number;
 }
 
@@ -23,7 +25,10 @@ export function labelMetrics(wMm: number, hMm: number): LabelMetrics {
     path: 2.3 * s,
     name: 3.4 * s,
     category: 2.3 * s,
-    logo: Math.min(10 * s, hMm * 0.25, wMm * 0.3),
+    logo: vertical
+      ? Math.min(hMm * 0.16, wMm * 0.55, 32)
+      : Math.min(10 * s, hMm * 0.25, wMm * 0.3),
+    logoCenter: vertical,
     padding: Math.min(3 * s, 8),
   };
 }

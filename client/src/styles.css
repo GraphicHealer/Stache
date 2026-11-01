@@ -431,6 +431,8 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .model-banner-bar > div { height: 100%; background: var(--accent, #d9a441); transition: width 0.5s; min-width: 6px; }
 @media (min-width: 720px) { .model-banner { bottom: 20px; } }
 
-/* Tall labels: QR stacked over centered text. */
-.pcell.vertical, .label-cell.vertical { flex-direction: column; align-items: center; }
+/* Tall labels: QR stacked over centered text, big centered logo. */
+.pcell.vertical, .label-cell.vertical { flex-direction: column; align-items: center; position: relative; }
 .pcell.vertical .pinfo, .label-cell.vertical .label-info { text-align: center; align-items: center; }
+.pcell.vertical .plogo, .label-cell.vertical .label-logo { position: absolute; left: 50%; transform: translateX(-50%); bottom: 1.5mm; }
+.pcell.vertical .pblank, .label-cell.vertical .label-blank { width: 86%; margin: 0 7%; }

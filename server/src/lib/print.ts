@@ -163,7 +163,7 @@ function labelMetrics(w: number, h: number) {
     vertical,
     qr: vertical ? Math.min(w * 0.55, h * 0.42) : Math.min(h * 0.82, w * 0.4),
     code: 2.1 * s, path: 2.3 * s, name: 3.4 * s, cat: 2.3 * s,
-    logo: Math.min(10 * s, h * 0.25, w * 0.3),
+    logo: vertical ? Math.min(h * 0.16, w * 0.55, 32) : Math.min(10 * s, h * 0.25, w * 0.3),
   };
 }
 
@@ -199,11 +199,14 @@ async function cellSvg(
     if (info.category)
       text += `<text x="${tx}" y="${y + px(m.name + 1.7)}" font-family="sans-serif" font-size="${font(m.cat)}" fill="#333"${anchor ? ` text-anchor="${anchor}"` : ''}>${clip(info.category, m.cat, textW - m.logo - 2)}</text>`;
   } else {
-    const lines = [0.36, 0.62, 0.88].map((f) => Math.round(ch * f));
+    // Vertical blanks: lines sit between QR and the centered logo, full width.
+    const lines = (m.vertical ? [0.5, 0.65, 0.8] : [0.36, 0.62, 0.88]).map((f) =>
+      Math.round(ch * f),
+    );
     text = lines
       .map(
         (y, i) =>
-          `<line x1="${m.vertical ? px(4) : textX}" y1="${y}" x2="${cw - px(i === 2 ? m.logo + 1 : 4)}" y2="${y}" stroke="#000" stroke-width="${Math.max(1, px(0.4))}" />`,
+          `<line x1="${m.vertical ? px(4) : textX}" y1="${y}" x2="${cw - px(m.vertical ? 4 : i === 2 ? m.logo + 1 : 4)}" y2="${y}" stroke="#000" stroke-width="${Math.max(1, px(0.4))}" />`,
       )
       .join('');
   }
@@ -211,7 +214,7 @@ async function cellSvg(
   let logo = '';
   try {
     const logoBuf = await fs.readFile(path.join(process.cwd(), 'client', 'dist', 'logo-mono.svg'));
-    logo = `<image href="data:image/svg+xml;base64,${logoBuf.toString('base64')}" x="${cw - logoSide - px(0.8)}" y="${ch - logoSide - px(0.5)}" width="${logoSide}" height="${logoSide}"/>`;
+    logo = `<image href="data:image/svg+xml;base64,${logoBuf.toString('base64')}" x="${m.vertical ? Math.round((cw - logoSide) / 2) : cw - logoSide - px(0.8)}" y="${ch - logoSide - px(0.5)}" width="${logoSide}" height="${logoSide}"/>`;
   } catch {
     // logo asset missing - cells still print fine without it
   }
