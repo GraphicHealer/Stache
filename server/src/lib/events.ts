@@ -261,12 +261,16 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
     case 'area.restored':
       await db.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, entityId));
       break;
-    case 'area.updated':
-      await db
-        .update(areas)
-        .set({ name: p.prev?.name, coverPhotoId: p.prev?.cover_photo_id })
-        .where(eq(areas.id, entityId));
+    case 'area.updated': {
+      const prev = (p.prev ?? {}) as Record<string, unknown>;
+      const set: Record<string, unknown> = {};
+      if ('name' in prev) set.name = prev.name;
+      if ('cover_photo_id' in prev) set.coverPhotoId = prev.cover_photo_id;
+      if ('tags' in prev) set.tags = prev.tags;
+      if (Object.keys(set).length)
+        await db.update(areas).set(set).where(eq(areas.id, entityId));
       break;
+    }
     default:
       return { ok: false, message: `cannot undo ${ev.type}` };
   }

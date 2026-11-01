@@ -28,6 +28,7 @@ const PatchAreaSchema = z.object({
   name: z.string().max(200).nullish(),
   parent_id: z.string().nullish(),
   cover_photo_id: z.string().nullish(),
+  tags: z.array(z.string().max(50)).max(50).nullable().optional(),
 }).passthrough();
 
 const StocktakeSchema = z.object({
@@ -52,6 +53,7 @@ function areaJson(
     created_at: a.createdAt,
     archived_at: a.archivedAt,
     last_audit_at: a.lastAuditAt,
+    tags: a.tags ?? [],
     ...(itemCount !== undefined ? { item_count: itemCount } : {}),
   };
 }
@@ -226,8 +228,13 @@ export async function areaRoutes(app: FastifyInstance) {
         payload: { from_parent_id: area.parentId, to_parent_id: body.parent_id },
       });
     }
+    const prevTags = (area.tags as string[] | null) ?? [];
+    const nextTags = body.tags === undefined ? prevTags : (body.tags ?? []);
     if (body.name !== undefined && body.name !== area.name) {
       evs.push({ type: 'area.updated', payload: { prev: { name: area.name } } });
+    }
+    if (JSON.stringify(nextTags) !== JSON.stringify(prevTags)) {
+      evs.push({ type: 'area.updated', payload: { prev: { tags: prevTags }, next: { tags: nextTags } } });
     }
 
     const { updated, eventIds } = db.transaction((tx) => {
@@ -238,6 +245,7 @@ export async function areaRoutes(app: FastifyInstance) {
           name: body.name === undefined ? area.name : body.name,
           parentId: body.parent_id === undefined ? area.parentId : body.parent_id,
           coverPhotoId: body.cover_photo_id === undefined ? area.coverPhotoId : body.cover_photo_id,
+          tags: body.tags === undefined ? area.tags : nextTags,
         })
         .where(eq(areas.id, id))
         .returning()

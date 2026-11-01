@@ -193,6 +193,23 @@ export function AreaPage() {
         />
       </div>
 
+      <label className="row" style={{ gap: 8 }}>
+        <span className="muted">Tags</span>
+        <input
+          className="input"
+          style={{ flex: 1 }}
+          placeholder="christmas, electronics, fragile…"
+          defaultValue={(area.tags ?? []).join(', ')}
+          onBlur={async (e) => {
+            const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean);
+            if (JSON.stringify(tags) === JSON.stringify(area.tags ?? [])) return;
+            const r = await api.patch(`/api/areas/${id}`, { tags });
+            toast('Tags saved', r.event_ids?.[0]);
+            refresh();
+          }}
+        />
+      </label>
+
       {subareas.length > 0 && (
         <>
           <h2>Inside</h2>

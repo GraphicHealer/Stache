@@ -127,9 +127,11 @@ export function LabelsPage() {
     }
   };
 
-  // Claimed labels print their area name; unclaimed get a write-in line.
-  const nameFor = (code: string) =>
-    (labels.find((l: any) => l.code === code)?.area_name as string | null) ?? null;
+  // Claimed labels print their area name + path; unclaimed get write-in lines.
+  const labelFor = (code: string) => labels.find((l: any) => l.code === code);
+  const nameFor = (code: string) => (labelFor(code)?.area_name as string | null) ?? null;
+  const pathFor = (code: string) => (labelFor(code)?.area_path as string | null) ?? null;
+  const tagsFor = (code: string) => (labelFor(code)?.area_tags as string[] | null) ?? [];
 
   // Printing happens on /print/labels - the sheet is handed over via
   // sessionStorage so that page can render it without the app shell.
@@ -161,7 +163,12 @@ export function LabelsPage() {
                 'stache:print-sheet',
                 JSON.stringify({
                   template,
-                  labels: sheet.map((l) => ({ code: l.code, name: nameFor(l.code) })),
+                  labels: sheet.map((l) => ({
+                    code: l.code,
+                    name: nameFor(l.code),
+                    path: pathFor(l.code),
+                    tags: tagsFor(l.code),
+                  })),
                 }),
               );
               window.open('/print/labels', '_blank');
@@ -275,15 +282,34 @@ export function LabelsPage() {
           <div className={`label-sheet${template === 'avery' ? ' avery' : ''}`}>
             {sheet.map((l) => {
               const name = nameFor(l.code);
+              const path = pathFor(l.code);
               return (
                 <div key={l.code} className="label-cell">
-                  <img className="label-qr" src={l.dataUrl} alt={l.code} />
+                  <div className="label-qrcol">
+                    <img className="label-qr" src={l.dataUrl} alt={l.code} />
+                    <span className="label-code">{l.code}</span>
+                  </div>
                   <div className="label-info">
-                    <div className="label-head">
-                      <img className="label-logo" src="/logo-mono.svg" alt="" />
-                      <span className="label-code">{l.code}</span>
-                    </div>
-                    {name ? <div className="label-name">{name}</div> : <div className="label-blank" />}
+                    <img className="label-logo" src="/logo-mono.svg" alt="" />
+                    {name ? (
+                      <>
+                        {path && path !== name && (
+                          <div className="label-path">
+                            {path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path}
+                          </div>
+                        )}
+                        <div className="label-name">{name}</div>
+                        {tagsFor(l.code).length > 0 && (
+                          <div className="label-tags">{tagsFor(l.code).join(', ')}</div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="label-blank" />
+                        <div className="label-blank" />
+                        <div className="label-blank" />
+                      </>
+                    )}
                   </div>
                 </div>
               );

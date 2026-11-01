@@ -5,6 +5,8 @@ import QRCode from 'qrcode';
 interface PrintLabel {
   code: string;
   name: string | null;
+  path: string | null;
+  tags: string[];
 }
 
 interface PrintSheet {
@@ -13,6 +15,13 @@ interface PrintSheet {
 }
 
 const AVERY_PER_PAGE = 30;
+
+/** "Garage / Shelf 2" -> "Garage" - the leaf is already shown as the name. */
+const parentPath = (path: string | null, name: string | null) => {
+  if (!path || !name) return null;
+  const suffix = ` / ${name}`;
+  return path.endsWith(suffix) ? path.slice(0, -suffix.length) : null;
+};
 
 /**
  * Bare label-sheet print view - no app chrome. Opened from the Labels page
@@ -75,15 +84,27 @@ export function PrintLabels() {
 
   const cell = (l: PrintLabel) => (
     <div key={l.code} className="pcell">
-      {qrs[l.code] && (
-        <img className="pqr" src={qrs[l.code]} alt="" onLoad={() => setLoaded((n) => n + 1)} />
-      )}
+      <div className="pqrcol">
+        {qrs[l.code] && (
+          <img className="pqr" src={qrs[l.code]} alt="" onLoad={() => setLoaded((n) => n + 1)} />
+        )}
+        <span className="pcode">{l.code}</span>
+      </div>
       <div className="pinfo">
-        <div className="phead">
-          <img className="plogo" src="/logo-mono.svg" alt="" />
-          <span className="pcode">{l.code}</span>
-        </div>
-        {l.name ? <div className="pname">{l.name}</div> : <div className="pblank" />}
+        <img className="plogo" src="/logo-mono.svg" alt="" />
+        {l.name ? (
+          <>
+            {parentPath(l.path, l.name) && <div className="ppath">{parentPath(l.path, l.name)}</div>}
+            <div className="pname">{l.name}</div>
+            {l.tags?.length > 0 && <div className="ptags">{l.tags.join(', ')}</div>}
+          </>
+        ) : (
+          <>
+            <div className="pblank" />
+            <div className="pblank" />
+            <div className="pblank" />
+          </>
+        )}
       </div>
     </div>
   );

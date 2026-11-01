@@ -189,13 +189,15 @@ textarea.input { resize: vertical; }
 /* Labels */
 .label-sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
 .label-cell { background: #fff; color: #000; border-radius: 8px; padding: 8px; display: flex; align-items: center; gap: 8px; }
-.label-qr { width: 34%; max-width: 100px; display: block; }
+.label-qrcol { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; width: 34%; max-width: 100px; }
+.label-qr { width: 100%; display: block; }
 .label-info { flex: 1; min-width: 0; }
-.label-head { display: flex; align-items: center; gap: 4px; }
-.label-logo { width: 20px; height: 20px; flex: none; }
-.label-code { font-family: ui-monospace, monospace; font-size: 0.7rem; font-weight: 700; }
-.label-name { font-weight: 700; font-size: 0.8rem; margin-top: 4px; overflow-wrap: anywhere; }
-.label-blank { border-bottom: 2px solid #000; height: 1.1em; margin: 6px 4mm 2px 0; }
+.label-logo { width: 20px; height: 20px; flex: none; margin-bottom: 4px; }
+.label-code { font-family: ui-monospace, monospace; font-size: 0.55rem; color: #555; }
+.label-path { font-size: 0.6rem; color: #555; overflow-wrap: anywhere; }
+.label-tags { font-size: 0.6rem; color: #555; margin-top: 1px; overflow-wrap: anywhere; }
+.label-name { font-weight: 700; font-size: 0.8rem; overflow-wrap: anywhere; }
+.label-blank { border-bottom: 2px solid #000; height: 1em; margin: 8px 4mm 0 0; }
 /* Avery cells render at true physical size on screen too - real preview. */
 .label-sheet.avery { grid-template-columns: repeat(auto-fill, 66.675mm); gap: 3.175mm; }
 .label-sheet.avery .label-cell { height: 25.4mm; padding: 2mm; overflow: hidden; border: 1px dashed var(--border); }
@@ -398,13 +400,15 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .grid-page { width: 215.9mm; min-height: 279.4mm; padding: 10mm; }
 .ggrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
 .pcell { display: flex; align-items: center; gap: 1.5mm; height: 25.4mm; padding: 1.5mm; overflow: hidden; }
-.pqr { width: 21mm; flex: none; }
+.pqrcol { display: flex; flex-direction: column; align-items: center; gap: 0.4mm; flex: none; }
+.pqr { width: 19mm; display: block; }
+.pcode { font-family: ui-monospace, monospace; font-size: 2.1mm; color: #444; }
 .pinfo { flex: 1; min-width: 0; }
-.phead { display: flex; align-items: center; gap: 1.5mm; }
-.plogo { width: 6mm; height: 6mm; flex: none; }
-.pcode { font-family: ui-monospace, monospace; font-size: 3.4mm; font-weight: 700; }
-.pname { font-weight: 700; font-size: 3.4mm; margin-top: 1mm; overflow-wrap: anywhere; }
-.pblank { border-bottom: 0.6mm solid #000; height: 3mm; margin: 2mm 3mm 1mm 0; }
+.plogo { width: 5mm; height: 5mm; margin-bottom: 1mm; }
+.ppath { font-size: 2.3mm; color: #333; margin-bottom: 0.4mm; overflow-wrap: anywhere; }
+.ptags { font-size: 2.3mm; color: #333; margin-top: 0.4mm; overflow-wrap: anywhere; }
+.pname { font-weight: 700; font-size: 3.4mm; overflow-wrap: anywhere; }
+.pblank { border-bottom: 0.5mm solid #000; height: 2.8mm; margin: 2mm 3mm 0 0; }
 .ggrid .pcell { height: auto; min-height: 30mm; border: 1px dashed #999; }
 .ggrid .pqr { width: 24mm; }
 

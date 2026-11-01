@@ -19,12 +19,30 @@ export async function labelRoutes(app: FastifyInstance) {
         batch: labels.batch,
         area_id: labels.areaId,
         area_name: areas.name,
+        area_tags: areas.tags,
         created_at: labels.createdAt,
       })
       .from(labels)
       .leftJoin(areas, eq(labels.areaId, areas.id))
       .orderBy(asc(labels.code));
-    return { labels: rows };
+
+    // Breadcrumb path for claimed labels - built in JS from one area fetch.
+    const allAreas = await db
+      .select({ id: areas.id, parentId: areas.parentId, name: areas.name })
+      .from(areas);
+    const byId = new Map(allAreas.map((a) => [a.id, a]));
+    const pathFor = (id: string | null) => {
+      const parts: string[] = [];
+      for (let cur = id; cur && byId.has(cur) && parts.length < 32; ) {
+        const a = byId.get(cur)!;
+        parts.unshift(a.name ?? 'unnamed');
+        cur = a.parentId;
+      }
+      return parts.length ? parts.join(' / ') : null;
+    };
+    return {
+      labels: rows.map((r) => ({ ...r, area_path: pathFor(r.area_id) })),
+    };
   });
 
   // Pre-print a batch of labels - random codes, unclaimed until first scan.

@@ -28,6 +28,8 @@ export const areas = sqliteTable('areas', {
   archivedAt: ts('archived_at'),
   // Last completed stocktake - "audited ... ago" on the area page.
   lastAuditAt: ts('last_audit_at'),
+  // User-editable tags (JSON string[]), printed under the name on labels.
+  tags: text('tags', { mode: 'json' }),
 }, (t) => [index('areas_parent_idx').on(t.parentId)]);
 
 export const items = sqliteTable('items', {
