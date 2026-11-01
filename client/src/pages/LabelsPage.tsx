@@ -34,6 +34,7 @@ export function LabelsPage() {
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [customCount, setCustomCount] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [progress, setProgress] = useState<string | null>(null);
 
@@ -154,7 +155,28 @@ export function LabelsPage() {
       <div className="row">
         <button className="btn" disabled={busy} onClick={() => newBatch(12)}>+ 12</button>
         <button className="btn" disabled={busy} onClick={() => newBatch(24)}>+ 24</button>
+        <button className="btn" disabled={busy} onClick={() => newBatch(30)}>+ 30</button>
         <button className="btn" disabled={busy} onClick={() => newBatch(48)}>+ 48</button>
+        <input
+          className="input"
+          style={{ width: 72 }}
+          inputMode="numeric"
+          placeholder="n"
+          aria-label="Custom label count"
+          value={customCount}
+          onChange={(e) => setCustomCount(e.target.value)}
+          onKeyDown={(e) => {
+            const n = parseInt(customCount, 10);
+            if (e.key === 'Enter' && n > 0) { setCustomCount(''); newBatch(n); }
+          }}
+        />
+        <button
+          className="btn"
+          disabled={busy || !(parseInt(customCount, 10) > 0)}
+          onClick={() => { const n = parseInt(customCount, 10); setCustomCount(''); newBatch(n); }}
+        >
+          +
+        </button>
         {sheet.length > 0 && (
           <button
             className="btn has-icon"
