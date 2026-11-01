@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
-import { Icon, ItemGrid, KebabMenu } from '../components/Bits';
-import { resolveSheet } from '../lib/sheets';
+import { Icon, ItemGrid, PrintDialog } from '../components/Bits';
 
 export function BrowsePage() {
   const qc = useQueryClient();
@@ -13,6 +12,7 @@ export function BrowsePage() {
   const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
   const { data: labelsData } = useQuery({ queryKey: ['labels'], queryFn: () => api.get('/api/labels') });
   const [selecting, setSelecting] = useState<Set<string> | null>(null);
+  const [printDlg, setPrintDlg] = useState(false);
 
   const areas = data?.areas ?? [];
   const printers = printerData?.printers ?? [];
@@ -31,41 +31,6 @@ export function BrowsePage() {
     ? areas.filter((a: any) => selecting.has(a.id) && a.label_code).map((a: any) => a.label_code)
     : [];
 
-  const reprint = async (p: any) => {
-    if (!selectedCodes.length) return;
-    if (p.id === 'pc') {
-      const spec = p.media_type === 'sheet' ? resolveSheet(p.sheet, presets) : null;
-      sessionStorage.setItem(
-        'stache:print-sheet',
-        JSON.stringify({
-          mode: p.media_type === 'label' ? 'label' : 'sheet',
-          spec,
-          labelW: p.label_w_mm ?? 57,
-          labelH: p.label_h_mm ?? 32,
-          labels: selectedCodes.map((code: string) => {
-            const l: any = labelByCode.get(code);
-            return { code, name: l?.area_name ?? null, path: l?.area_path ?? null, category: l?.area_category ?? null };
-          }),
-        }),
-      );
-      window.open('/print/labels', '_blank');
-      setSelecting(null);
-      return;
-    }
-    try {
-      if (p.type === 'dymo') {
-        const { dymoPrintLabels } = await import('../dymo');
-        await dymoPrintLabels(p.name, selectedCodes, window.location.origin);
-      } else {
-        await api.post('/api/labels/print', { printer_id: p.id, codes: selectedCodes });
-      }
-      toast(`Sent ${selectedCodes.length} label(s) to ${p.name}`);
-      setSelecting(null);
-    } catch (e) {
-      toast(`Print failed: ${(e as Error).message}`);
-    }
-  };
-
   return (
     <div className="page">
       <div className="row spread">
@@ -73,13 +38,9 @@ export function BrowsePage() {
         <span className="row" style={{ margin: 0 }}>
           {selecting ? (
             <>
-              <KebabMenu
-                label={`Reprint ${selectedCodes.length} label(s)`}
-                items={printers.map((p: any) => ({
-                  label: `→ ${p.name}`,
-                  onSelect: () => void reprint(p),
-                }))}
-              />
+              <button className="btn" disabled={!selectedCodes.length} onClick={() => setPrintDlg(true)}>
+                Reprint {selectedCodes.length}
+              </button>
               <button className="btn" onClick={() => setSelecting(null)}>Cancel</button>
             </>
           ) : (
@@ -117,6 +78,16 @@ export function BrowsePage() {
       <p className="muted">
         {selecting ? 'Select bins to reprint their labels.' : 'Add an area above, or scan an unclaimed QR label.'}
       </p>
+      <PrintDialog
+        open={printDlg}
+        onClose={() => { setPrintDlg(false); setSelecting(null); }}
+        printers={printers}
+        presets={presets}
+        labels={selectedCodes.map((code: string) => {
+          const l: any = labelByCode.get(code);
+          return { code, name: l?.area_name ?? null, path: l?.area_path ?? null, category: l?.area_category ?? null };
+        })}
+      />
     </div>
   );
 }

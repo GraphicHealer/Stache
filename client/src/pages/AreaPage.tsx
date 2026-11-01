@@ -6,8 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu } from '../components/Bits';
-import { resolveSheet } from '../lib/sheets';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu, PrintDialog } from '../components/Bits';
 
 export function AreaPage() {
   const { id = '' } = useParams();
@@ -22,6 +21,7 @@ export function AreaPage() {
   const [markMissing, setMarkMissing] = useState(true);
   const [deep, setDeep] = useState(false);
   const [scanFor, setScanFor] = useState<null | 'set-current' | 'move-items' | 'move-area' | 'merge'>(null);
+  const [printDlg, setPrintDlg] = useState(false);
 
   const stocktakeKey = `stache:stocktake:${id}`;
 
@@ -55,29 +55,6 @@ export function AreaPage() {
 
   const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
   const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
-
-  // Print this bin's label(s) - N copies, bin info pre-filled.
-  const printQr = () => {
-    const codes: string[] = data.label_codes ?? (area.label_code ? [area.label_code] : []);
-    if (!codes.length) return toast('No labels on this bin');
-    const copies = parseInt(window.prompt('How many copies of each label?', '1') ?? '', 10) || 0;
-    if (copies < 1) return;
-    const pc = (printerData?.printers ?? []).find((p: any) => p.id === 'pc');
-    const spec = pc?.media_type === 'sheet' ? resolveSheet(pc.sheet, templatesData?.templates ?? []) : null;
-    const parent = (breadcrumb ?? []).slice(0, -1).map((c: any) => c.name ?? 'unnamed').join(' / ') || null;
-    const labels: { code: string; name: string | null; path: string | null; category: string | null }[] = [];
-    for (const code of codes)
-      for (let i = 0; i < copies; i++)
-        labels.push({ code, name: area.name ?? null, path: parent, category: area.category ?? null });
-    sessionStorage.setItem('stache:print-sheet', JSON.stringify({
-      mode: pc?.media_type === 'label' ? 'label' : 'sheet',
-      spec,
-      labelW: pc?.label_w_mm ?? 57,
-      labelH: pc?.label_h_mm ?? 32,
-      labels,
-    }));
-    window.open('/print/labels', '_blank');
-  };
 
   const suggestTags = async () => {
     const r = await api.get(`/api/areas/${id}/suggest-tags`).catch(() => null);
@@ -232,7 +209,7 @@ export function AreaPage() {
         <KebabMenu
           label="Area actions"
           items={[
-            { label: 'Print QR code', icon: 'printer', onSelect: printQr },
+            { label: 'Print QR code', icon: 'printer', onSelect: () => setPrintDlg(true) },
             { label: 'Move area…', onSelect: () => setScanFor('move-area') },
             { label: 'Merge into…', onSelect: () => setScanFor('merge') },
             { label: '+ Sub-area', onSelect: addSubarea },
@@ -395,6 +372,18 @@ export function AreaPage() {
         } : undefined}
       />
 
+      <PrintDialog
+        open={printDlg}
+        onClose={() => setPrintDlg(false)}
+        printers={printerData?.printers ?? []}
+        presets={templatesData?.templates ?? []}
+        labels={(data.label_codes ?? (area.label_code ? [area.label_code] : [])).map((code: string) => ({
+          code,
+          name: area.name ?? null,
+          path: (breadcrumb ?? []).slice(0, -1).map((c: any) => c.name ?? 'unnamed').join(' / ') || null,
+          category: area.category ?? null,
+        }))}
+      />
       {scanFor && (
         <Scanner
           onResult={onScan}

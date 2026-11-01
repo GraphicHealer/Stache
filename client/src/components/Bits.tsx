@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { resolveSheet } from '../lib/sheets';
 
 const ICP = {
   viewBox: '0 0 24 24',
@@ -291,5 +292,79 @@ export function CaptureInput({
         }}
       />
     </>
+  );
+}
+
+/** Shared print picker: copies + printer, dispatches to PC page/Dymo/server. */
+export function PrintDialog({
+  open,
+  labels,
+  printers,
+  presets,
+  onClose,
+}: {
+  open: boolean;
+  labels: { code: string; name: string | null; path: string | null; category: string | null }[];
+  printers: any[];
+  presets: any[];
+  onClose: () => void;
+}) {
+  const { toast } = useApp();
+  const [copies, setCopies] = useState('1');
+  const [printerId, setPrinterId] = useState('pc');
+  useEffect(() => {
+    if (open) setPrinterId((id) => (printers.some((p) => p.id === id) ? id : printers[0]?.id ?? 'pc'));
+  }, [open, printers]);
+  if (!open || !labels.length) return null;
+
+  const run = async () => {
+    const p = printers.find((x) => x.id === printerId);
+    if (!p) return;
+    const n = Math.max(1, parseInt(copies, 10) || 1);
+    onClose();
+    if (p.id === 'pc') {
+      const spec = p.media_type === 'sheet' ? resolveSheet(p.sheet, presets) : null;
+      const out: typeof labels = [];
+      for (const l of labels) for (let i = 0; i < n; i++) out.push(l);
+      sessionStorage.setItem('stache:print-sheet', JSON.stringify({
+        mode: p.media_type === 'label' ? 'label' : 'sheet',
+        spec, labelW: p.label_w_mm ?? 57, labelH: p.label_h_mm ?? 32, labels: out,
+      }));
+      window.open('/print/labels', '_blank');
+      return;
+    }
+    const repeated: string[] = [];
+    for (const l of labels) for (let i = 0; i < n; i++) repeated.push(l.code);
+    try {
+      if (p.type === 'dymo') {
+        const { dymoPrintLabels } = await import('../dymo');
+        await dymoPrintLabels(p.name, repeated, window.location.origin);
+      } else {
+        await api.post('/api/labels/print', { printer_id: p.id, codes: repeated });
+      }
+      toast(`Sent ${repeated.length} label(s) to ${p.name}`);
+    } catch (e) {
+      toast(`Print failed: ${(e as Error).message}`);
+    }
+  };
+
+  return (
+    <div className="dlg-overlay" onClick={onClose}>
+      <div className="dlg" role="dialog" aria-label="Print labels" onClick={(e) => e.stopPropagation()}>
+        <h2>Print {labels.length === 1 ? 'label' : `${labels.length} labels`}</h2>
+        <label className="muted">Printer</label>
+        <select className="input" value={printerId} onChange={(e) => setPrinterId(e.target.value)}>
+          {printers.map((p: any) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <label className="muted">Copies per label</label>
+        <input className="input" inputMode="numeric" value={copies} onChange={(e) => setCopies(e.target.value)} />
+        <div className="row">
+          <button className="btn" onClick={() => void run()}>Print</button>
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }
