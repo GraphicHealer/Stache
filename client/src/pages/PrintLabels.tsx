@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import QRCode from 'qrcode';
+import type { SheetSpec } from '../lib/sheets';
+import { PAGE_SIZES } from '../lib/sheets';
 
 interface PrintLabel {
   code: string;
@@ -10,11 +12,13 @@ interface PrintLabel {
 }
 
 interface PrintSheet {
-  template: 'grid' | 'avery';
+  // 'sheet' = die-cut grid page; 'label' = one label per page at w×h mm.
+  mode: 'sheet' | 'label';
+  spec: SheetSpec | null;
+  labelW: number;
+  labelH: number;
   labels: PrintLabel[];
 }
-
-const AVERY_PER_PAGE = 30;
 
 /** "Garage / Shelf 2" -> "Garage" - the leaf is already shown as the name. */
 const parentPath = (path: string | null, name: string | null) => {
@@ -24,8 +28,9 @@ const parentPath = (path: string | null, name: string | null) => {
 };
 
 /**
- * Bare label-sheet print view - no app chrome. Opened from the Labels page
- * via window.open; the sheet itself is handed over in sessionStorage.
+ * Bare label print view - no app chrome. Opened via window.open with the
+ * job handed over in sessionStorage. Dynamic @page size/margin is injected
+ * via a style tag so any sheet spec or label size prints correctly.
  */
 export function PrintLabels() {
   const [sheet] = useState<PrintSheet | null>(() => {
@@ -40,7 +45,8 @@ export function PrintLabels() {
   const [loaded, setLoaded] = useState(0);
   const [printed, setPrinted] = useState(false);
   const labels = useMemo(() => sheet?.labels ?? [], [sheet]);
-  const template = sheet?.template ?? 'grid';
+  const spec = sheet?.spec ?? null;
+  const mode = sheet?.mode ?? 'sheet';
 
   useEffect(() => {
     document.title = 'Stache labels';
@@ -66,11 +72,12 @@ export function PrintLabels() {
   }, [ready, printed]);
 
   const pages = useMemo(() => {
-    if (template !== 'avery') return [labels];
+    if (mode !== 'sheet' || !spec) return [labels];
+    const per = spec.cols * spec.rows;
     const chunks: PrintLabel[][] = [];
-    for (let i = 0; i < labels.length; i += AVERY_PER_PAGE) chunks.push(labels.slice(i, i + AVERY_PER_PAGE));
+    for (let i = 0; i < labels.length; i += per) chunks.push(labels.slice(i, i + per));
     return chunks;
-  }, [labels, template]);
+  }, [labels, spec, mode]);
 
   if (!sheet) {
     return (
@@ -83,10 +90,20 @@ export function PrintLabels() {
   }
 
   const cell = (l: PrintLabel) => (
-    <div key={l.code} className="pcell">
+    <div
+      key={l.code}
+      className="pcell"
+      style={spec ? { height: `${spec.cellH}mm` } : undefined}
+    >
       <div className="pqrcol">
         {qrs[l.code] && (
-          <img className="pqr" src={qrs[l.code]} alt="" onLoad={() => setLoaded((n) => n + 1)} />
+          <img
+            className="pqr"
+            src={qrs[l.code]}
+            alt=""
+            style={spec ? { width: `${Math.min(spec.cellH - 4, spec.cellW * 0.4)}mm` } : undefined}
+            onLoad={() => setLoaded((n) => n + 1)}
+          />
         )}
         <span className="pcode">{l.code}</span>
       </div>
@@ -109,12 +126,39 @@ export function PrintLabels() {
     </div>
   );
 
+  const labelPage = (l: PrintLabel) => (
+    <div
+      key={l.code}
+      className="plabel"
+      style={{ width: `${sheet.labelW}mm`, height: `${sheet.labelH}mm` }}
+    >
+      {qrs[l.code] && (
+        <img
+          src={qrs[l.code]}
+          alt=""
+          onLoad={() => setLoaded((n) => n + 1)}
+          style={{ width: `${Math.min(sheet.labelW, sheet.labelH) * 0.62}mm` }}
+        />
+      )}
+      <span className="pcode">{l.code}</span>
+      {l.name && <span className="plabel-name">{l.name}</span>}
+    </div>
+  );
+
+  const pageW =
+    mode === 'label' ? sheet.labelW : (PAGE_SIZES[spec?.page ?? 'letter'].w);
+  const pageH =
+    mode === 'label' ? sheet.labelH : (PAGE_SIZES[spec?.page ?? 'letter'].h);
+
   return (
     <div className="print-doc">
+      <style>{`@page { size: ${pageW}mm ${pageH}mm; margin: 0; }`}</style>
       <div className="print-bar">
         <span>
           {labels.length} label(s)
-          {template === 'avery' ? ' · Avery 5160 - Letter paper, scale 100%' : ' · plain sheet'}
+          {mode === 'sheet'
+            ? ' · sheet print - match paper size, scale 100%'
+            : ` · ${sheet.labelW}×${sheet.labelH}mm labels, scale 100%`}
         </span>
         <button className="btn btn-small" onClick={() => window.print()}>
           Print again
@@ -123,11 +167,30 @@ export function PrintLabels() {
           Back
         </Link>
       </div>
-      {pages.map((chunk, i) => (
-        <div key={i} className={template === 'avery' ? 'avery-page' : 'grid-page'}>
-          <div className={template === 'avery' ? 'agrid' : 'ggrid'}>{chunk.map(cell)}</div>
-        </div>
-      ))}
+      {mode === 'label'
+        ? labels.map(labelPage)
+        : pages.map((chunk, i) => (
+            <div
+              key={i}
+              className="sheet-page"
+              style={{
+                width: `${pageW}mm`,
+                minHeight: `${pageH}mm`,
+                padding: `${spec!.marginTop}mm ${spec!.marginX}mm`,
+              }}
+            >
+              <div
+                className="sgrid"
+                style={{
+                  gridTemplateColumns: `repeat(${spec!.cols}, ${spec!.cellW}mm)`,
+                  columnGap: `${spec!.gapX}mm`,
+                  rowGap: `${spec!.gapY}mm`,
+                }}
+              >
+                {chunk.map(cell)}
+              </div>
+            </div>
+          ))}
     </div>
   );
 }

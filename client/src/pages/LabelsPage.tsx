@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useApp } from '../context';
 import { dymoPrintLabels } from '../dymo';
 import { Icon, IconBtn } from '../components/Bits';
+import { resolveSheet, type SheetChoice, type SheetPreset } from '../lib/sheets';
 
 interface SheetLabel {
   code: string;
@@ -14,38 +15,107 @@ interface SheetLabel {
 interface Printer {
   id: string;
   name: string;
-  type: 'zpl' | 'cups' | 'dymo';
+  type: 'zpl' | 'cups' | 'dymo' | 'pc';
+  builtin?: boolean;
   host: string | null;
   port: number;
   queue: string | null;
   dpi: number;
   label_w_mm: number;
   label_h_mm: number;
+  media_type?: 'label' | 'sheet';
+  sheet?: SheetChoice | null;
 }
 
-const EMPTY_FORM = { name: '', type: 'zpl', host: '', port: '9100', queue: '', dpi: '203', label_w_mm: '57', label_h_mm: '32' };
+const EMPTY_FORM = {
+  name: '', type: 'zpl', host: '', port: '9100', queue: '', dpi: '203',
+  label_w_mm: '57', label_h_mm: '32', media: 'label',
+};
+
+interface SheetForm { preset: string; custom: Record<string, string>; }
+const EMPTY_SHEET: SheetForm = { preset: 'avery-5160', custom: {} };
+
+function SheetPicker({
+  value, onChange, presets,
+}: { value: SheetForm; onChange: (v: SheetForm) => void; presets: SheetPreset[] }) {
+  const c = value.custom;
+  const setC = (k: string, v: string) => onChange({ ...value, custom: { ...c, [k]: v } });
+  const num = (k: string, label: string, w = 56) => (
+    <label key={k} className="muted" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem' }}>
+      {label}
+      <input className="input" style={{ width: w, minHeight: 36 }} inputMode="decimal" value={c[k] ?? ''} onChange={(e) => setC(k, e.target.value)} />
+    </label>
+  );
+  return (
+    <>
+      <div className="row">
+        <select className="input" style={{ width: 'auto', flex: 1 }} value={value.preset} aria-label="Sheet template"
+          onChange={(e) => onChange({ ...value, preset: e.target.value })}>
+          {presets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <option value="custom">Custom…</option>
+        </select>
+      </div>
+      {value.preset === 'custom' && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+          {num('cellW', 'cell w')} {num('cellH', 'h')}
+          {num('cols', 'cols', 44)} {num('rows', 'rows', 44)}
+          {num('gapX', 'gap x')} {num('gapY', 'gap y')}
+          {num('marginTop', 'top')} {num('marginX', 'side')}
+          <select className="input" style={{ width: 'auto', minHeight: 36 }} value={c.page ?? 'letter'}
+            onChange={(e) => setC('page', e.target.value)} aria-label="Page size">
+            <option value="letter">Letter</option>
+            <option value="a4">A4</option>
+          </select>
+        </div>
+      )}
+    </>
+  );
+}
+
+const sheetChoice = (f: SheetForm): SheetChoice =>
+  f.preset === 'custom'
+    ? {
+        custom: Object.fromEntries(
+          Object.entries(f.custom)
+            .filter(([, v]) => v !== '')
+            .map(([k, v]) => [k, k === 'page' ? v : Number(v)]),
+        ),
+      }
+    : { preset: f.preset };
 
 /** Generate sequential labels; print as a sheet or straight to a label printer. */
 export function LabelsPage() {
   const qc = useQueryClient();
   const { toast } = useApp();
   const [sheet, setSheet] = useState<SheetLabel[]>([]);
-  const [template, setTemplate] = useState<'grid' | 'avery'>('grid');
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [customCount, setCustomCount] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [progress, setProgress] = useState<string | null>(null);
+  const [editPc, setEditPc] = useState(false);
+  const [pcForm, setPcForm] = useState<{ media: 'label' | 'sheet'; sheet: SheetForm; w: string; h: string; dpi: string }>({
+    media: 'sheet', sheet: EMPTY_SHEET, w: '57', h: '32', dpi: '300',
+  });
+  const [sheetForm, setSheetForm] = useState<SheetForm>(EMPTY_SHEET);
 
   const { data } = useQuery({ queryKey: ['labels'], queryFn: () => api.get('/api/labels') });
   const { data: printerData, refetch: refetchPrinters } = useQuery({
     queryKey: ['printers'],
     queryFn: () => api.get('/api/printers'),
   });
+  const { data: templatesData } = useQuery({
+    queryKey: ['sheet-templates'],
+    queryFn: () => api.get('/api/sheet-templates'),
+  });
+  const presets: SheetPreset[] = templatesData?.templates ?? [];
   const labels = data?.labels ?? [];
   const printers: Printer[] = printerData?.printers ?? [];
+  const pc = printers.find((p) => p.id === 'pc');
+  const pcSpec = pc?.media_type === 'sheet' ? resolveSheet(pc.sheet, presets) : null;
   const claimed = labels.filter((l: any) => l.area_id).length;
+  const unclaimed = labels.filter((l: any) => !l.area_id);
   const sheetCodes = sheet.map((l) => l.code);
 
   const render = async (codes: string[]) => {
@@ -84,6 +154,8 @@ export function LabelsPage() {
         dpi: parseInt(form.dpi, 10) || 203,
         label_w_mm: parseFloat(form.label_w_mm) || 57,
         label_h_mm: parseFloat(form.label_h_mm) || 32,
+        media_type: form.type === 'cups' ? form.media : 'label',
+        sheet: form.type === 'cups' && form.media === 'sheet' ? sheetChoice(sheetForm) : null,
       });
       setAdding(false);
       setForm(EMPTY_FORM);
@@ -94,8 +166,30 @@ export function LabelsPage() {
     }
   };
 
+  // Hand the print job to /print/labels - it renders without the app shell.
+  const openPrint = (codes: string[]) => {
+    const isSheet = pc?.media_type !== 'label';
+    sessionStorage.setItem(
+      'stache:print-sheet',
+      JSON.stringify({
+        mode: isSheet ? 'sheet' : 'label',
+        spec: isSheet ? pcSpec : null,
+        labelW: pc?.label_w_mm ?? 57,
+        labelH: pc?.label_h_mm ?? 32,
+        labels: codes.map((code) => ({
+          code,
+          name: nameFor(code),
+          path: pathFor(code),
+          tags: tagsFor(code),
+        })),
+      }),
+    );
+    window.open('/print/labels', '_blank');
+  };
+
   const printTo = async (p: Printer, codes: string[]) => {
     if (!codes.length) return;
+    if (p.id === 'pc') return openPrint(codes);
     setBusy(true);
     try {
       if (p.type === 'dymo') {
@@ -178,39 +272,12 @@ export function LabelsPage() {
           +
         </button>
         {sheet.length > 0 && (
-          <button
-            className="btn has-icon"
-            onClick={() => {
-              sessionStorage.setItem(
-                'stache:print-sheet',
-                JSON.stringify({
-                  template,
-                  labels: sheet.map((l) => ({
-                    code: l.code,
-                    name: nameFor(l.code),
-                    path: pathFor(l.code),
-                    tags: tagsFor(l.code),
-                  })),
-                }),
-              );
-              window.open('/print/labels', '_blank');
-            }}
-          >
+          <button className="btn has-icon" onClick={() => openPrint(sheetCodes)}>
             <Icon name="printer" /> Print
           </button>
         )}
       </div>
       <div className="row">
-        <select
-          className="input"
-          style={{ width: 'auto' }}
-          value={template}
-          onChange={(e) => setTemplate(e.target.value as 'grid' | 'avery')}
-          aria-label="Sheet template"
-        >
-          <option value="grid">Plain grid</option>
-          <option value="avery">Avery 5160 (3×10)</option>
-        </select>
         {claimed > 0 && (
           <button
             className="btn btn-ghost"
@@ -234,19 +301,92 @@ export function LabelsPage() {
 
       <h2>Printers</h2>
       {printers.map((p) => (
-        <div key={p.id} className="label-row">
-          <span>
-            <b>{p.name}</b> <span className="muted">{p.type}{p.host ? ` · ${p.host}` : ''}{p.queue ? ` · ${p.queue}` : ''}</span>
-          </span>
-          <span className="row" style={{ margin: 0 }}>
-            <IconBtn icon="printer" className="btn-small" label={`Send test label to ${p.name}`} onClick={() => testPrinter(p)} />
-            <IconBtn
-              icon="trash"
-              className="btn-small btn-ghost"
-              label={`Remove ${p.name}`}
-              onClick={() => api.del(`/api/printers/${p.id}`).then(refetchPrinters)}
-            />
-          </span>
+        <div key={p.id}>
+          <div className="label-row">
+            <span>
+              <b>{p.name}</b>{' '}
+              <span className="muted">
+                {p.type}
+                {p.media_type === 'sheet' ? ' · sheet' : ''}
+                {p.host ? ` · ${p.host}` : ''}
+                {p.queue ? ` · ${p.queue}` : ''}
+              </span>
+            </span>
+            <span className="row" style={{ margin: 0 }}>
+              {p.id === 'pc' ? (
+                <IconBtn
+                  icon="pencil"
+                  className="btn-small"
+                  label="Configure PC printing"
+                  onClick={() => {
+                    setEditPc((v) => !v);
+                    setPcForm({
+                      media: p.media_type === 'label' ? 'label' : 'sheet',
+                      sheet: p.sheet?.preset || p.sheet?.custom
+                        ? { preset: p.sheet?.custom ? 'custom' : p.sheet!.preset!, custom: p.sheet?.custom ? Object.fromEntries(Object.entries(p.sheet.custom).map(([k, v]) => [k, String(v)])) : {} }
+                        : EMPTY_SHEET,
+                      w: String(p.label_w_mm ?? 57),
+                      h: String(p.label_h_mm ?? 32),
+                      dpi: String(p.dpi ?? 300),
+                    });
+                  }}
+                />
+              ) : (
+                <>
+                  <IconBtn icon="printer" className="btn-small" label={`Send test label to ${p.name}`} onClick={() => testPrinter(p)} />
+                  <IconBtn
+                    icon="trash"
+                    className="btn-small btn-ghost"
+                    label={`Remove ${p.name}`}
+                    onClick={() => api.del(`/api/printers/${p.id}`).then(refetchPrinters)}
+                  />
+                </>
+              )}
+            </span>
+          </div>
+          {p.id === 'pc' && editPc && (
+            <div className="printer-form">
+              <div className="row">
+                <label className="muted">Media</label>
+                <select className="input" style={{ width: 'auto' }} value={pcForm.media}
+                  onChange={(e) => setPcForm({ ...pcForm, media: e.target.value as 'label' | 'sheet' })}>
+                  <option value="sheet">Sheet (laser / Avery-style)</option>
+                  <option value="label">Single labels (label printer)</option>
+                </select>
+              </div>
+              {pcForm.media === 'sheet' ? (
+                <SheetPicker value={pcForm.sheet} onChange={(s) => setPcForm({ ...pcForm, sheet: s })} presets={presets} />
+              ) : (
+                <div className="row">
+                  <label className="muted">Label mm</label>
+                  <input className="input" style={{ width: 80 }} value={pcForm.w}
+                    onChange={(e) => setPcForm({ ...pcForm, w: e.target.value })} />
+                  <span className="muted">×</span>
+                  <input className="input" style={{ width: 80 }} value={pcForm.h}
+                    onChange={(e) => setPcForm({ ...pcForm, h: e.target.value })} />
+                </div>
+              )}
+              <div className="row">
+                <button className="btn" onClick={async () => {
+                  try {
+                    await api.patch('/api/printers/pc', {
+                      media_type: pcForm.media,
+                      sheet: pcForm.media === 'sheet' ? sheetChoice(pcForm.sheet) : null,
+                      label_w_mm: parseFloat(pcForm.w) || 57,
+                      label_h_mm: parseFloat(pcForm.h) || 32,
+                      dpi: parseInt(pcForm.dpi, 10) || 300,
+                    });
+                    setEditPc(false);
+                    refetchPrinters();
+                    toast('PC printing saved');
+                  } catch (e) {
+                    toast(`Failed: ${(e as Error).message}`);
+                  }
+                }}>Save</button>
+                <button className="btn" onClick={() => setEditPc(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
       {adding ? (
@@ -271,23 +411,38 @@ export function LabelsPage() {
             </div>
           )}
           {form.type === 'cups' && (
+            <>
+              <div className="row">
+                <input className="input" style={{ flex: 1 }} placeholder="Queue name"
+                  value={form.queue} onChange={(e) => setForm({ ...form, queue: e.target.value })} />
+                <input className="input" style={{ flex: 1 }} placeholder="CUPS server (optional)"
+                  value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
+              </div>
+              <div className="row">
+                <label className="muted">Media</label>
+                <select className="input" style={{ width: 'auto' }} value={form.media}
+                  onChange={(e) => setForm({ ...form, media: e.target.value })}>
+                  <option value="label">Single labels (label printer)</option>
+                  <option value="sheet">Sheet (laser / Avery-style)</option>
+                </select>
+              </div>
+              {form.media === 'sheet' && (
+                <SheetPicker value={sheetForm} onChange={setSheetForm} presets={presets} />
+              )}
+            </>
+          )}
+          {(form.type !== 'cups' || form.media === 'label') && (
             <div className="row">
-              <input className="input" style={{ flex: 1 }} placeholder="Queue name"
-                value={form.queue} onChange={(e) => setForm({ ...form, queue: e.target.value })} />
-              <input className="input" style={{ flex: 1 }} placeholder="CUPS server (optional)"
-                value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
+              <label className="muted">Label mm</label>
+              <input className="input" style={{ width: 80 }} value={form.label_w_mm}
+                onChange={(e) => setForm({ ...form, label_w_mm: e.target.value })} />
+              <span className="muted">×</span>
+              <input className="input" style={{ width: 80 }} value={form.label_h_mm}
+                onChange={(e) => setForm({ ...form, label_h_mm: e.target.value })} />
+              <input className="input" style={{ width: 80 }} value={form.dpi}
+                onChange={(e) => setForm({ ...form, dpi: e.target.value })} placeholder="dpi" />
             </div>
           )}
-          <div className="row">
-            <label className="muted">Label mm</label>
-            <input className="input" style={{ width: 80 }} value={form.label_w_mm}
-              onChange={(e) => setForm({ ...form, label_w_mm: e.target.value })} />
-            <span className="muted">×</span>
-            <input className="input" style={{ width: 80 }} value={form.label_h_mm}
-              onChange={(e) => setForm({ ...form, label_h_mm: e.target.value })} />
-            <input className="input" style={{ width: 80 }} value={form.dpi}
-              onChange={(e) => setForm({ ...form, dpi: e.target.value })} placeholder="dpi" />
-          </div>
           <div className="row">
             <button className="btn" onClick={addPrinter} disabled={!form.name}>Add printer</button>
             <button className="btn" onClick={() => setAdding(false)}>Cancel</button>
@@ -301,7 +456,7 @@ export function LabelsPage() {
         <>
           <h2>Sheet preview</h2>
           <p className="muted">First label at true size - the print includes all {sheet.length}.</p>
-          <div className={`label-sheet${template === 'avery' ? ' avery' : ''}`}>
+          <div className="label-sheet avery">
             {sheet.map((l) => {
               const name = nameFor(l.code);
               const path = pathFor(l.code);
@@ -341,7 +496,20 @@ export function LabelsPage() {
       )}
 
       <div className="row spread">
-        <h2>All labels</h2>
+        <h2>Unclaimed labels</h2>
+        {unclaimed.length > 0 && (
+          <label className="row muted" style={{ gap: 6, margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={sel.size === unclaimed.length && unclaimed.length > 0}
+              onChange={(e) =>
+                setSel(e.target.checked ? new Set(unclaimed.map((l: any) => l.code)) : new Set())
+              }
+              aria-label="Select all unclaimed labels"
+            />
+            all
+          </label>
+        )}
         {sel.size > 0 && (
           <button
             className="btn btn-small danger"
@@ -360,28 +528,25 @@ export function LabelsPage() {
         )}
       </div>
       <div className="label-list">
-        {labels.map((l: any) => (
+        {unclaimed.map((l: any) => (
           <div key={l.code} className="label-row">
             <span className="row" style={{ margin: 0 }}>
-              {!l.area_id && (
-                <input
-                  type="checkbox"
-                  aria-label={`Select ${l.code}`}
-                  checked={sel.has(l.code)}
-                  onChange={(e) => {
-                    const next = new Set(sel);
-                    e.target.checked ? next.add(l.code) : next.delete(l.code);
-                    setSel(next);
-                  }}
-                />
-              )}
+              <input
+                type="checkbox"
+                aria-label={`Select ${l.code}`}
+                checked={sel.has(l.code)}
+                onChange={(e) => {
+                  const next = new Set(sel);
+                  e.target.checked ? next.add(l.code) : next.delete(l.code);
+                  setSel(next);
+                }}
+              />
               <code>{l.code}</code>
             </span>
-            <span className={l.area_id ? '' : 'muted'}>
-              {l.area_id ? (l.area_name ?? 'claimed') : 'unclaimed'}
-            </span>
+            <span className="muted">unclaimed</span>
           </div>
         ))}
+        {unclaimed.length === 0 && <p className="muted">No unclaimed codes - every label is in use.</p>}
       </div>
     </div>
   );

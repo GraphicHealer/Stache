@@ -391,34 +391,28 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .print-doc { min-height: 100vh; background: #444; color: #eee; }
 .print-bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
 .print-bar span { flex: 1; font-size: 0.85rem; }
-.avery-page, .grid-page { background: #fff; color: #000; margin: 0 auto 16px; }
-/* Avery 5160 (Letter, 215.9×279.4mm): margins replicated as padding -
-   12.7mm top/bottom, 4.76mm sides. Sheet padding-bottom minus row pitch
-   keeps 10×25.4mm rows landing on the die-cut. */
-.avery-page { width: 215.9mm; min-height: 279.4mm; padding: 12.7mm 4.76mm; }
-.agrid { display: grid; grid-template-columns: repeat(3, 66.675mm); column-gap: 3.175mm; }
-.grid-page { width: 215.9mm; min-height: 279.4mm; padding: 10mm; }
-.ggrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
-.pcell { display: flex; align-items: center; gap: 1.5mm; height: 25.4mm; padding: 1.5mm; overflow: hidden; }
+.sheet-page, .plabel { background: #fff; color: #000; margin: 0 auto 16px; }
+.sheet-page { box-sizing: border-box; }
+.sgrid { display: grid; }
+.pcell { position: relative; display: flex; align-items: center; gap: 1.5mm; padding: 1mm; overflow: hidden; }
 .pqrcol { display: flex; flex-direction: column; align-items: center; gap: 0.4mm; flex: none; }
 .pqr { width: 19mm; display: block; }
 .pcode { font-family: ui-monospace, monospace; font-size: 2.1mm; color: #444; }
 .pinfo { flex: 1; min-width: 0; }
-.plogo { width: 7mm; height: 7mm; flex: none; }
+/* Logo sits in the bottom-right corner, out of the text flow's way. */
+.plogo { position: absolute; right: 1mm; bottom: 0.5mm; width: 6mm; height: 6mm; }
 .ppath { font-size: 2.3mm; color: #333; margin-bottom: 0.4mm; overflow-wrap: anywhere; }
 .ptags { font-size: 2.3mm; color: #333; margin-top: 0.4mm; overflow-wrap: anywhere; }
 .pname { font-weight: 700; font-size: 3.4mm; overflow-wrap: anywhere; }
 .pblank { border-bottom: 0.5mm solid #000; height: 2.8mm; margin: 2mm 3mm 0 0; }
-.ggrid .pcell { height: auto; min-height: 30mm; border: 1px dashed #999; }
-.ggrid .pqr { width: 24mm; }
-
-@page avery { size: letter; margin: 0; }
-.avery-page { page: avery; }
+/* Single-label mode: one .plabel per page at the stock's own size. */
+.plabel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1mm; padding: 1mm; overflow: hidden; }
+.plabel-name { font-size: 3mm; font-weight: 700; text-align: center; overflow-wrap: anywhere; }
 
 @media print {
   @page { margin: 0; }
   .print-bar { display: none !important; }
   .print-doc { background: #fff; }
-  .avery-page, .grid-page { margin: 0; break-after: page; }
-  .avery-page:last-child, .grid-page:last-child { break-after: auto; }
+  .sheet-page, .plabel { margin: 0; break-after: page; }
+  .sheet-page:last-child, .plabel:last-child { break-after: auto; }
 }
