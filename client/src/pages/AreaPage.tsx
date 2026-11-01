@@ -47,14 +47,13 @@ export function AreaPage() {
     queryFn: () => api.get(`/api/areas/${id}${deep ? '?deep=1' : ''}`),
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['area', id] });
+  const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
+  const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
 
   if (isLoading) return <div className="page"><p className="muted">Loading…</p></div>;
   if (error || !data) return <div className="page"><p className="muted">Area not found.</p></div>;
 
   const { area, breadcrumb, subareas, items, photos } = data;
-
-  const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
-  const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
 
   const suggestTags = async () => {
     const r = await api.get(`/api/areas/${id}/suggest-tags`).catch(() => null);
