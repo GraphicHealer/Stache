@@ -170,7 +170,7 @@ async function cellSvg(
   const textX = qrSide + px(1.5);
   const font = (mm: number) => Math.max(6, Math.round(px(mm)));
   const clip = (s: string, mmFont: number) => {
-    const max = Math.floor((spec.cellW - spec.cellH - 2) / (mmFont * 0.62));
+    const max = Math.floor((spec.cellW - spec.cellH - 16) / (mmFont * 0.62));
     return esc(s.length > max && max > 3 ? `${s.slice(0, max - 1)}…` : s);
   };
   let text = '';
@@ -192,11 +192,11 @@ async function cellSvg(
       )
       .join('');
   }
-  const logoSide = px(6);
+  const logoSide = px(12);
   let logo = '';
   try {
     const logoBuf = await fs.readFile(path.join(process.cwd(), 'client', 'dist', 'logo-mono.svg'));
-    logo = `<image href="data:image/svg+xml;base64,${logoBuf.toString('base64')}" x="${cw - logoSide - px(1)}" y="${ch - logoSide - px(0.5)}" width="${logoSide}" height="${logoSide}"/>`;
+    logo = `<image href="data:image/svg+xml;base64,${logoBuf.toString('base64')}" x="${cw - logoSide - px(0.8)}" y="${ch - logoSide - px(0.5)}" width="${logoSide}" height="${logoSide}"/>`;
   } catch {
     // logo asset missing - cells still print fine without it
   }
