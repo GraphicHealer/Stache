@@ -576,7 +576,7 @@ export function LabelsPage() {
                     <img className="label-qr" src={l.dataUrl} alt={l.code} style={{ width: `${m.qr}mm` }} />
                     <span className="label-code" style={{ fontSize: `${m.code}mm` }}>{l.code}</span>
                   </div>
-                  <div className="label-info">
+                  <div className="label-info" style={m.vertical ? { paddingTop: `${m.logo + 3}mm` } : undefined}>
                     {name ? (
                       <>
                         {path && path !== name && (

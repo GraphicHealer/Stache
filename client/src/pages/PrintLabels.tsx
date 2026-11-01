@@ -114,7 +114,7 @@ export function PrintLabels() {
         )}
         <span className="pcode" style={{ fontSize: `${m.code}mm` }}>{l.code}</span>
       </div>
-      <div className="pinfo">
+      <div className="pinfo" style={m.vertical ? { paddingTop: `${m.logo + 3}mm` } : undefined}>
         {l.name ? (
           <>
             {parentPath(l.path, l.name) && <div className="ppath" style={{ fontSize: `${m.path}mm` }}>{parentPath(l.path, l.name)}</div>}
