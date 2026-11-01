@@ -6,6 +6,9 @@
   Self-hosted, photo-first home inventory for people who won't fill in forms.
 </p>
 <p align="center">
+  <a href="AI-DECLARATION.md"><img src="https://img.shields.io/badge/AI--DECLARATION-pair-blue" alt="AI-DECLARATION: pair"></a>
+</p>
+<p align="center">
   <a href="https://github.com/GraphicHealer/Stache/releases"><img src="https://img.shields.io/github/v/release/GraphicHealer/Stache" alt="Latest release"></a>
   <a href="https://github.com/GraphicHealer/Stache/actions/workflows/release.yml"><img src="https://github.com/GraphicHealer/Stache/actions/workflows/release.yml/badge.svg" alt="Release build"></a>
 </p>
