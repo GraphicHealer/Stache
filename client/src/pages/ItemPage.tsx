@@ -329,8 +329,11 @@ export function ItemPage() {
                 onClick={() =>
                   patch(
                     {
+                      // Fills blanks only - never overwrites your text. AI
+                      // tags merge into your real tags, deduped.
                       name: item.name ?? item.ai_name,
                       description: item.description ?? item.ai_description,
+                      tags: [...new Set([...(item.tags ?? []), ...(item.ai_tags ?? [])])],
                     },
                     'Saved',
                   )
@@ -348,6 +351,9 @@ export function ItemPage() {
         <span className="qty">×{item.quantity}</span>
         <button className="btn" onClick={() => patch({ quantity: item.quantity + 1 })}>+</button>
         {item.barcode && <span className="badge">{item.barcode}</span>}
+        {(item.tags ?? []).map((t: string) => (
+          <span key={t} className="badge">{t}</span>
+        ))}
       </div>
 
       {(item.detected_codes ?? [])

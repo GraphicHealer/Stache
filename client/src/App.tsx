@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { parseScan } from './scan';
 import { useApp } from './context';
+import { ModelBanner } from './components/Bits';
 import { Home } from './pages/Home';
 import { LabelPage } from './pages/LabelPage';
 import { AreaPage } from './pages/AreaPage';
@@ -185,6 +186,7 @@ export function App() {
           />
         </Routes>
       </main>
+      <ModelBanner />
       <nav className="nav">
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">

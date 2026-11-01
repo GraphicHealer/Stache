@@ -3,9 +3,10 @@ import { runMigrations } from './migrate';
 import { initAuth } from './auth';
 import { ensurePhotoDir } from './lib/photos';
 import { buildApp } from './app';
-import { startAiWorker } from './lib/ai';
+import { getAiConfig, startAiWorker } from './lib/ai';
 import { startDigestScheduler } from './lib/digest';
 import { startBackupScheduler } from './lib/backup';
+import { mlDisabled, warmClip, warmVlm } from './lib/ml';
 import { pruneEvents } from './lib/events';
 import { sqlite } from './db';
 import { env } from './env';
@@ -48,6 +49,17 @@ async function main() {
 
   const app = buildApp();
   await app.listen({ port: env.port, host: env.host });
+
+  // Pre-warm the local AI stack once we're up: the model download shows up
+  // in Settings instead of stalling the first photo that needs it.
+  setTimeout(async () => {
+    try {
+      if (mlDisabled) return;
+      warmClip();
+      const cfg = await getAiConfig();
+      if (cfg?.enabled && cfg.provider === 'local') warmVlm();
+    } catch { /* warm is best-effort */ }
+  }, 3000).unref();
 
   // node is PID 1 (setpriv exec) - SIGTERM must close cleanly or docker stop
   // escalates to SIGKILL and the WAL can be left mid-transaction.

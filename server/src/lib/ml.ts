@@ -49,9 +49,25 @@ function l2norm(v: ArrayLike<number>): number[] {
 
 const rawLevel = process.env.STACHE_ML_LEVEL ?? (process.env.STACHE_NO_ML === '1' ? '0' : '2');
 const parsedLevel = parseInt(rawLevel, 10);
-/** 0=off, 1=Florence-2, 2=LFM2.5-VL (default), 3=Moondream2. CLIP rides along at >=1. */
-export const mlLevel = Number.isNaN(parsedLevel) ? 2 : Math.min(3, Math.max(0, parsedLevel));
-export const mlDisabled = mlLevel === 0;
+/** Env level: 0=off, 1=Florence-2, 2=LFM2.5-VL (default), 3=Moondream2. */
+const envLevel = Number.isNaN(parsedLevel) ? 2 : Math.min(3, Math.max(0, parsedLevel));
+export const mlDisabled = envLevel === 0;
+
+// Settings can override the env level (AI settings -> local model picker).
+// Env 0 stays a hard off - a tiny host opted out on purpose.
+let levelCache: number | null = null;
+export function invalidateMlLevel(): void {
+  levelCache = null;
+}
+export async function activeMlLevel(): Promise<number> {
+  if (mlDisabled) return 0;
+  if (levelCache == null) {
+    const row = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', 'ml_level');
+    const v = row ? (JSON.parse(String(row.value)) as { level?: number }).level : undefined;
+    levelCache = typeof v === 'number' ? Math.min(3, Math.max(0, v)) : envLevel;
+  }
+  return levelCache;
+}
 
 async function rawImage(buf: Buffer) {
   const hf = await import('@huggingface/transformers');
@@ -224,53 +240,96 @@ export async function nearestToItem(itemId: string, limit = 12, viewerId: string
 //   2 - LFM2.5-VL-450M: edge-tuned chat VLM, name/barcode as context, OD
 //   3 - Moondream2: bigger prompted VLM for hosts with headroom
 // ---------------------------------------------------------------------------
-const VLM_KINDS = { 1: 'florence', 2: 'lfm2vl', 3: 'moondream' } as const;
-const VLM_MODEL =
-  VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3] === 'florence'
-    ? 'onnx-community/Florence-2-base-ft'
-    : VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3] === 'lfm2vl'
-      ? 'LiquidAI/LFM2.5-VL-450M-ONNX'
-      : 'Xenova/moondream2';
-export const vlmKind = VLM_KINDS[Math.min(3, Math.max(1, mlLevel)) as 1 | 2 | 3];
-const VLM_OPTS: any = {
-  dtype: (
-    vlmKind === 'florence'
-      ? {
-          embed_tokens: 'fp32',
-          vision_encoder: 'fp32',
-          encoder_model: 'fp32',
-          decoder_model_merged: 'q4',
-        }
-      : vlmKind === 'lfm2vl'
-        ? {
-            embed_tokens: 'fp16',
-            vision_encoder: 'q4',
-            decoder_model_merged: 'q4',
-          }
-        : {
-            embed_tokens: 'fp32',
-            vision_encoder: 'fp16',
-            decoder_model_merged: 'q4',
-          }
-  ) as Record<string, string>,
-  session_options: SESSION_OPTS,
+type VlmKind = 'florence' | 'lfm2vl' | 'moondream';
+function vlmFor(level: number): { kind: VlmKind; model: string; dtype: Record<string, string> } {
+  if (level <= 1)
+    return {
+      kind: 'florence',
+      model: 'onnx-community/Florence-2-base-ft',
+      dtype: { embed_tokens: 'fp32', vision_encoder: 'fp32', encoder_model: 'fp32', decoder_model_merged: 'q4' },
+    };
+  if (level === 2)
+    return {
+      kind: 'lfm2vl',
+      model: 'LiquidAI/LFM2.5-VL-450M-ONNX',
+      dtype: { embed_tokens: 'fp16', vision_encoder: 'q4', decoder_model_merged: 'q4' },
+    };
+  return {
+    kind: 'moondream',
+    model: 'Xenova/moondream2',
+    dtype: { embed_tokens: 'fp32', vision_encoder: 'fp16', decoder_model_merged: 'q4' },
+  };
+}
+// Kind of the loaded model - set by loadVlm, read by vlmAsk's arg ordering.
+let vlmKind: VlmKind = 'lfm2vl';
+
+// Download progress for the Settings UI + corner banner.
+const dl = {
+  state: 'idle' as 'idle' | 'downloading' | 'ready' | 'failed',
+  file: '',
+  files: new Map<string, { loaded: number; total: number }>(),
 };
+export function vlmStatus(): {
+  state: string;
+  file: string;
+  downloaded: number;
+  total: number;
+  percent: number | null;
+} {
+  let loaded = 0;
+  let total = 0;
+  for (const f of dl.files.values()) {
+    loaded += f.loaded;
+    total += f.total;
+  }
+  return {
+    state: dl.state,
+    file: dl.file,
+    downloaded: loaded,
+    total,
+    percent: total ? Math.round((loaded / total) * 100) : null,
+  };
+}
 
 type Vlm = { model: any; processor: any; tokenizer: any };
 let vlmPromise: Promise<Vlm> | null = null;
 
 async function loadVlm(): Promise<Vlm> {
   if (mlDisabled) throw new Error('ML disabled (STACHE_ML_LEVEL=0)');
+  const lvl = await activeMlLevel();
+  const sel = vlmFor(Math.min(3, Math.max(1, lvl)));
+  vlmKind = sel.kind;
   const hf = await import('@huggingface/transformers');
   hf.env.cacheDir = path.join(env.dataDir, 'models');
-  const [model, processor, tokenizer] = await Promise.all([
-    (vlmKind === 'moondream'
-      ? hf.Moondream1ForConditionalGeneration.from_pretrained(VLM_MODEL, VLM_OPTS)
-      : hf.AutoModelForImageTextToText.from_pretrained(VLM_MODEL, VLM_OPTS)),
-    hf.AutoProcessor.from_pretrained(VLM_MODEL),
-    hf.AutoTokenizer.from_pretrained(VLM_MODEL),
-  ]);
-  return { model, processor, tokenizer };
+  dl.state = 'downloading';
+  const track = (p: any) => {
+    if (p.status === 'initiate') dl.file = p.file;
+    else if (p.status === 'progress' || p.status === 'done')
+      dl.files.set(p.file, { loaded: p.loaded ?? p.total ?? 0, total: p.total ?? 0 });
+  };
+  try {
+    const [model, processor, tokenizer] = await Promise.all([
+      (sel.kind === 'moondream'
+        ? hf.Moondream1ForConditionalGeneration.from_pretrained(sel.model, {
+            dtype: sel.dtype as any,
+            session_options: SESSION_OPTS,
+            progress_callback: track,
+          })
+        : hf.AutoModelForImageTextToText.from_pretrained(sel.model, {
+            dtype: sel.dtype as any,
+            session_options: SESSION_OPTS,
+            progress_callback: track,
+          })),
+      hf.AutoProcessor.from_pretrained(sel.model),
+      hf.AutoTokenizer.from_pretrained(sel.model),
+    ]);
+    dl.state = 'ready';
+    scheduleModelPurge();
+    return { model, processor, tokenizer };
+  } catch (e) {
+    dl.state = 'failed';
+    throw e;
+  }
 }
 
 export function ensureVlm(): Promise<Vlm> {
@@ -281,6 +340,39 @@ export function ensureVlm(): Promise<Vlm> {
     });
   }
   return vlmPromise;
+}
+
+/** Kick a background VLM download - the model arrives before the first photo needs it. */
+export function warmVlm(): void {
+  if (mlDisabled) return;
+  ensureVlm().catch(() => {});
+}
+
+// Once a newly selected model is ready, wait a grace period, then delete the
+// OTHER known VLM dirs. The delay means an accidental click on the model
+// picker doesn't destroy a 700MB download; switching back cancels it.
+let purgeTimer: ReturnType<typeof setTimeout> | null = null;
+const PURGE_DELAY_MS = 5 * 60_000;
+export function scheduleModelPurge(): void {
+  if (purgeTimer) clearTimeout(purgeTimer);
+  purgeTimer = setTimeout(async () => {
+    purgeTimer = null;
+    try {
+      const lvl = await activeMlLevel();
+      const keep = vlmFor(Math.min(3, Math.max(1, lvl))).model;
+      const modelsDir = path.join(env.dataDir, 'models');
+      for (const other of [1, 2, 3]) {
+        const m = vlmFor(other).model;
+        if (m === keep) continue;
+        const dir = path.join(modelsDir, m);
+        await fs.rm(dir, { recursive: true, force: true });
+        console.log(`[ml] purged unselected model ${m}`);
+      }
+    } catch (e) {
+      console.error('[ml] model purge failed:', (e as Error).message);
+    }
+  }, PURGE_DELAY_MS);
+  purgeTimer.unref?.();
 }
 
 /**

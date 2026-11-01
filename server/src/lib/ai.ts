@@ -5,7 +5,7 @@ import { db } from '../db';
 import { items, photos, settings } from '../db/schema';
 import { env } from '../env';
 import { lookupBarcode, type DetectedCode } from './barcodes';
-import { mlDisabled, mlLevel, vlmAsk, vlmGenerate } from './ml';
+import { activeMlLevel, mlDisabled, vlmAsk, vlmGenerate } from './ml';
 
 export interface AiConfig {
   enabled: boolean;
@@ -150,7 +150,8 @@ async function suggestOne(itemId: string): Promise<void> {
   }
   if (item.name) context.push(`The owner called it "${item.name}".`);
 
-  if (cfg.provider === 'local' && mlLevel <= 1) {
+  const lvl = cfg.provider === 'local' ? await activeMlLevel() : 0;
+  if (cfg.provider === 'local' && lvl <= 1) {
     const short = await vlmGenerate(buf, '<CAPTION>', 40);
     const detailed = await vlmGenerate(buf, '<MORE_DETAILED_CAPTION>', 100);
     const ocr = await vlmGenerate(buf, '<OCR>', 128).catch(() => null);
@@ -218,7 +219,7 @@ export async function detectObjects(photoFile: string, isPrivate = false): Promi
     throw new Error('private items can only use the built-in model');
   const buf = await fs.readFile(photoFile);
 
-  if (cfg.provider === 'local' && mlLevel >= 2) {
+  if (cfg.provider === 'local' && (await activeMlLevel()) >= 2) {
     // Prompted VLM answers the same JSON split prompt remote providers get.
     const raw = await vlmAsk(buf, SPLIT_PROMPT, 320);
     const arr = JSON.parse(raw.replace(/```(?:json)?/g, '').match(/\[[\s\S]*\]/)?.[0] ?? '[]') as any[];

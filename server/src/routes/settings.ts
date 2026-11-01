@@ -2,9 +2,9 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { asc, eq } from 'drizzle-orm';
 import { db, sqlite } from '../db';
-import { items, mcpTokens } from '../db/schema';
+import { items, mcpTokens, settings } from '../db/schema';
 import { getAiConfig, kickAi, setAiConfig } from '../lib/ai';
-import { analyzeItemPhoto, vlmDownloaded } from '../lib/ml';
+import { activeMlLevel, analyzeItemPhoto, invalidateMlLevel, vlmDownloaded, vlmStatus, warmVlm } from '../lib/ml';
 import { getDigestConfig, setDigestConfig, webhookToken } from '../lib/digest';
 import { getBackupSchedule, setBackupSchedule } from '../lib/backup';
 import { requireAdmin } from '../lib/guards';
@@ -17,6 +17,7 @@ const AiSettingsSchema = z.object({
   base_url: z.string().max(500).optional(),
   model: z.string().max(200).optional(),
   api_key: z.string().max(500).nullable().optional(),
+  ml_level: z.number().int().min(0).max(3).nullable().optional(),
 }).passthrough();
 
 const DigestSettingsSchema = z.object({
@@ -70,6 +71,8 @@ export async function settingsRoutes(app: FastifyInstance) {
       enabled: cfg?.enabled ?? false,
       provider: cfg?.provider ?? 'local',
       local_ready: await vlmDownloaded(),
+      ml_level: await activeMlLevel(),
+      ml: vlmStatus(),
       base_url: cfg?.base_url ?? '',
       model: cfg?.model ?? '',
       has_api_key: !!cfg?.api_key,
@@ -84,13 +87,31 @@ export async function settingsRoutes(app: FastifyInstance) {
       if (err) return reply.badRequest(err);
     }
     const prev = await getAiConfig();
-    await setAiConfig({
-      enabled: !!body.enabled,
-      provider: body.provider === 'local' ? 'local' : 'remote',
+    const cfg = {
+      enabled: body.enabled ?? prev?.enabled ?? false,
+      provider: (body.provider ?? prev?.provider) === 'local' ? ('local' as const) : ('remote' as const),
       base_url: body.base_url ?? prev?.base_url ?? '',
       model: body.model ?? prev?.model ?? '',
       api_key: body.api_key != null ? body.api_key : prev?.api_key,
-    });
+    };
+    if (body.enabled !== undefined || body.provider !== undefined || body.base_url !== undefined ||
+        body.model !== undefined || body.api_key !== undefined) {
+      await setAiConfig(cfg);
+    }
+    if (body.ml_level !== undefined) {
+      if (body.ml_level === null) {
+        await db.delete(settings).where(eq(settings.key, 'ml_level'));
+      } else {
+        await db
+          .insert(settings)
+          .values({ key: 'ml_level', value: { level: body.ml_level } as any })
+          .onConflictDoUpdate({ target: settings.key, set: { value: { level: body.ml_level } as any } });
+      }
+      invalidateMlLevel();
+      // New selection -> start fetching it now; the purge of the old model
+      // only arms once the new one is ready.
+      if (cfg.provider === 'local' && cfg.enabled) warmVlm();
+    }
     kickAi();
     return { ok: true };
   });

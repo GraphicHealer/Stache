@@ -295,6 +295,24 @@ export function LabelsPage() {
               ) : (
                 <>
                   <IconBtn icon="printer" className="btn-small" label={`Send test label to ${p.name}`} onClick={() => testPrinter(p)} />
+                  {p.type === 'zpl' && (
+                    <button
+                      className="btn btn-small"
+                      title="Ask the printer what label size is loaded"
+                      onClick={async () => {
+                        const cal = window.confirm('Run media calibration? It feeds ~1 label to measure it. Cancel = read current values only.');
+                        try {
+                          const r = await api.post(`/api/printers/${p.id}/detect`, { calibrate: cal });
+                          toast(`Detected ${r.label_w_mm ?? '?'}×${r.label_h_mm ?? '?'}mm @ ${r.dpi}dpi`);
+                          refetchPrinters();
+                        } catch (e) {
+                          toast(`Detect failed: ${(e as Error).message}`);
+                        }
+                      }}
+                    >
+                      Size?
+                    </button>
+                  )}
                   <IconBtn
                     icon="trash"
                     className="btn-small btn-ghost"

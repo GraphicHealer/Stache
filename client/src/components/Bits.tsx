@@ -378,3 +378,24 @@ export function PrintDialog({
     </div>
   );
 }
+
+/** Bottom-corner banner while the local AI model downloads. Links to Settings. */
+export function ModelBanner() {
+  const { data } = useQuery({
+    queryKey: ['ai-model-status'],
+    queryFn: () => api.get('/api/settings/ai'),
+    refetchInterval: (q) => (q.state.data?.ml?.state === 'downloading' ? 3000 : 30000),
+  });
+  const ml = data?.ml;
+  if (ml?.state !== 'downloading') return null;
+  return (
+    <Link to="/settings" className="model-banner">
+      <span className="muted">
+        Downloading AI model{ml.percent != null ? ` - ${ml.percent}%` : '...'}
+      </span>
+      <div className="model-banner-bar">
+        <div style={{ width: `${ml.percent ?? 2}%` }} />
+      </div>
+    </Link>
+  );
+}

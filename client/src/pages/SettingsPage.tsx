@@ -72,7 +72,11 @@ function parseImportFile(text: string, filename: string): Record<string, unknown
 export function SettingsPage() {
   const { toast, user, signOut } = useApp();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['settings-ai'], queryFn: () => api.get('/api/settings/ai') });
+  const { data } = useQuery({
+    queryKey: ['settings-ai'],
+    queryFn: () => api.get('/api/settings/ai'),
+    refetchInterval: (q) => (q.state.data?.ml?.state === 'downloading' ? 1500 : false),
+  });
   const { data: mcp } = useQuery({ queryKey: ['settings-mcp'], queryFn: () => api.get('/api/settings/mcp') });
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const { data: digest } = useQuery({ queryKey: ['settings-digest'], queryFn: () => api.get('/api/settings/digest') });
@@ -268,10 +272,38 @@ export function SettingsPage() {
         <option value="remote">External endpoint</option>
       </select>
       {form.provider === 'local' && (
-        <p className="muted">
-          Florence-2 downloads into your data folder on first use (~400MB) and runs offline
-          after that.{data?.local_ready ? ' Model downloaded.' : ''}
-        </p>
+        <>
+          <label className="row" style={{ gap: 8 }}>
+            <span className="muted">Model</span>
+            <select
+              className="input"
+              style={{ width: 'auto', flex: 1 }}
+              value={String(data?.ml_level ?? 2)}
+              onChange={async (e) => {
+                await api.put('/api/settings/ai', { ml_level: parseInt(e.target.value, 10) });
+                qc.invalidateQueries({ queryKey: ['settings-ai'] });
+              }}
+            >
+              <option value="1">Florence-2 — light, fast (~400MB)</option>
+              <option value="2">LFM2.5-VL 450M — uses your names as context (~700MB)</option>
+              <option value="3">Moondream2 — biggest, best quality (~2GB)</option>
+            </select>
+          </label>
+          {data?.ml?.state === 'downloading' && (
+            <p className="muted">
+              Downloading model
+              {data.ml.percent != null ? ` — ${data.ml.percent}%` : '…'}
+              {data.ml.file ? ` (${data.ml.file.split('/').pop()})` : ''}
+            </p>
+          )}
+          {data?.ml?.state === 'ready' && <p className="muted">Model downloaded and ready.</p>}
+          {data?.ml?.state === 'failed' && (
+            <p className="muted">Model download failed — it retries on the next request.</p>
+          )}
+          <p className="muted">
+            Switching models deletes the old one a few minutes after the new one is ready.
+          </p>
+        </>
       )}
       {form.provider === 'remote' && (
         <>
