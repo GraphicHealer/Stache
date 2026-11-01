@@ -273,10 +273,17 @@ async function cellSvg(
     if (info.category)
       text += `<text x="${tx}" y="${y + px(m.name + 1.7)}" font-family="sans-serif" font-size="${font(m.cat)}" fill="#333"${anchor ? ` text-anchor="${anchor}"` : ''}>${clip(info.category, m.cat, textW - m.logo - 2)}</text>`;
   } else {
-    // Vertical blanks: lines fill the middle band between logo and QR.
-    const lines = (m.vertical ? [0.28, 0.38, 0.48] : [0.36, 0.62, 0.88]).map((f) =>
-      Math.round(ch * f),
-    );
+    // Vertical blanks: three lines at ~10mm pitch, centered in the middle
+    // band between the logo and the QR.
+    let lines: number[];
+    if (m.vertical) {
+      const qrTop = ch - px(m.qr) - px(m.code + 2.5);
+      const mid = Math.round((px(m.logo) + qrTop) / 2);
+      const gap = Math.min(px(10), Math.round((qrTop - px(m.logo)) / 4));
+      lines = [mid - gap, mid, mid + gap];
+    } else {
+      lines = [0.36, 0.62, 0.88].map((f) => Math.round(ch * f));
+    }
     text = lines
       .map(
         (y, i) =>

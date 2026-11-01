@@ -437,7 +437,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .pcell.vertical .plogo, .label-cell.vertical .label-logo { position: absolute; left: 50%; transform: translateX(-50%); top: 1.5mm; }
 .pcell.vertical .pqrcol, .label-cell.vertical .label-qrcol { order: 2; width: auto; max-width: none; }
 .pcell.vertical .pinfo, .label-cell.vertical .label-info { order: 1; flex: 1; justify-content: center; }
-.pcell.vertical .pblank, .label-cell.vertical .label-blank { width: 86%; margin: 0 7%; }
+.pcell.vertical .pblank, .label-cell.vertical .label-blank { width: 86%; margin: 0 7%; height: 7mm; }
 
 /* Vertical cells: kill the grid layout outright - plain column flow. */
 .pcell.vertical .pinfo,
