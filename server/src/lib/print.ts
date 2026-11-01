@@ -6,12 +6,16 @@ import path from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
+import zplImage from 'zpl-image';
 import type { Printer } from '../db/schema';
 import { db } from '../db';
 import { areas, labels } from '../db/schema';
 import { PAGE_SIZES, resolveSheet, type SheetSpec } from './sheetspec';
 
 const MM_PER_DOT = (dpi: number) => 25.4 / dpi;
+
+// zpl-image is CJS/UMD - named imports break under ESM bundling.
+const { rgbaToACS } = zplImage;
 
 function sendTcp(host: string, port: number, payload: string | Buffer): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -29,33 +33,103 @@ function sendTcp(host: string, port: number, payload: string | Buffer): Promise<
   });
 }
 
-/** ZPL for one label: QR code + human-readable code beneath it. */
-export function zplForLabel(code: string, url: string, p: Printer): string {
-  const w = Math.round(p.labelWmm / MM_PER_DOT(p.dpi));
-  const h = Math.round(p.labelHmm / MM_PER_DOT(p.dpi));
-  const qrDots = Math.min(w, h) * 0.72;
-  // ^BQ magnification ~ module size in dots; QR v3-ish ≈ 33 modules incl. quiet zone.
-  const mag = Math.max(1, Math.min(10, Math.floor(qrDots / 33)));
-  const qrSide = 33 * mag;
-  const textH = Math.round(3.5 / MM_PER_DOT(p.dpi));
-  const qrX = Math.round((w - qrSide) / 2);
-  const qrY = Math.round((h - qrSide - textH) / 2);
-  return [
-    '^XA',
-    `^PW${w}`,
-    `^LL${h}`,
-    `^FO${qrX},${qrY}^BQN,2,${mag}^FDQA,${url}^FS`,
-    `^FO0,${qrY + qrSide + Math.round(1 / MM_PER_DOT(p.dpi))}^A0N,${textH},${textH}^FB${w},1,0,C,0^FD${code}^FS`,
-    '^XZ',
-  ].join('\n');
+/** PNG/SVG buffer -> ^GFA field at an exact dot size (ACS = legacy-safe). */
+async function gfa(input: Buffer, dotsW: number, dotsH: number): Promise<string> {
+  const { data, info } = await sharp(input)
+    .resize(dotsW, dotsH, { kernel: 'nearest' })
+    .flatten({ background: '#ffffff' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const r = rgbaToACS(data, info.width, { black: 50, notrim: true });
+  return `^GFA,${r.length},${r.length},${r.rowlen},${r.acs}`;
+}
+
+/** Strip field-data control chars so user text can't break the format. */
+const zfd = (s: string) => s.replace(/[\^~\\]/g, '');
+
+/** ZPL for one label: logo/text/lines layout mirroring the browser cells. */
+export async function zplForLabel(
+  info: CellInfo,
+  url: string,
+  p: Printer,
+  logoBuf: Buffer | null,
+): Promise<string> {
+  const d = (mm: number) => Math.round(mm / MM_PER_DOT(p.dpi));
+  const w = d(p.labelWmm);
+  const h = d(p.labelHmm);
+  const m = labelMetrics(p.labelWmm, p.labelHmm);
+  const qrSide = d(m.qr);
+  const clip = (s: string, mmFont: number, widthMm: number) => {
+    const max = Math.floor(widthMm / (mmFont * 0.62));
+    return zfd(s.length > max && max > 3 ? `${s.slice(0, max - 1)}…` : s);
+  };
+  const centered = (txt: string, y: number, mmFont: number) =>
+    `^FO0,${y}^A0N,${d(mmFont)},${d(mmFont)}^FB${w},1,0,C,0^FD${zfd(txt)}^FS`;
+  const rule = (x: number, y: number, len: number) =>
+    `^FO${x},${y}^GB${len},${Math.max(2, d(0.35))},${Math.max(2, d(0.35))}^FS`;
+
+  const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 0 });
+  const logoSide = d(m.logo);
+  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`];
+  if (m.vertical) {
+    if (logoBuf) cmds.push(`^FO${Math.round((w - logoSide) / 2)},${d(1)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
+    if (info.name) {
+      let y = d(m.logo + 6);
+      if (info.path) {
+        cmds.push(centered(clip(info.path, m.path, p.labelWmm - 8), y, m.path));
+        y += d(m.path + 1.7);
+      }
+      cmds.push(centered(clip(info.name, m.name, p.labelWmm - 8), y, m.name));
+      y += d(m.name + 1.7);
+      if (info.category) cmds.push(centered(clip(info.category, m.cat, p.labelWmm - 8), y, m.cat));
+    } else {
+      for (const f of [0.28, 0.38, 0.48]) cmds.push(rule(d(4), Math.round(h * f), w - d(8)));
+    }
+    const qrY = h - qrSide - d(m.code + 2.5);
+    cmds.push(`^FO${Math.round((w - qrSide) / 2)},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
+    cmds.push(centered(info.code, qrY + qrSide + d(1), m.code));
+  } else {
+    const qrX = d(1);
+    const qrY = Math.round((h - qrSide) / 2) - d(2);
+    cmds.push(`^FO${qrX},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
+    cmds.push(`^FO0,${qrY + qrSide + d(1)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}^FS`);
+    const textX = qrSide + d(3);
+    const textWmm = p.labelWmm - m.qr - 6;
+    if (info.name) {
+      let y = d(5);
+      if (info.path) {
+        cmds.push(`^FO${textX},${y}^A0N,${d(m.path)},${d(m.path)}^FD${clip(info.path, m.path, textWmm)}^FS`);
+        y += d(m.path + 1.7);
+      }
+      cmds.push(`^FO${textX},${y}^A0N,${d(m.name)},${d(m.name)}^FD${clip(info.name, m.name, textWmm)}^FS`);
+      y += d(m.name + 1.7);
+      if (info.category)
+        cmds.push(`^FO${textX},${y}^A0N,${d(m.cat)},${d(m.cat)}^FD${clip(info.category, m.cat, textWmm)}^FS`);
+    } else {
+      for (const [i, f] of [0.36, 0.62, 0.88].entries())
+        cmds.push(rule(textX, Math.round(h * f), w - textX - d(4) - (i === 2 ? d(m.logo) : 0)));
+    }
+    if (logoBuf)
+      cmds.push(`^FO${w - logoSide - d(0.8)},${h - logoSide - d(0.5)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
+  }
+  cmds.push('^XZ');
+  return cmds.join('\n');
 }
 
 export async function printZpl(p: Printer, codes: string[], origin: string): Promise<void> {
   if (!p.host) throw new Error('printer host not set');
-  const zpl = codes
-    .map((code) => zplForLabel(code, `${origin}/l/${code}`, p))
-    .join('\n');
-  await sendTcp(p.host, p.port, zpl);
+  const infos = await cellInfos(codes);
+  let logoBuf: Buffer | null = null;
+  try {
+    logoBuf = await fs.readFile(path.join(process.cwd(), 'client', 'dist', 'logo-mono.svg'));
+  } catch {
+    // no logo asset - label prints without it
+  }
+  const parts = await Promise.all(
+    codes.map((code) => zplForLabel(infos.get(code)!, `${origin}/l/${code}`, p, logoBuf)),
+  );
+  await sendTcp(p.host, p.port, parts.join('\n'));
 }
 
 /** QR code rendered to a PNG sized for the label, for CUPS queues. */
