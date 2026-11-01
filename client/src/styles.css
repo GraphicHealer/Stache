@@ -193,7 +193,7 @@ textarea.input { resize: vertical; }
 .label-qr { width: 100%; display: block; }
 .label-info { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr auto; align-content: center; }
 .label-info > :nth-last-child(n+3) { grid-column: 1 / -1; }
-.label-logo { width: 34px; height: 34px; align-self: end; justify-self: end; }
+.label-logo { width: 34px; height: auto; align-self: end; justify-self: end; }
 .label-code { font-family: ui-monospace, monospace; font-size: 0.55rem; color: #555; }
 .label-path { font-size: 0.6rem; color: #555; overflow-wrap: anywhere; }
 .label-tags { font-size: 0.6rem; color: #555; margin-top: 1px; overflow-wrap: anywhere; }
@@ -402,7 +402,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 /* Grid: upper lines span the full width, last text + logo share a 2-col row. */
 .pinfo { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr auto; align-content: center; }
 .pinfo > :nth-last-child(n+3) { grid-column: 1 / -1; }
-.plogo { width: 10mm; height: 10mm; align-self: end; justify-self: end; }
+.plogo { width: 10mm; height: auto; align-self: end; justify-self: end; }
 .ppath { font-size: 2.3mm; color: #333; margin-bottom: 0.4mm; overflow-wrap: anywhere; }
 .ptags { font-size: 2.3mm; color: #333; margin-top: 0.4mm; overflow-wrap: anywhere; }
 .pname { font-weight: 700; font-size: 3.4mm; overflow-wrap: anywhere; }
