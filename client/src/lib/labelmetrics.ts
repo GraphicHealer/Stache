@@ -26,7 +26,7 @@ export function labelMetrics(wMm: number, hMm: number): LabelMetrics {
     name: 3.4 * s,
     category: 2.3 * s,
     logo: vertical
-      ? Math.min(hMm * 0.15, wMm * 0.45, 30)
+      ? Math.min(hMm * 0.22, wMm * 0.6, 48)
       : Math.min(10 * s, hMm * 0.25, wMm * 0.3),
     logoCenter: vertical,
     padding: Math.min(3 * s, 8),

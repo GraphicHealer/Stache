@@ -163,7 +163,7 @@ function labelMetrics(w: number, h: number) {
     vertical,
     qr: vertical ? Math.min(w * 0.72, h * 0.42) : Math.min(h * 0.82, w * 0.4),
     code: 2.1 * s, path: 2.3 * s, name: 3.4 * s, cat: 2.3 * s,
-    logo: vertical ? Math.min(h * 0.15, w * 0.45, 30) : Math.min(10 * s, h * 0.25, w * 0.3),
+    logo: vertical ? Math.min(h * 0.22, w * 0.6, 48) : Math.min(10 * s, h * 0.25, w * 0.3),
   };
 }
 
