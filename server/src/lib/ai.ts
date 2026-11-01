@@ -50,6 +50,34 @@ Reply with ONLY a JSON object:
 }
 Rules: never guess a name - null is better than wrong. No markdown, no explanation.`;
 
+/** Words too generic to be useful tags. */
+const TAG_STOP = new Set(
+  ('the,and,for,with,that,this,from,into,onto,over,under,item,photo,image,picture,object,thing,' +
+    'sitting,standing,shown,appears,seems,looks,like,next,near,against,behind,around,inside,' +
+    'outside,background,foreground,small,large,big,little,top,bottom,front,back,left,right,' +
+    'white,black,one,two,three,some,several,view,close,closeup')
+    .split(','),
+);
+
+/**
+ * Tag candidates for the local provider. Florence-2 can't take text
+ * context, so tags are derived instead: the owner's own words first
+ * (they're the best label signal we have), then distinctive words
+ * from the detailed caption and OCR text.
+ */
+function localTags(userName: string | null, caption: string | null, ocr: string | null): string[] {
+  const words = (t: string | null) =>
+    (t ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/[\s-]+/)
+      .filter((w) => w.length > 2 && !TAG_STOP.has(w));
+  const out: string[] = [];
+  for (const src of [userName, caption, ocr])
+    for (const w of words(src)) if (!out.includes(w)) out.push(w);
+  return out.slice(0, 8);
+}
+
 /** Shared VLM call - returns the raw text content. */
 async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promise<string> {
   const res = await fetch(`${cfg.base_url.replace(/\/$/, '')}/chat/completions`, {
@@ -113,11 +141,13 @@ async function suggestOne(itemId: string): Promise<void> {
     const detailed = await vlmGenerate(buf, '<MORE_DETAILED_CAPTION>', 100);
     const ocr = await vlmGenerate(buf, '<OCR>', 128).catch(() => null);
     const name = String(short.result?.['<CAPTION>'] ?? '').replace(/^(a|an|the)\s+/i, '').trim() || null;
+    const description = String(detailed.result?.['<MORE_DETAILED_CAPTION>'] ?? '').trim() || null;
+    const ocrText = String(ocr?.result?.['<OCR>'] ?? '').trim() || null;
     parsed = {
       name,
-      description: String(detailed.result?.['<MORE_DETAILED_CAPTION>'] ?? '').trim() || null,
-      tags: [],
-      ocr_text: String(ocr?.result?.['<OCR>'] ?? '').trim() || null,
+      description,
+      tags: localTags(item.name, description, ocrText),
+      ocr_text: ocrText,
     };
   } else {
     const dataUrl = `data:image/webp;base64,${buf.toString('base64')}`;
