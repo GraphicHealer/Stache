@@ -94,8 +94,13 @@ async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promi
         { role: 'user', content: userContent },
       ],
     }),
+    // Never follow redirects: a permitted base_url must not bounce the
+    // request at a prohibited (metadata/internal) target.
+    redirect: 'manual',
     signal: AbortSignal.timeout(90_000),
   });
+  if (res.status >= 300 && res.status < 400)
+    throw new Error('AI provider answered with a redirect - refused');
   if (!res.ok) throw new Error(`AI provider ${res.status}: ${(await res.text()).slice(0, 500)}`);
   // A hostile or garbage endpoint could return anything - cap the read.
   const raw = await res.text();

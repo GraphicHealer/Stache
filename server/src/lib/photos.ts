@@ -12,6 +12,12 @@ const PHOTO_DIR = () => path.join(env.dataDir, 'photos');
 // Keep libvips off all cores during bursts - small hosts stay responsive.
 sharp.concurrency(2);
 
+// Reject absurd decodes before they happen: every real phone photo fits
+// under 250MP; a crafted bomb does not.
+const MAX_INPUT_PIXELS = 250_000_000;
+
+export class PhotoError extends Error {}
+
 export async function ensurePhotoDir() {
   await fs.mkdir(PHOTO_DIR(), { recursive: true });
 }
@@ -23,24 +29,39 @@ export interface SavedPhoto {
   height: number | null;
 }
 
+/** Cheap up-front check so a bad upload is refused before records exist. */
+export async function assertImage(buf: Buffer): Promise<void> {
+  await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().metadata();
+}
+
 /** Stores an oriented original (max 1600px webp) plus a 320px thumb. */
 export async function savePhotoFile(buf: Buffer): Promise<SavedPhoto> {
   await ensurePhotoDir();
   const id = crypto.randomUUID();
   const name = `${id}.webp`;
   const thumbName = `${id}_t.webp`;
-  const meta = await sharp(buf).rotate().metadata();
-  await sharp(buf)
-    .rotate()
-    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 82 })
-    .toFile(path.join(PHOTO_DIR(), name));
-  await sharp(buf)
-    .rotate()
-    .resize(320, 320, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 70 })
-    .toFile(path.join(PHOTO_DIR(), thumbName));
-  return { path: name, thumbPath: thumbName, width: meta.width ?? null, height: meta.height ?? null };
+  const out = path.join(PHOTO_DIR(), name);
+  const thumb = path.join(PHOTO_DIR(), thumbName);
+  const img = () => sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS });
+  try {
+    const meta = await img().rotate().metadata();
+    await img()
+      .rotate()
+      .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toFile(out);
+    await img()
+      .rotate()
+      .resize(320, 320, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 70 })
+      .toFile(thumb);
+    return { path: name, thumbPath: thumbName, width: meta.width ?? null, height: meta.height ?? null };
+  } catch (e) {
+    // Never leave a half-written pair on disk or a vague 500 for the client.
+    await fs.rm(out, { force: true });
+    await fs.rm(thumb, { force: true });
+    throw new PhotoError(e instanceof Error ? e.message : 'invalid image');
+  }
 }
 
 /** Regenerates the 320px thumb for an existing stored original. */

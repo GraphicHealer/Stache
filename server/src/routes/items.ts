@@ -8,12 +8,36 @@ import { env } from '../env';
 import { areas, items, itemLinks, itemReceipts, photos, user } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
 import { recordEventTx, type EventType } from '../lib/events';
-import { insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
+import { assertImage, insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
 import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
 import { analyzeItemPhoto, hasEmbedding, mlHealthy, nearestToItem } from '../lib/ml';
 import { detectCodes, lookupBarcode, type DetectedCode } from '../lib/barcodes';
 import { parseBody } from '../lib/validate';
 import { z } from 'zod';
+
+// A real calendar date, not just a YYYY-MM-DD shape ("2026-02-30" fails).
+const isCalDate = (s: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const dt = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return (
+    dt.getUTCFullYear() === +m[1] &&
+    dt.getUTCMonth() === +m[2] - 1 &&
+    dt.getUTCDate() === +m[3]
+  );
+};
+const CalDate = z.string().refine(isCalDate, 'must be a real YYYY-MM-DD date');
+
+// JSON numbers or numeric strings ("5") - rejects booleans and garbage
+// (coerce would silently turn true->1, ""->0, "abc"->NaN is caught but ugly).
+const numOrString = z.union([
+  z.number().finite(),
+  z
+    .string()
+    .trim()
+    .refine((s) => s !== '' && Number.isFinite(Number(s)), 'must be a number')
+    .transform((s) => Number(s)),
+]);
 
 const ItemPatchSchema = z.object({
   area_id: z.string().optional(),
@@ -21,15 +45,19 @@ const ItemPatchSchema = z.object({
   lent_to: z.string().max(200).nullable().optional(),
   name: z.string().max(200).nullable().optional(),
   description: z.string().max(4000).nullable().optional(),
-  quantity: z.union([z.number(), z.string()]).optional(),
+  quantity: numOrString.pipe(z.number().int().min(1).max(1_000_000)).optional(),
   barcode: z.string().max(64).nullable().optional(),
   detected_codes: z.array(z.any()).nullable().optional(),
   is_private: z.boolean().optional(),
-  remind_snoozed_until: z.string().nullable().optional(),
-  warranty_until: z.string().nullable().optional(),
-  restock_below: z.union([z.number(), z.string(), z.null()]).optional(),
-  purchase_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  purchase_price: z.union([z.number(), z.string(), z.null()]).optional(),
+  remind_snoozed_until: z
+    .string()
+    .refine((s) => !isNaN(new Date(s).getTime()), 'must be a valid date')
+    .nullable()
+    .optional(),
+  warranty_until: CalDate.nullable().optional(),
+  restock_below: numOrString.pipe(z.number().int().min(0)).nullable().optional(),
+  purchase_date: CalDate.nullable().optional(),
+  purchase_price: numOrString.pipe(z.number().min(0).max(1_000_000_000)).nullable().optional(),
   retailer: z.string().max(200).nullable().optional(),
   serial_number: z.string().max(200).nullable().optional(),
   tags: z.array(z.string().max(50)).max(50).nullable().optional(),
@@ -37,7 +65,7 @@ const ItemPatchSchema = z.object({
   ai_name: z.string().max(200).nullable().optional(),
   ai_description: z.string().max(4000).nullable().optional(),
   ai_tags: z.array(z.string().max(50)).max(50).nullable().optional(),
-}).passthrough();
+}).strict();
 
 const LinkSchema = z.object({
   item_id: z.string(),
@@ -122,6 +150,13 @@ export async function itemRoutes(app: FastifyInstance) {
 
     const areaId = fields.area_id;
     if (!areaId) return reply.badRequest('area_id is required');
+    for (const buf of files) {
+      try {
+        await assertImage(buf);
+      } catch {
+        return reply.badRequest('invalid or oversized image');
+      }
+    }
     const [area] = await db
       .select({ id: areas.id })
       .from(areas)
@@ -255,13 +290,6 @@ export async function itemRoutes(app: FastifyInstance) {
       if (body.status === 'gone') item.hiddenAt = new Date();
     }
 
-    if (
-      body.remind_snoozed_until !== undefined &&
-      body.remind_snoozed_until !== null &&
-      isNaN(new Date(body.remind_snoozed_until).getTime())
-    )
-      return reply.badRequest('remind_snoozed_until must be a valid date');
-
     const editable = {
       name: 'name',
       description: 'description',
@@ -289,14 +317,9 @@ export async function itemRoutes(app: FastifyInstance) {
       if (raw !== undefined && raw !== (item as any)[col]) {
         prev[col] = (item as any)[col];
         next[col] = raw;
+        // Values arrive schema-typed; only the timestamp field needs a Date.
         (item as any)[col] =
-          key === 'quantity'
-            ? Math.max(1, parseInt(String(raw), 10) || 1)
-            : key === 'remind_snoozed_until' && raw
-              ? new Date(raw as string)
-              : key === 'restock_below'
-                ? (raw === null ? null : Math.max(0, parseInt(String(raw), 10) || 0))
-                : raw;
+          key === 'remind_snoozed_until' && raw ? new Date(raw as string) : raw;
       }
     }
     if (Object.keys(prev).length) {
@@ -365,6 +388,11 @@ export async function itemRoutes(app: FastifyInstance) {
     for await (const part of req.parts()) {
       if (part.type === 'file') {
         const buf = await part.toBuffer();
+        try {
+          await assertImage(buf);
+        } catch {
+          return reply.badRequest('invalid or oversized image');
+        }
         bufs.push(buf);
         const p = await insertPhoto(await savePhotoFile(buf), { itemId: id });
         saved.push(p);
@@ -393,6 +421,11 @@ export async function itemRoutes(app: FastifyInstance) {
       if (part.type === 'file') buf = await part.toBuffer();
     }
     if (!buf) return reply.badRequest('no photo uploaded');
+    try {
+      await assertImage(buf);
+    } catch {
+      return reply.badRequest('invalid or oversized image');
+    }
 
     const saved = await savePhotoFile(buf);
     const ev = db.transaction((tx) => {

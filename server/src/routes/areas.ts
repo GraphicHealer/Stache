@@ -5,6 +5,7 @@ import { areas, labels, photos } from '../db/schema';
 import { breadcrumb, descendantAreaIds, subtreeItemCounts } from '../lib/breadcrumb';
 import { recordEventTx } from '../lib/events';
 import {
+  assertImage,
   coverThumbsForAreas,
   insertPhoto,
   photoUrl,
@@ -279,7 +280,13 @@ export async function areaRoutes(app: FastifyInstance) {
     const rows = await db
       .select({ aiTags: items.aiTags, tags: items.tags })
       .from(items)
-      .where(and(inArray(items.areaId, ids), isNull(items.hiddenAt)));
+      .where(
+        and(
+          inArray(items.areaId, ids),
+          isNull(items.hiddenAt),
+          itemVisible(req.user?.id ?? null),
+        ),
+      );
     const have = new Set(((area.tags as string[] | null) ?? []).map((t) => t.toLowerCase()));
     const freq = new Map<string, number>();
     const bump = (t: unknown) => {
@@ -416,6 +423,11 @@ export async function areaRoutes(app: FastifyInstance) {
     for await (const part of req.parts()) {
       if (part.type === 'file') {
         const buf = await part.toBuffer();
+        try {
+          await assertImage(buf);
+        } catch {
+          return reply.badRequest('invalid or oversized image');
+        }
         const saved = await savePhotoFile(buf);
         savedPhotos.push(await insertPhoto(saved, { areaId: id }));
       } else if (part.fieldname === 'cover' && part.value === 'true') {
