@@ -13,6 +13,13 @@ export function BrowsePage() {
   const { data: labelsData } = useQuery({ queryKey: ['labels'], queryFn: () => api.get('/api/labels') });
   const [selecting, setSelecting] = useState<Set<string>>(new Set());
   const [printDlg, setPrintDlg] = useState(false);
+  const [moveDlg, setMoveDlg] = useState(false);
+  const [moveTarget, setMoveTarget] = useState('');
+  const { data: allAreasData } = useQuery({
+    queryKey: ['areas-all'],
+    queryFn: () => api.get('/api/areas?all=1'),
+    enabled: moveDlg,
+  });
 
   const areas = data?.areas ?? [];
   const printers = printerData?.printers ?? [];
@@ -80,6 +87,9 @@ export function BrowsePage() {
           </button>
           <span className="muted">{selecting.size} selected</span>
           <span style={{ flex: 1 }} />
+          <button className="btn" onClick={() => { setMoveTarget(''); setMoveDlg(true); }}>
+            Move into…
+          </button>
           <button className="btn" disabled={minting} onClick={() => void openPrint()}>
             {minting ? 'Making codes…' : `Print ${selecting.size}`}
           </button>
@@ -102,6 +112,45 @@ export function BrowsePage() {
       />
       {!active && (
         <p className="muted">Long-press a bin to select, or add an area / scan an unclaimed QR label.</p>
+      )}
+      {moveDlg && (
+        <div className="dlg-overlay" onClick={() => setMoveDlg(false)}>
+          <div className="dlg" role="dialog" aria-label="Move areas" onClick={(e) => e.stopPropagation()}>
+            <h2>Move {selecting.size} bin{selecting.size === 1 ? '' : 's'} into…</h2>
+            <select
+              className="input"
+              value={moveTarget}
+              onChange={(e) => setMoveTarget(e.target.value)}
+              autoFocus
+            >
+              <option value="">Top level (no parent)</option>
+              {(allAreasData?.areas ?? [])
+                .filter((a: any) => !selecting.has(a.id))
+                .map((a: any) => (
+                  <option key={a.id} value={a.id}>{a.name ?? 'unnamed'}</option>
+                ))}
+            </select>
+            <div className="row">
+              <button
+                className="btn"
+                onClick={async () => {
+                  for (const aid of selecting) {
+                    await api
+                      .patch(`/api/areas/${aid}`, { parent_id: moveTarget || null })
+                      .catch((e) => toast(e.message));
+                  }
+                  qc.invalidateQueries({ queryKey: ['areas'] });
+                  qc.invalidateQueries({ queryKey: ['areas-all'] });
+                  setMoveDlg(false);
+                  setSelecting(new Set());
+                }}
+              >
+                Move
+              </button>
+              <button className="btn" onClick={() => setMoveDlg(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
       <PrintDialog
         open={printDlg}
