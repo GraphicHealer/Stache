@@ -12,17 +12,22 @@ const PHOTO_DIR = () => path.join(env.dataDir, 'photos');
 // Keep libvips off all cores during bursts - small hosts stay responsive.
 sharp.concurrency(2);
 
-// Reject absurd decodes before they happen: every real phone photo fits
-// (200MP covers Samsung's max capture mode); a crafted bomb does not.
+// Resource limits here are three separate controls, not one:
+//   multipart cap (25MB/file, 30MB/request)  - bounds ENCODED upload size
+//   MAX_INPUT_PIXELS (200MP ~ 800MB decoded) - bounds DECODED memory per image
+//   photoGuard below                         - bounds concurrent OPERATIONS
+// Decoded size dwarfs encoded size, so pixel count is the decode bound.
 const MAX_INPUT_PIXELS = 200_000_000;
 
 export class PhotoError extends Error {}
 export class PhotoBusyError extends PhotoError {}
 
 // Bounds concurrent image work at the REQUEST level (not just libvips
-// threads). Each waiter only queues a closure, and a hard cap on waiters
-// refuses load instead of accumulating: worst-case in-flight memory is
-// (2 processing + 16 waiting) x the 25MB multipart cap.
+// threads). This is an operation limit, not a strict memory bound: each
+// waiter only queues a closure, but its request may already hold uploaded
+// buffers (up to ~30MB each) and each in-flight decode can take ~800MB.
+// Worst case is bounded but bigger than a naive (2+16) x 25MB figure -
+// roughly 2 decodes (~1.6GB) + 16 held request bodies (~480MB).
 const PHOTO_CONCURRENCY = 2;
 const PHOTO_WAITERS = 16;
 let inFlight = 0;
