@@ -23,6 +23,8 @@ export function AreaPage() {
   const [scanFor, setScanFor] = useState<null | 'set-current' | 'move-items' | 'move-area' | 'merge'>(null);
   const [printDlg, setPrintDlg] = useState(false);
   const [printCode, setPrintCode] = useState<string | null>(null);
+  const [editDlg, setEditDlg] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', category: '', tags: '' });
 
   const stocktakeKey = `stache:stocktake:${id}`;
 
@@ -122,8 +124,6 @@ export function AreaPage() {
     if (mode) await useDest(mode, dest);
   };
 
-  const [editForm, setEditForm] = useState({ name: '', category: '', tags: '' });
-  const [editDlg, setEditDlg] = useState(false);
   const openEdit = () => {
     setEditForm({
       name: area.name ?? '',
