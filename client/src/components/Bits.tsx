@@ -141,7 +141,16 @@ function SelectableCard({
         }
       }}
     >
-      <span className={`card-check${isSel ? ' on' : ''}`} aria-hidden />
+      <span
+        className={`card-check${isSel ? ' on' : ''}`}
+        aria-hidden
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
       {children}
     </div>
   );
@@ -154,6 +163,7 @@ export function ItemGrid({
   onToggle,
   placeholderLogo,
   selectable,
+  forceSelect,
 }: {
   items: GridItem[];
   linkTo: (id: string) => string;
@@ -163,9 +173,11 @@ export function ItemGrid({
   placeholderLogo?: boolean;
   /** Photos-app selection: long-press (mobile) or checkbox (hover) to pick. */
   selectable?: boolean;
+  /** Force selection mode on even with an empty set (e.g. stocktake). */
+  forceSelect?: boolean;
 }) {
   if (!items.length) return <div className="empty">Nothing here yet</div>;
-  const active = !!selected?.size;
+  const active = forceSelect || !!selected?.size;
   return (
     <div className="grid">
       {items.map((i) => {

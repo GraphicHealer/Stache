@@ -423,6 +423,8 @@ export function AreaPage() {
           sub: [i.area_name, i.quantity > 1 ? `×${i.quantity}` : null].filter(Boolean).join(' · ') || undefined,
         }))}
         linkTo={(iid) => `/items/${iid}`}
+        selectable
+        forceSelect={!!stocktake && !stocktakeReview}
         selected={stocktake ?? selecting ?? undefined}
         onToggle={(stocktake ?? selecting) && !stocktakeReview ? (iid) => {
           const next = new Set(stocktake ?? selecting ?? []);

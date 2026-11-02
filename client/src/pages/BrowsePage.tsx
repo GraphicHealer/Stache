@@ -38,6 +38,26 @@ export function BrowsePage() {
     ? areas.filter((a: any) => selecting.has(a.id) && a.label_code).map((a: any) => a.label_code)
     : [];
 
+  // Bins without a code get one minted + assigned, like the bin page does.
+  const [minting, setMinting] = useState(false);
+  const openPrint = async () => {
+    setMinting(true);
+    try {
+      for (const a of areas.filter((x: any) => selecting.has(x.id) && !x.label_code)) {
+        const r = await api.post('/api/labels/batch', { count: 1 }).catch(() => null);
+        const code = r?.labels?.[0];
+        if (code) {
+          await api.post(`/api/labels/${code}/assign`, { area_id: a.id }).catch(() => null);
+          a.label_code = code;
+        }
+      }
+      qc.invalidateQueries({ queryKey: ['areas'] });
+      setPrintDlg(true);
+    } finally {
+      setMinting(false);
+    }
+  };
+
   return (
     <div className="page">
       <div className="row spread">
@@ -60,8 +80,8 @@ export function BrowsePage() {
           </button>
           <span className="muted">{selecting.size} selected</span>
           <span style={{ flex: 1 }} />
-          <button className="btn" disabled={!selectedCodes.length} onClick={() => setPrintDlg(true)}>
-            Reprint {selectedCodes.length}
+          <button className="btn" disabled={minting} onClick={() => void openPrint()}>
+            {minting ? 'Making codes…' : `Print ${selecting.size}`}
           </button>
           <button className="btn btn-ghost" onClick={() => setSelecting(new Set())}>Done</button>
         </div>
@@ -91,7 +111,8 @@ export function BrowsePage() {
         presets={presets}
         labels={selectedCodes.map((code: string) => {
           const l: any = labelByCode.get(code);
-          return { code, name: l?.area_name ?? null, path: l?.area_path ?? null, category: l?.area_category ?? null };
+          const a: any = areas.find((x: any) => x.label_code === code);
+          return { code, name: l?.area_name ?? a?.name ?? null, path: l?.area_path ?? null, category: l?.area_category ?? a?.category ?? null };
         })}
       />
     </div>

@@ -491,8 +491,8 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .card-check {
   position: absolute; top: 8px; left: 8px; width: 24px; height: 24px;
   border-radius: 50%; border: 2px solid #fff; background: rgba(0,0,0,0.35);
-  opacity: 0; transition: opacity 0.15s; z-index: 2; pointer-events: none;
-  display: grid; place-items: center;
+  opacity: 0; transition: opacity 0.15s; z-index: 2;
+  display: grid; place-items: center; cursor: pointer;
 }
 .card-check.on { opacity: 1; background: var(--accent); border-color: var(--accent); }
 .card-check.on::after { content: '✓'; color: #fff; font-size: 14px; font-weight: 800; line-height: 1; }
