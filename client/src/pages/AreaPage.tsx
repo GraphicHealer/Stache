@@ -190,11 +190,25 @@ export function AreaPage() {
       <Breadcrumb trail={breadcrumb} />
 
       <div className="area-head">
-        {area.cover_thumb ? (
-          <img className="area-cover" src={area.cover_url} alt="" />
-        ) : (
-          <img className="area-cover ph-logo" src="/icon.svg" alt="" />
-        )}
+        <label className="area-cover-wrap" title="Change photo" aria-label="Change photo">
+          {area.cover_thumb ? (
+            <img className="area-cover" src={area.cover_url} alt="" />
+          ) : (
+            <img className="area-cover ph-logo" src="/icon.svg" alt="" />
+          )}
+          <span className="photo-replace"><Icon name="camera" size={14} /></span>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadPhoto(f);
+              e.target.value = '';
+            }}
+          />
+        </label>
         <div>
           <div className="row" style={{ gap: 6, alignItems: 'center' }}>
             <h1>{area.name ?? 'unnamed area'}</h1>
@@ -219,7 +233,6 @@ export function AreaPage() {
         }}>
           File things here
         </button>
-        <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
         <KebabMenu
           className="page-menu"
           label="Area actions"

@@ -476,3 +476,12 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 /* Stache logo placeholder for bins/areas without a cover photo. */
 .thumb-placeholder.ph-logo { object-fit: contain; padding: 18%; opacity: 0.45; }
 .area-cover.ph-logo { object-fit: contain; padding: 14px; opacity: 0.45; background: var(--panel-2); }
+
+/* Photo cells inside dialogs: smaller, with an add-tile. */
+.dlg .photo-strip img { height: 72px; border-radius: 10px; }
+.dlg .photo-cell .photo-replace { width: 22px; height: 22px; }
+.photo-add {
+  flex-shrink: 0; width: 54px; height: 72px; border-radius: 10px;
+  border: 2px dashed var(--border); background: var(--panel);
+  color: var(--muted); display: grid; place-items: center; cursor: pointer;
+}

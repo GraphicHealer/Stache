@@ -348,9 +348,39 @@ export function ItemPage() {
               </label>
             )}
             <label className="muted">Photos</label>
-            <CaptureInput onCapture={uploadPhoto} className="btn has-icon">
-              <Icon name="camera" /> Add photo
-            </CaptureInput>
+            <div className="photo-strip">
+              {photos.map((p: any) => (
+                <label key={p.id} className="photo-cell" title="Tap to replace" aria-label="Replace photo">
+                  <img src={p.thumb ?? p.url} alt="" />
+                  <span className="photo-replace"><Icon name="camera" size={14} /></span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) replacePhoto(p.id, f);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              ))}
+              <label className="photo-add" title="Add a photo" aria-label="Add a photo">
+                <Icon name="camera" size={22} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadPhoto(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
             <div className="row">
               <button
                 className="btn"
