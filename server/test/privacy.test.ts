@@ -161,6 +161,36 @@ describe('item privacy - routes', () => {
   });
 });
 
+describe('digest webhook POST', () => {
+  it('sends shared items only to the configured webhook', async () => {
+    const http = await import('node:http');
+    let posted: any = null;
+    const server = http.createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => { posted = JSON.parse(Buffer.concat(chunks).toString()); res.writeHead(200); res.end(); });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as any).port;
+    try {
+      const { setDigestConfig, sendDigest } = await import('../src/lib/digest');
+      await setDigestConfig({ enabled: true, webhook_url: `http://127.0.0.1:${port}/hook`, time: '09:00', base_url: 'http://x' });
+      // Seed one shared out item next to the private 'mine-passport'.
+      await db.update(schema.items).set({ status: 'out', outSince: new Date() }).where(eq(schema.items.id, shared.id));
+      await sendDigest();
+      expect(posted).toBeTruthy();
+      const names = posted.items.map((i: any) => i.name);
+      expect(names).toContain('shared-drill');
+      expect(names).not.toContain('mine-passport');
+      expect(names).not.toContain('theirs-diary');
+      expect(posted.low_stock.map((i: any) => i.name)).not.toContain('mine-passport');
+      expect(posted.warranty_expiring.map((i: any) => i.name)).not.toContain('mine-passport');
+    } finally {
+      server.close();
+    }
+  });
+});
+
 describe('signed photo URLs', () => {
   let photoName: string;
   beforeAll(async () => {

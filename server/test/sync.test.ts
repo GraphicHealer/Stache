@@ -110,4 +110,10 @@ describe('photo upload validation', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().item.id).toBeTruthy();
   });
+
+  it('rejects an upload over the 25MB part limit', async () => {
+    const big = Buffer.alloc(26 * 1024 * 1024, 1);
+    const res = await app.inject(multipart('big.jpg', big));
+    expect(res.statusCode).toBe(413);
+  });
 });
