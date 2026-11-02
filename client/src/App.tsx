@@ -153,7 +153,7 @@ function MoreMenu() {
 
 export function App() {
   useWedgeScan();
-  const { pending, user } = useApp();
+  const { pending, user, currentArea, setCurrentArea, stagedPhoto } = useApp();
   const { pathname } = useLocation();
   if (user === undefined) return <div className="page"><p className="muted">…</p></div>;
   if (user === null) return <LoginPage />;
@@ -166,6 +166,20 @@ export function App() {
           <img src="/icon.svg" alt="" />
           <span>Stache</span>
         </Link>
+        <div className="header-context">
+          {currentArea ? (
+            <>
+              <span className="muted">Filing into</span>
+              <b>{currentArea.name ?? 'unnamed area'}</b>
+              <button className="btn btn-small btn-ghost" onClick={() => setCurrentArea(null)}>Clear</button>
+            </>
+          ) : (
+            <span className="muted">
+              {stagedPhoto ? 'Photo staged - scan where it went' : 'Scan an area label to start filing'}
+            </span>
+          )}
+          {pending > 0 && <span className="badge warn">{pending} queued</span>}
+        </div>
       </header>
       <main className="content">
         <Routes>

@@ -460,6 +460,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 }
 .app-logo { display: flex; align-items: center; gap: 9px; text-decoration: none; color: inherit; font-weight: 700; font-size: 1.15rem; }
 .app-logo img { width: 30px; height: 30px; display: block; }
+.header-context { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.9rem; padding-right: 44px; white-space: nowrap; overflow: hidden; }
 
 /* Page-level kebab: floats into the header's top-right corner, chrome-free.
    40px button centered in the 48px header = 4px offset. */

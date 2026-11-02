@@ -16,7 +16,7 @@ import { ALL_FORMATS, Scanner } from '../components/Scanner';
 export function Home() {
   const {
     currentArea, setCurrentArea, stagedPhoto, setStagedPhoto,
-    toast, pending, refreshPending,
+    toast, refreshPending,
   } = useApp();
   const [scanning, setScanning] = useState(false);
   const [hint, setHint] = useState('Scan an area label');
@@ -131,26 +131,6 @@ export function Home() {
 
   return (
     <div className="home">
-      {(currentArea || stagedPhoto || pending > 0) && (
-      <div className="area-banner">
-        {currentArea ? (
-          <>
-            {currentArea.thumb && <img src={currentArea.thumb} alt="" />}
-            <div>
-              <div className="banner-label">Filing into</div>
-              <div className="banner-name">{currentArea.name ?? 'unnamed area'}</div>
-            </div>
-            <button className="btn btn-small" onClick={() => setCurrentArea(null)}>
-              Clear
-            </button>
-          </>
-        ) : stagedPhoto ? (
-          <div className="banner-name muted">Photo staged - scan where it went</div>
-        ) : null}
-        {pending > 0 && <span className="badge warn">{pending} queued</span>}
-      </div>
-      )}
-
       {outSum && outSum.total > 0 && (
         <div className="still-out">
           <div className="still-out-row">
