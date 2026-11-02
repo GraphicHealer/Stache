@@ -78,8 +78,8 @@ function localTags(userName: string | null, caption: string | null, ocr: string 
   return out.slice(0, 8);
 }
 
-/** Shared VLM call - returns the raw text content. */
-async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promise<string> {
+/** Shared VLM call - returns the raw text content. Exported for tests. */
+export async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promise<string> {
   const res = await fetch(`${cfg.base_url.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {

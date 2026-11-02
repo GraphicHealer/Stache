@@ -108,4 +108,24 @@ describe('drainOutbox', () => {
     expect(spy.mock.calls[0][0].client_id).toBe(spy.mock.calls[1][0].client_id);
     expect(await outboxCount()).toBe(0);
   });
+
+  it('overlapping drains upload each op once - the lock serializes', async () => {
+    // Boot + online + interval triggers can fire drainOutbox together; the
+    // module-level lock must keep the second call from re-sending the op.
+    let inFlight = 0;
+    const spy = vi.spyOn(api, 'fileItem').mockImplementation(async () => {
+      inFlight++;
+      expect(inFlight).toBe(1); // never two uploads at once
+      await new Promise((r) => setTimeout(r, 10));
+      inFlight--;
+      return { item: {} };
+    });
+    await outboxAdd(op(1));
+    await outboxAdd(op(2));
+
+    const [r1, r2] = await Promise.all([drainOutbox(), drainOutbox()]);
+    expect(spy).toHaveBeenCalledTimes(2); // once per op, never twice
+    expect(r1 + r2).toBeGreaterThanOrEqual(0);
+    expect(await outboxAll()).toHaveLength(0);
+  });
 });

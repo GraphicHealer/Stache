@@ -99,6 +99,34 @@ describe('ai base_url validation (SSRF surface)', () => {
   });
 });
 
+describe('callVlm redirect handling', () => {
+  it('a 302 from the configured endpoint is refused, not followed', async () => {
+    const http = await import('node:http');
+    const hits: string[] = [];
+    const server = http.createServer((req, res) => {
+      hits.push(req.url ?? '');
+      res.writeHead(302, { location: 'http://169.254.169.254/latest' });
+      res.end();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as any).port;
+    try {
+      const { callVlm } = await import('../src/lib/ai');
+      await expect(
+        callVlm(
+          { enabled: true, provider: 'remote', base_url: `http://127.0.0.1:${port}`, model: 'm', api_key: null } as any,
+          'sys',
+          [],
+        ),
+      ).rejects.toThrow(/redirect/i);
+      // One request, to our stub only - never the redirect target.
+      expect(hits).toHaveLength(1);
+    } finally {
+      server.close();
+    }
+  });
+});
+
 describe('PATCH /api/items/:id validation', () => {
   let member: any, item: any;
   beforeAll(async () => {
