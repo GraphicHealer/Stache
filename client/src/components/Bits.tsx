@@ -52,6 +52,7 @@ export function IconBtn({
 }) {
   return (
     <button
+      type="button"
       className={`btn icon-btn ${className}`}
       aria-label={label}
       title={label}
@@ -279,7 +280,7 @@ export function CaptureInput({
   const ref = useRef<HTMLInputElement>(null);
   return (
     <>
-      <button className={className} onClick={() => ref.current?.click()} {...rest}>
+      <button type="button" className={className} onClick={() => ref.current?.click()} {...rest}>
         {children}
       </button>
       <input
