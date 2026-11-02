@@ -13,7 +13,7 @@ overwrites.
   Bundled with esbuild (`--packages=external`); `tsc --noEmit` for typecheck.
 - `client/` - React + Vite PWA (offline outbox in IndexedDB, service worker
   caching, camera-first UX, Zebra wedge-scanner input).
-- `Dockerfile` - multi-stage: deps → build → runtime (`node:22-bookworm-slim`,
+- `Dockerfile` - multi-stage: deps → build → runtime (`node:24-bookworm-slim`,
   non-root `node` user, `cups-client` for label printing).
 - `docker-compose.yml` - a single `app` service, no DB container. Everything
   persists under `/data` (stache.db + photos + model cache).
