@@ -47,6 +47,7 @@ export function ItemPage() {
   const [listening, setListening] = useState(false);
   const [editDlg, setEditDlg] = useState(false);
   const [editTags, setEditTags] = useState('');
+  const [editPrivate, setEditPrivate] = useState(false);
   const recRef = useRef<{ stop: () => void } | null>(null);
 
   const { data: links } = useQuery({
@@ -289,6 +290,7 @@ export function ItemPage() {
           label="Edit item"
           onClick={() => {
             setEditTags((item.tags ?? []).join(', '));
+            setEditPrivate(!!item.is_private);
             setEditDlg(true);
           }}
         />
@@ -336,6 +338,16 @@ export function ItemPage() {
               onChange={(e) => setEditTags(e.target.value)}
               placeholder="comma, separated"
             />
+            {(!item.owner_id || item.owner_id === user?.id) && (
+              <label className="row" style={{ gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={editPrivate}
+                  onChange={(e) => setEditPrivate(e.target.checked)}
+                />
+                Private - only you can see this
+              </label>
+            )}
             <div className="row">
               <button
                 className="btn"
@@ -345,6 +357,7 @@ export function ItemPage() {
                       name: name.trim() || null,
                       description: desc.trim() || null,
                       tags: editTags.split(',').map((t) => t.trim()).filter(Boolean),
+                      is_private: editPrivate,
                     },
                     'Saved',
                   );
@@ -611,16 +624,6 @@ export function ItemPage() {
         </details>
       )}
 
-      {(!item.owner_id || item.owner_id === user?.id) && (
-        <label className="row">
-          <input
-            type="checkbox"
-            checked={item.is_private}
-            onChange={(e) => patch({ is_private: e.target.checked }, e.target.checked ? 'Private' : 'Shared')}
-          />
-          Private - only you can see this
-        </label>
-      )}
       {item.is_private && <span className="badge warn">private</span>}
       {item.duplicate_of && (
         <p className="muted">
