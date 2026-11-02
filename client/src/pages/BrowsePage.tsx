@@ -11,7 +11,7 @@ export function BrowsePage() {
   const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
   const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
   const { data: labelsData } = useQuery({ queryKey: ['labels'], queryFn: () => api.get('/api/labels') });
-  const [selecting, setSelecting] = useState<Set<string> | null>(null);
+  const [selecting, setSelecting] = useState<Set<string>>(new Set());
   const [printDlg, setPrintDlg] = useState(false);
 
   const areas = data?.areas ?? [];
