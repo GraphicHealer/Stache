@@ -280,7 +280,6 @@ export function ItemPage() {
             </label>
           </div>
         ))}
-        <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
       </div>
 
       <div className="row" style={{ gap: 6, alignItems: 'center' }}>
@@ -348,6 +347,10 @@ export function ItemPage() {
                 Private <span className="muted">(only you)</span>
               </label>
             )}
+            <label className="muted">Photos</label>
+            <CaptureInput onCapture={uploadPhoto} className="btn has-icon">
+              <Icon name="camera" /> Add photo
+            </CaptureInput>
             <div className="row">
               <button
                 className="btn"
