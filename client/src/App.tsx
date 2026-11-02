@@ -173,11 +173,11 @@ export function App() {
               <b>{currentArea.name ?? 'unnamed area'}</b>
               <button className="btn btn-small btn-ghost" onClick={() => setCurrentArea(null)}>Clear</button>
             </>
-          ) : (
+          ) : pathname === '/' ? (
             <span className="muted">
               {stagedPhoto ? 'Photo staged - scan where it went' : 'Scan an area label to start filing'}
             </span>
-          )}
+          ) : null}
           {pending > 0 && <span className="badge warn">{pending} queued</span>}
         </div>
       </header>
