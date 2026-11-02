@@ -449,13 +449,15 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 
 /* App header: logo top-left on every page. */
 .app-header {
-  display: flex; align-items: center; padding: 6px 14px;
+  display: flex; align-items: center; padding: 6px 14px; min-height: 48px;
   border-bottom: 1px solid var(--border); background: var(--bg, #14110d);
   flex-shrink: 0;
 }
 .app-logo { display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; font-weight: 700; font-size: 1.05rem; }
 .app-logo img { width: 26px; height: 26px; display: block; }
 
-/* Page-level kebab: floats into the header's top-right corner. */
-.kebab.page-menu { position: fixed; top: 8px; right: 10px; z-index: 60; }
-.kebab.page-menu .kebab-menu { position: fixed; top: 44px; right: 10px; left: auto; }
+/* Page-level kebab: floats into the header's top-right corner, chrome-free. */
+.kebab.page-menu { position: fixed; top: 5px; right: 10px; z-index: 60; }
+.kebab.page-menu .icon-btn { background: none; border: 0; box-shadow: none; padding: 8px 8px; min-width: 0; color: var(--muted); }
+.kebab.page-menu .icon-btn:hover { color: inherit; }
+.kebab.page-menu .kebab-menu { position: fixed; top: 48px; right: 10px; left: auto; }
