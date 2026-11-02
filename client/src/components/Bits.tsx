@@ -71,6 +71,10 @@ export interface Crumb {
 export function Breadcrumb({ trail }: { trail: Crumb[] }) {
   return (
     <div className="breadcrumb">
+      <Link to="/browse" className="crumb crumb-root" aria-label="All areas" title="All areas">
+        <img src="/logo-mono.svg" alt="" />
+      </Link>
+      {trail.length > 0 && <span className="crumb-sep">›</span>}
       {trail.map((c, i) => (
         <span key={c.id}>
           {i > 0 && <span className="crumb-sep">›</span>}

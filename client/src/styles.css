@@ -514,3 +514,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
   border: 2px solid var(--muted); display: inline-block;
 }
 .sel-all.on::before { background: var(--accent); border-color: var(--accent); content: '✓'; color: #fff; font-size: 13px; font-weight: 800; display: inline-grid; place-items: center; }
+
+/* Breadcrumb root link: bare stache logo. */
+.crumb-root img { width: 20px; height: 20px; display: block; opacity: 0.7; }
+.crumb-root:hover img { opacity: 1; }
