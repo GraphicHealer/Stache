@@ -131,6 +131,7 @@ export function Home() {
 
   return (
     <div className="home">
+      {(currentArea || stagedPhoto || pending > 0) && (
       <div className="area-banner">
         {currentArea ? (
           <>
@@ -143,13 +144,12 @@ export function Home() {
               Clear
             </button>
           </>
-        ) : (
-          <div className="banner-name muted">
-            {stagedPhoto ? 'Photo staged - scan where it went' : 'Scan an area label to start filing'}
-          </div>
-        )}
+        ) : stagedPhoto ? (
+          <div className="banner-name muted">Photo staged - scan where it went</div>
+        ) : null}
         {pending > 0 && <span className="badge warn">{pending} queued</span>}
       </div>
+      )}
 
       {outSum && outSum.total > 0 && (
         <div className="still-out">
