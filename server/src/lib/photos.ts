@@ -29,6 +29,12 @@ export interface SavedPhoto {
   height: number | null;
 }
 
+/** Deletes the files a SavedPhoto points at - rollback for failed uploads. */
+export async function removePhotoFiles(s: SavedPhoto): Promise<void> {
+  await fs.rm(path.join(PHOTO_DIR(), s.path), { force: true });
+  await fs.rm(path.join(PHOTO_DIR(), s.thumbPath), { force: true });
+}
+
 /** Cheap up-front check so a bad upload is refused before records exist. */
 export async function assertImage(buf: Buffer): Promise<void> {
   await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().metadata();

@@ -6,6 +6,8 @@ import { items, photos, settings } from '../db/schema';
 import { env } from '../env';
 import { lookupBarcode, type DetectedCode } from './barcodes';
 import { activeMlLevel, mlDisabled, vlmAsk, vlmGenerate } from './ml';
+import { checkedLookup } from './urlcheck';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 export interface AiConfig {
   enabled: boolean;
@@ -78,9 +80,16 @@ function localTags(userName: string | null, caption: string | null, ocr: string 
   return out.slice(0, 8);
 }
 
+// Custom DNS lookup so a DNS rebind can't turn a validated base_url into a
+// connect to a prohibited address - the resolved IP is checked per request.
+const aiDispatcher = new Agent({ connect: { lookup: checkedLookup() } as any });
+
 /** Shared VLM call - returns the raw text content. Exported for tests. */
 export async function callVlm(cfg: AiConfig, system: string, userContent: any[]): Promise<string> {
-  const res = await fetch(`${cfg.base_url.replace(/\/$/, '')}/chat/completions`, {
+  // undici's own fetch - the custom Agent is not guaranteed compatible with
+  // the runtime's bundled fetch implementation.
+  const res = await undiciFetch(`${cfg.base_url.replace(/\/$/, '')}/chat/completions`, {
+    dispatcher: aiDispatcher,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

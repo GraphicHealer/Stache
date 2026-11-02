@@ -116,4 +116,69 @@ describe('photo upload validation', () => {
     const res = await app.inject(multipart('big.jpg', big));
     expect(res.statusCode).toBe(413);
   });
+
+  it('rejects an image declaring absurd pixel dimensions', async () => {
+    // Minimal PNG: valid signature + IHDR claiming 30000x30000 (900MP). The
+    // 250MP decode limit must trip on the header, before any real decode.
+    const { crc32 } = await import('node:zlib');
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(30000, 0);
+    ihdr.writeUInt32BE(30000, 4);
+    ihdr[8] = 8; ihdr[9] = 6; // 8-bit RGBA
+    const chunk = (type: string, data: Buffer) => {
+      const body = Buffer.concat([Buffer.from(type), data]);
+      const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+      const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body), 0);
+      return Buffer.concat([len, body, crc]);
+    };
+    const png = Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      chunk('IHDR', ihdr),
+      chunk('IDAT', Buffer.alloc(0)),
+      chunk('IEND', Buffer.alloc(0)),
+    ]);
+    const res = await app.inject(multipart('huge.png', png));
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('area photo upload is atomic', () => {
+  const boundary = 'A-BOUNDARY';
+  const build = (parts: { name: string; filename: string; content: Buffer | string }[]) => ({
+    method: 'POST' as const,
+    url: `/api/areas/${area.id}/photos`,
+    headers: { ...member, 'content-type': `multipart/form-data; boundary=${boundary}` },
+    payload: Buffer.concat([
+      ...parts.flatMap((p) => [
+        Buffer.from(
+          `--${boundary}\r\ncontent-disposition: form-data; name="${p.name}"; filename="${p.filename}"\r\ncontent-type: image/png\r\n\r\n`,
+        ),
+        Buffer.isBuffer(p.content) ? p.content : Buffer.from(p.content),
+        Buffer.from('\r\n'),
+      ]),
+      Buffer.from(`--${boundary}--\r\n`),
+    ]),
+  });
+
+  it('a bad second file leaves no photo row and no files', async () => {
+    const sharp = (await import('sharp')).default;
+    const png = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: { r: 9, g: 9, b: 9 } },
+    }).png().toBuffer();
+    const fs = await import('node:fs');
+    const photoDir = `${process.env.DATA_DIR}/photos`;
+    const filesBefore = fs.existsSync(photoDir) ? fs.readdirSync(photoDir).length : 0;
+
+    const res = await app.inject(
+      build([
+        { name: 'photos', filename: 'ok.png', content: png },
+        { name: 'photos', filename: 'bad.png', content: 'not an image' },
+      ]),
+    );
+    expect(res.statusCode).toBe(400);
+    const rows = await db.select().from(schema.photos).where(eq(schema.photos.areaId, area.id));
+    expect(rows.length).toBe(0);
+    const filesAfter = fs.readdirSync(photoDir).length;
+    expect(filesAfter).toBe(filesBefore);
+  });
 });

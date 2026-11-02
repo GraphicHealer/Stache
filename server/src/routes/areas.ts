@@ -9,10 +9,12 @@ import {
   coverThumbsForAreas,
   insertPhoto,
   photoUrl,
+  removePhotoFiles,
   savePhotoFile,
   thumbUrl,
   thumbsForItems,
 } from '../lib/photos';
+import type { SavedPhoto } from '../lib/photos';
 import { items } from '../db/schema';
 import { itemVisible } from '../lib/visibility';
 import { parseBody } from '../lib/validate';
@@ -418,23 +420,36 @@ export async function areaRoutes(app: FastifyInstance) {
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
 
-    const savedPhotos = [];
+    // Collect + validate every file before writing anything - a bad upload
+    // must not leave earlier photos half-committed.
+    const bufs: Buffer[] = [];
     let wantsCover = !area.coverPhotoId;
     for await (const part of req.parts()) {
-      if (part.type === 'file') {
-        const buf = await part.toBuffer();
-        try {
-          await assertImage(buf);
-        } catch {
-          return reply.badRequest('invalid or oversized image');
-        }
-        const saved = await savePhotoFile(buf);
-        savedPhotos.push(await insertPhoto(saved, { areaId: id }));
-      } else if (part.fieldname === 'cover' && part.value === 'true') {
-        wantsCover = true;
+      if (part.type === 'file') bufs.push(await part.toBuffer());
+      else if (part.fieldname === 'cover' && part.value === 'true') wantsCover = true;
+    }
+    if (bufs.length === 0) return reply.badRequest('no photo uploaded');
+    for (const buf of bufs) {
+      try {
+        await assertImage(buf);
+      } catch {
+        return reply.badRequest('invalid or oversized image');
       }
     }
-    if (savedPhotos.length === 0) return reply.badRequest('no photo uploaded');
+    // Everything decodes - persist. If a later write still fails (disk/db),
+    // remove the files and rows this request already created.
+    const saved: SavedPhoto[] = [];
+    const savedPhotos = [];
+    try {
+      for (const buf of bufs) saved.push(await savePhotoFile(buf));
+      for (const s of saved) savedPhotos.push(await insertPhoto(s, { areaId: id }));
+    } catch (e) {
+      for (const s of saved) await removePhotoFiles(s);
+      await db
+        .delete(photos)
+        .where(inArray(photos.id, savedPhotos.map((p) => p.id)));
+      throw e;
+    }
     if (wantsCover) {
       await db
         .update(areas)

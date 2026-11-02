@@ -99,6 +99,38 @@ describe('ai base_url validation (SSRF surface)', () => {
   });
 });
 
+describe('checkedLookup (connect-time DNS check)', () => {
+  it('rejects when a name resolves to a prohibited address', async () => {
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    const lookup = checkedLookup(() => Promise.resolve({ address: '169.254.169.254', family: 4 }));
+    const err: any = await new Promise((res) => lookup('evil.lan', {}, (e) => res(e)));
+    expect(err).toBeInstanceOf(Error);
+    expect(String(err.message)).toContain('prohibited');
+  });
+
+  it('rejects an IPv6 link-local answer too', async () => {
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    const lookup = checkedLookup(() => Promise.resolve({ address: 'fe80::a9fe:a9fe', family: 6 }));
+    const err: any = await new Promise((res) => lookup('v6.lan', {}, (e) => res(e)));
+    expect(err).toBeInstanceOf(Error);
+  });
+
+  it('allows ordinary LAN/loopback answers', async () => {
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    for (const a of [
+      { address: '192.168.1.50', family: 4 },
+      { address: '127.0.0.1', family: 4 },
+      { address: 'fd00::1', family: 6 },
+    ]) {
+      const lookup = checkedLookup(() => Promise.resolve(a));
+      const got: any = await new Promise((res, rej) =>
+        lookup('nas.lan', {}, (e, addr, fam) => (e ? rej(e) : res([addr, fam]))),
+      );
+      expect(got).toEqual([a.address, a.family]);
+    }
+  });
+});
+
 describe('callVlm redirect handling', () => {
   it('a 302 from the configured endpoint is refused, not followed', async () => {
     const http = await import('node:http');

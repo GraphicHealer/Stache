@@ -26,6 +26,7 @@
     "qrcode": "^1.5.4",
     "sharp": "^0.35.5",
     "sqlite-vec": "^0.1.6",
+    "undici": "^8.12.3",
     "zod": "^4.6.7",
     "zpl-image": "^0.3.0",
     "zxing-wasm": "^3.1.6"
