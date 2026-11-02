@@ -340,6 +340,9 @@ export async function itemRoutes(app: FastifyInstance) {
           serialNumber: item.serialNumber,
           tags: item.tags,
           duplicateOf: item.duplicateOf,
+          aiName: item.aiName,
+          aiDescription: item.aiDescription,
+          aiTags: item.aiTags,
         })
         .where(eq(items.id, id))
         .returning()
