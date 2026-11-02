@@ -13,7 +13,7 @@ export function AreaPage() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const { setCurrentArea, toast } = useApp();
-  const [selecting, setSelecting] = useState<Set<string> | null>(null);
+  const [selecting, setSelecting] = useState<Set<string>>(new Set());
   // Stocktake mode: set of item ids confirmed physically present. Persisted
   // to localStorage so a distracted walk-away doesn't lose the ticks.
   const [stocktake, setStocktake] = useState<Set<string> | null>(null);
@@ -104,7 +104,7 @@ export function AreaPage() {
     }
     if (ids.length === 1 && !failed) toast('Moved', lastEvent);
     else toast(`Moved ${ids.length - failed}/${ids.length} item(s)`);
-    setSelecting(null);
+    setSelecting(new Set());
     refresh();
     qc.invalidateQueries({ queryKey: ['area', dest] });
   };
@@ -166,7 +166,7 @@ export function AreaPage() {
   // unticks what's missing, reviews the count, then commits - unticked items
   // get flagged unaccounted unless they opt out.
   const startStocktake = () => {
-    setSelecting(null);
+    setSelecting(new Set());
     setDeep(false);
     persistStocktake(new Set(items.map((i: any) => i.id)));
   };
@@ -348,44 +348,50 @@ export function AreaPage() {
             include sub-areas
           </label>
         )}
-        {items.length > 0 &&
-          (stocktake ? (
-            <>
-              <button className="btn" onClick={() => setStocktakeReview(true)}>Review…</button>
-              <button className="btn" onClick={() => persistStocktake(null)}>Cancel</button>
-            </>
-          ) : selecting ? (
-            <>
-              <button className="btn" onClick={() => setScanFor('move-items')} disabled={!selecting.size}>
-                Move {selecting.size}…
-              </button>
-              <button
-                className="btn danger"
-                disabled={!selecting.size}
-                onClick={async () => {
-                  if (!window.confirm(`Hide ${selecting.size} item(s)? Undoable.`)) return;
-                  const ids = [...selecting];
-                  let failed = 0;
-                  let lastEvent: string | undefined;
-                  for (const itemId of ids) {
-                    const r = await api.del(`/api/items/${itemId}`).catch(() => null);
-                    if (r) lastEvent = r.event_id;
-                    else failed++;
-                  }
-                  if (ids.length === 1 && !failed) toast('Hidden', lastEvent);
-                  else toast(`Hidden ${ids.length - failed}/${ids.length} item(s)`);
-                  setSelecting(null);
-                  refresh();
-                }}
-              >
-                Hide {selecting.size}
-              </button>
-              <button className="btn" onClick={() => setSelecting(null)}>Cancel</button>
-            </>
-          ) : (
-            <button className="btn" onClick={() => setSelecting(new Set())}>Select</button>
-          ))}
       </div>
+      {stocktake ? (
+        <div className="selection-bar">
+          <span className="muted">{stocktake.size}/{items.length} present</span>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={() => setStocktakeReview(true)}>Review…</button>
+          <button className="btn btn-ghost" onClick={() => persistStocktake(null)}>Done</button>
+        </div>
+      ) : selecting.size > 0 ? (
+        <div className="selection-bar">
+          <button
+            className={`sel-all${selecting.size === items.length ? ' on' : ''}`}
+            onClick={() =>
+              setSelecting(selecting.size === items.length ? new Set() : new Set(items.map((i: any) => i.id)))
+            }
+          >
+            Select all
+          </button>
+          <span className="muted">{selecting.size} selected</span>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={() => setScanFor('move-items')}>Move…</button>
+          <button
+            className="btn danger"
+            onClick={async () => {
+              if (!window.confirm(`Hide ${selecting.size} item(s)? Undoable.`)) return;
+              const ids = [...selecting];
+              let failed = 0;
+              let lastEvent: string | undefined;
+              for (const itemId of ids) {
+                const r = await api.del(`/api/items/${itemId}`).catch(() => null);
+                if (r) lastEvent = r.event_id;
+                else failed++;
+              }
+              if (ids.length === 1 && !failed) toast('Hidden', lastEvent);
+              else toast(`Hidden ${ids.length - failed}/${ids.length} item(s)`);
+              setSelecting(new Set());
+              refresh();
+            }}
+          >
+            Hide
+          </button>
+          <button className="btn btn-ghost" onClick={() => setSelecting(new Set())}>Done</button>
+        </div>
+      ) : null}
       {area.last_audit_at && !stocktake && (
         <p className="muted">Last checked {new Date(area.last_audit_at).toLocaleDateString()}</p>
       )}
@@ -425,7 +431,7 @@ export function AreaPage() {
         linkTo={(iid) => `/items/${iid}`}
         selectable
         forceSelect={!!stocktake && !stocktakeReview}
-        selected={stocktake ?? selecting ?? undefined}
+        selected={stocktake ?? selecting}
         onToggle={(stocktake ?? selecting) && !stocktakeReview ? (iid) => {
           const next = new Set(stocktake ?? selecting ?? []);
           next.has(iid) ? next.delete(iid) : next.add(iid);
