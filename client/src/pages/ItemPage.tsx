@@ -357,7 +357,8 @@ export function ItemPage() {
       )}
 
       {(item.ai_status === 'pending' ||
-        (item.ai_status === 'done' && (item.ai_name || item.ai_description))) && (
+        (item.ai_status === 'done' &&
+          (item.ai_name || item.ai_description || (item.ai_tags ?? []).length))) && (
         <div className="suggest">
           {item.ai_status === 'pending' ? (
             <p className="muted">AI is looking at the photo…</p>
