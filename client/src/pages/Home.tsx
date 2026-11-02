@@ -144,12 +144,9 @@ export function Home() {
             </button>
           </>
         ) : (
-          <>
-            <img className="banner-logo" src="/icon.svg" alt="" />
-            <div className="banner-name muted">
-              {stagedPhoto ? 'Photo staged - scan where it went' : 'Scan an area label to start filing'}
-            </div>
-          </>
+          <div className="banner-name muted">
+            {stagedPhoto ? 'Photo staged - scan where it went' : 'Scan an area label to start filing'}
+          </div>
         )}
         {pending > 0 && <span className="badge warn">{pending} queued</span>}
       </div>
