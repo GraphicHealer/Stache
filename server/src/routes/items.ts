@@ -34,6 +34,9 @@ const ItemPatchSchema = z.object({
   serial_number: z.string().max(200).nullable().optional(),
   tags: z.array(z.string().max(50)).max(50).nullable().optional(),
   duplicate_of: z.string().nullable().optional(),
+  ai_name: z.string().max(200).nullable().optional(),
+  ai_description: z.string().max(4000).nullable().optional(),
+  ai_tags: z.array(z.string().max(50)).max(50).nullable().optional(),
 }).passthrough();
 
 const LinkSchema = z.object({
@@ -275,6 +278,9 @@ export async function itemRoutes(app: FastifyInstance) {
       serial_number: 'serialNumber',
       tags: 'tags',
       duplicate_of: 'duplicateOf',
+      ai_name: 'aiName',
+      ai_description: 'aiDescription',
+      ai_tags: 'aiTags',
     } as const;
     const prev: Record<string, unknown> = {};
     const next: Record<string, unknown> = {};

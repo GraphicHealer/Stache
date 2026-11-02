@@ -11,7 +11,7 @@ registerSW({ immediate: true });
 
 const qc = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 10_000, networkMode: 'offlineFirst' },
+    queries: { retry: 1, staleTime: 10_000, networkMode: 'offlineFirst', refetchOnMount: 'always' },
   },
 });
 

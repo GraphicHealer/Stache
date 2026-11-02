@@ -65,6 +65,9 @@ export function ItemPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['item', id],
     queryFn: () => api.get(`/api/items/${id}`),
+    // Poll while AI is working so the suggestion lands without a refresh.
+    refetchInterval: (q) =>
+      q.state.data?.item?.ai_status === 'pending' ? 4000 : false,
   });
   const { data: areaHint } = useQuery({
     queryKey: ['suggested-area', id],
@@ -375,8 +378,12 @@ export function ItemPage() {
                 onClick={() =>
                   patch(
                     {
-                      // Tags only - your name and notes stay yours.
+                      // Tags only - your name and notes stay yours. Clears
+                      // the suggestion fields so the card dismisses.
                       tags: [...new Set([...(item.tags ?? []), ...(item.ai_tags ?? [])])],
+                      ai_name: null,
+                      ai_description: null,
+                      ai_tags: [],
                     },
                     'Tags added',
                   )
