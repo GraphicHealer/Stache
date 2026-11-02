@@ -190,7 +190,11 @@ export function AreaPage() {
       <Breadcrumb trail={breadcrumb} />
 
       <div className="area-head">
-        {area.cover_thumb ? <img className="area-cover" src={area.cover_url} alt="" /> : null}
+        {area.cover_thumb ? (
+          <img className="area-cover" src={area.cover_url} alt="" />
+        ) : (
+          <img className="area-cover ph-logo" src="/icon.svg" alt="" />
+        )}
         <div>
           <div className="row" style={{ gap: 6, alignItems: 'center' }}>
             <h1>{area.name ?? 'unnamed area'}</h1>
@@ -310,6 +314,7 @@ export function AreaPage() {
                 .filter(Boolean).join(' · ') || undefined,
             }))}
             linkTo={(aid) => `/areas/${aid}`}
+            placeholderLogo
           />
         </>
       )}

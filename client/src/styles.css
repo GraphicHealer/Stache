@@ -472,3 +472,7 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .kebab.page-menu .icon-btn { background: none; border: 0; box-shadow: none; padding: 0; width: 40px; height: 40px; min-width: 0; min-height: 0; color: var(--muted); }
 .kebab.page-menu .icon-btn:hover { color: inherit; }
 .kebab.page-menu .kebab-menu { position: fixed; top: 48px; right: 10px; left: auto; }
+
+/* Stache logo placeholder for bins/areas without a cover photo. */
+.thumb-placeholder.ph-logo { object-fit: contain; padding: 18%; opacity: 0.45; }
+.area-cover.ph-logo { object-fit: contain; padding: 14px; opacity: 0.45; background: var(--panel-2); }

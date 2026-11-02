@@ -64,6 +64,7 @@ export function BrowsePage() {
           sub: a.label_code ?? undefined,
         }))}
         linkTo={(id) => `/areas/${id}`}
+        placeholderLogo
         selected={selecting ?? undefined}
         onToggle={
           selecting

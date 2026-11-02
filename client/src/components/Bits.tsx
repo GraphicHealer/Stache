@@ -96,11 +96,14 @@ export function ItemGrid({
   linkTo,
   selected,
   onToggle,
+  placeholderLogo,
 }: {
   items: GridItem[];
   linkTo: (id: string) => string;
   selected?: Set<string>;
   onToggle?: (id: string) => void;
+  /** Show the stache logo instead of an empty block when there's no photo. */
+  placeholderLogo?: boolean;
 }) {
   if (!items.length) return <div className="empty">Nothing here yet</div>;
   return (
@@ -110,6 +113,8 @@ export function ItemGrid({
           <>
             {i.thumb ? (
               <img src={i.thumb} alt={i.name ?? 'item'} loading="lazy" />
+            ) : placeholderLogo ? (
+              <img className="thumb-placeholder ph-logo" src="/icon.svg" alt="" />
             ) : (
               <div className="thumb-placeholder" />
             )}
