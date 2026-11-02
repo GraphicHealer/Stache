@@ -85,7 +85,7 @@ export function BrowsePage() {
       )}
       <PrintDialog
         open={printDlg}
-        onClose={() => { setPrintDlg(false); setSelecting(null); }}
+        onClose={() => { setPrintDlg(false); setSelecting(new Set()); }}
         printers={printers}
         defaultId={printerData?.default_id}
         presets={presets}
