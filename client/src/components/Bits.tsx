@@ -174,13 +174,16 @@ export interface KebabItem {
 export function KebabMenu({
   items,
   label = 'More actions',
+  className,
 }: {
   items: (KebabItem | 'sep')[];
   label?: string;
+  /** 'page-menu' floats the trigger to the header's top-right corner. */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="kebab">
+    <div className={`kebab${className ? ` ${className}` : ''}`}>
       <IconBtn
         icon="dots"
         label={label}

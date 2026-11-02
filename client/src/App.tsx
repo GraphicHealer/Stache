@@ -161,6 +161,12 @@ export function App() {
   if (pathname.startsWith('/print/')) return <PrintLabels />;
   return (
     <div className="shell">
+      <header className="app-header">
+        <Link to="/" className="app-logo">
+          <img src="/icon.svg" alt="" />
+          <span>Stache</span>
+        </Link>
+      </header>
       <main className="content">
         <Routes>
           <Route path="/" element={<Home />} />

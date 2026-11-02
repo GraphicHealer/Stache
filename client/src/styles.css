@@ -446,3 +446,16 @@ button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
 .label-cell.vertical .label-info > * { grid-column: auto !important; grid-row: auto !important; }
 .pcell.vertical .pinfo > :last-child,
 .label-cell.vertical .label-info > :last-child { padding-right: 0 !important; }
+
+/* App header: logo top-left on every page. */
+.app-header {
+  display: flex; align-items: center; padding: 6px 14px;
+  border-bottom: 1px solid var(--border); background: var(--bg, #14110d);
+  flex-shrink: 0;
+}
+.app-logo { display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; font-weight: 700; font-size: 1.05rem; }
+.app-logo img { width: 26px; height: 26px; display: block; }
+
+/* Page-level kebab: floats into the header's top-right corner. */
+.kebab.page-menu { position: fixed; top: 8px; right: 10px; z-index: 60; }
+.kebab.page-menu .kebab-menu { position: fixed; top: 44px; right: 10px; left: auto; }

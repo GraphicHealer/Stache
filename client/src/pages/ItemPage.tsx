@@ -644,6 +644,7 @@ export function ItemPage() {
       <div className="row">
         <button className="btn" onClick={() => setScanning(true)}>Move…</button>
         <KebabMenu
+          className="page-menu"
           items={[
             {
               label: `Not here${item.not_here_count > 0 ? ` (${item.not_here_count})` : ''}`,

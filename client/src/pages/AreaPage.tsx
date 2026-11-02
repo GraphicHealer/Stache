@@ -217,6 +217,7 @@ export function AreaPage() {
         </button>
         <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
         <KebabMenu
+          className="page-menu"
           label="Area actions"
           items={[
             { label: 'Print QR code', icon: 'printer', onSelect: async () => {
