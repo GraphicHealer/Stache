@@ -26,6 +26,13 @@ export function BrowsePage() {
     if (r?.area) qc.invalidateQueries({ queryKey: ['areas'] });
   };
 
+  const toggle = (id: string) => {
+    const next = new Set(selecting);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelecting(next);
+  };
+  const active = !!selecting?.size;
+
   // Only labelled bins can reprint - their QR sticker is the claim.
   const selectedCodes = selecting
     ? areas.filter((a: any) => selecting.has(a.id) && a.label_code).map((a: any) => a.label_code)
@@ -35,26 +42,30 @@ export function BrowsePage() {
     <div className="page">
       <div className="row spread">
         <h1>Areas</h1>
-        <span className="row" style={{ margin: 0 }}>
-          {selecting ? (
-            <>
-              <button className="btn" disabled={!selectedCodes.length} onClick={() => setPrintDlg(true)}>
-                Reprint {selectedCodes.length}
-              </button>
-              <button className="btn" onClick={() => setSelecting(null)}>Cancel</button>
-            </>
-          ) : (
-            <>
-              {areas.some((a: any) => a.label_code) && (
-                <button className="btn" onClick={() => setSelecting(new Set())}>Select</button>
-              )}
-              <button className="btn has-icon" onClick={addArea}>
-                <Icon name="plus" /> New area
-              </button>
-            </>
-          )}
-        </span>
+        {!active && (
+          <button className="btn has-icon" onClick={addArea}>
+            <Icon name="plus" /> New area
+          </button>
+        )}
       </div>
+      {active && (
+        <div className="selection-bar">
+          <button
+            className={`sel-all${selecting.size === areas.length && areas.length ? ' on' : ''}`}
+            onClick={() =>
+              setSelecting(selecting.size === areas.length ? new Set() : new Set(areas.map((a: any) => a.id)))
+            }
+          >
+            Select all
+          </button>
+          <span className="muted">{selecting.size} selected</span>
+          <span style={{ flex: 1 }} />
+          <button className="btn" disabled={!selectedCodes.length} onClick={() => setPrintDlg(true)}>
+            Reprint {selectedCodes.length}
+          </button>
+          <button className="btn btn-ghost" onClick={() => setSelecting(new Set())}>Done</button>
+        </div>
+      )}
       {isLoading && <p className="muted">Loading…</p>}
       <ItemGrid
         items={areas.map((a: any) => ({
@@ -65,20 +76,13 @@ export function BrowsePage() {
         }))}
         linkTo={(id) => `/areas/${id}`}
         placeholderLogo
-        selected={selecting ?? undefined}
-        onToggle={
-          selecting
-            ? (id) => {
-                const next = new Set(selecting);
-                next.has(id) ? next.delete(id) : next.add(id);
-                setSelecting(next);
-              }
-            : undefined
-        }
+        selectable
+        selected={selecting}
+        onToggle={toggle}
       />
-      <p className="muted">
-        {selecting ? 'Select bins to reprint their labels.' : 'Add an area above, or scan an unclaimed QR label.'}
-      </p>
+      {!active && (
+        <p className="muted">Long-press a bin to select, or add an area / scan an unclaimed QR label.</p>
+      )}
       <PrintDialog
         open={printDlg}
         onClose={() => { setPrintDlg(false); setSelecting(null); }}

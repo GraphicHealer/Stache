@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
@@ -91,12 +91,69 @@ export interface GridItem {
   badge?: string;
 }
 
+/** Grid card with Photos-app selection: long-press starts, taps toggle. */
+function SelectableCard({
+  to,
+  isSel,
+  active,
+  onToggle,
+  children,
+}: {
+  to: string;
+  isSel: boolean;
+  active: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const nav = useNavigate();
+  const timer = useRef<number | undefined>(undefined);
+  const fired = useRef(false);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const clear = () => window.clearTimeout(timer.current);
+  return (
+    <div
+      className={`card selectable${isSel ? ' selected' : ''}${active ? ' sel-on' : ''}`}
+      role="button"
+      tabIndex={0}
+      onPointerDown={(e) => {
+        fired.current = false;
+        start.current = { x: e.clientX, y: e.clientY };
+        timer.current = window.setTimeout(() => {
+          fired.current = true;
+          onToggle();
+        }, 500);
+      }}
+      onPointerUp={(e) => {
+        clear();
+        if (!fired.current) (active ? onToggle() : nav(to));
+        start.current = null;
+      }}
+      onPointerLeave={clear}
+      onPointerCancel={clear}
+      onPointerMove={(e) => {
+        if (start.current && Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 10) clear();
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          active ? onToggle() : nav(to);
+        }
+      }}
+    >
+      <span className={`card-check${isSel ? ' on' : ''}`} aria-hidden />
+      {children}
+    </div>
+  );
+}
+
 export function ItemGrid({
   items,
   linkTo,
   selected,
   onToggle,
   placeholderLogo,
+  selectable,
 }: {
   items: GridItem[];
   linkTo: (id: string) => string;
@@ -104,8 +161,11 @@ export function ItemGrid({
   onToggle?: (id: string) => void;
   /** Show the stache logo instead of an empty block when there's no photo. */
   placeholderLogo?: boolean;
+  /** Photos-app selection: long-press (mobile) or checkbox (hover) to pick. */
+  selectable?: boolean;
 }) {
   if (!items.length) return <div className="empty">Nothing here yet</div>;
+  const active = !!selected?.size;
   return (
     <div className="grid">
       {items.map((i) => {
@@ -125,6 +185,18 @@ export function ItemGrid({
             </div>
           </>
         );
+        if (selectable)
+          return (
+            <SelectableCard
+              key={i.id}
+              to={linkTo(i.id)}
+              isSel={selected?.has(i.id) ?? false}
+              active={active}
+              onToggle={() => onToggle?.(i.id)}
+            >
+              {body}
+            </SelectableCard>
+          );
         const cls = `card${selected?.has(i.id) ? ' selected' : ''}`;
         return onToggle ? (
           <button key={i.id} className={cls} onClick={() => onToggle(i.id)}>
