@@ -7,7 +7,7 @@ import { recordEventTx } from '../lib/events';
 import {
   assertImage,
   coverThumbsForAreas,
-  insertPhoto,
+  PhotoBusyError,
   photoUrl,
   removePhotoFiles,
   savePhotoFile,
@@ -432,29 +432,39 @@ export async function areaRoutes(app: FastifyInstance) {
     for (const buf of bufs) {
       try {
         await assertImage(buf);
-      } catch {
+      } catch (e) {
+        if (e instanceof PhotoBusyError) return reply.code(503).send('image processing busy');
         return reply.badRequest('invalid or oversized image');
       }
     }
-    // Everything decodes - persist. If a later write still fails (disk/db),
-    // remove the files and rows this request already created.
+    // Everything decodes - persist rows + cover in one synchronous tx
+    // (better-sqlite3 transactions can't await). If any part fails, the tx
+    // rolls back every row and the cover change; files this request wrote
+    // are removed below. Pre-existing photos and an existing cover are
+    // untouched.
     const saved: SavedPhoto[] = [];
-    const savedPhotos = [];
+    let savedPhotos: any[] = [];
     try {
       for (const buf of bufs) saved.push(await savePhotoFile(buf));
-      for (const s of saved) savedPhotos.push(await insertPhoto(s, { areaId: id }));
+      savedPhotos = db.transaction((tx) => {
+        const rows: any[] = [];
+        for (const s of saved) {
+          rows.push(
+            tx
+              .insert(photos)
+              .values({ ...s, itemId: null, areaId: id })
+              .returning()
+              .get(),
+          );
+        }
+        if (wantsCover) {
+          tx.update(areas).set({ coverPhotoId: rows[0].id }).where(eq(areas.id, id)).run();
+        }
+        return rows;
+      });
     } catch (e) {
       for (const s of saved) await removePhotoFiles(s);
-      await db
-        .delete(photos)
-        .where(inArray(photos.id, savedPhotos.map((p) => p.id)));
       throw e;
-    }
-    if (wantsCover) {
-      await db
-        .update(areas)
-        .set({ coverPhotoId: savedPhotos[0].id })
-        .where(eq(areas.id, id));
     }
     return reply.code(201).send({
       photos: savedPhotos.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })),

@@ -115,19 +115,23 @@ export async function badAiUrl(raw: string): Promise<string | null> {
 // base_url can also just... set it to a LAN host, which is allowed by design;
 // and TOCTOU exists only between the hook and TCP connect (same answer).
 // ---------------------------------------------------------------------------
-type LookupFn = (hostname: string, opts: any) => Promise<{ address: string; family: number }>;
+type LookupFn = (hostname: string, opts: any) => Promise<{ address: string; family: number } | { address: string; family: number }[]>;
 
-/** Returns an undici `connect.lookup` that refuses prohibited resolved IPs. */
-export function checkedLookup(lookupFn?: (h: string, o: any) => Promise<any>) {
-  const lookup: LookupFn = lookupFn ?? ((h, o) => dns.lookup(h, { ...o, all: false }) as any);
+/** Returns an undici `connect.lookup` that refuses prohibited resolved IPs.
+ *  Checks EVERY answer - a hostile resolver could return a good and a bad
+ *  address and leave the OS to pick. */
+export function checkedLookup(lookupFn?: LookupFn) {
+  const lookup: LookupFn = lookupFn ?? ((h) => dns.lookup(h, { all: true }) as any);
   return (hostname: string, _opts: unknown, cb: (err: Error | null, addr?: string, fam?: number) => void) => {
-    lookup(hostname, { all: false })
-      .then((r: any) => {
-        const addr = Array.isArray(r) ? r[0] : r;
-        const a = typeof addr === 'string' ? { address: addr, family: addr.includes(':') ? 6 : 4 } : addr;
-        if (badIpLiteral(a.family === 4 ? a.address : `[${a.address}]`))
-          cb(new Error('ai endpoint resolves to a prohibited address'));
-        else cb(null, a.address, a.family);
+    lookup(hostname, { all: true })
+      .then((answers) => {
+        const list = (Array.isArray(answers) ? answers : [answers]).map((a: any) =>
+          typeof a === 'string' ? { address: a, family: a.includes(':') ? 6 : 4 } : a);
+        for (const a of list) {
+          if (badIpLiteral(a.family === 4 ? a.address : `[${a.address}]`))
+            return cb(new Error('ai endpoint resolves to a prohibited address'));
+        }
+        cb(null, list[0].address, list[0].family);
       })
       .catch((e) => cb(e instanceof Error ? e : new Error(String(e))));
   };

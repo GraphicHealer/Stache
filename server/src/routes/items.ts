@@ -8,7 +8,7 @@ import { env } from '../env';
 import { areas, items, itemLinks, itemReceipts, photos, user } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
 import { recordEventTx, type EventType } from '../lib/events';
-import { assertImage, insertPhoto, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
+import { assertImage, insertPhoto, PhotoBusyError, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
 import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
 import { analyzeItemPhoto, hasEmbedding, mlHealthy, nearestToItem } from '../lib/ml';
 import { detectCodes, lookupBarcode, type DetectedCode } from '../lib/barcodes';
@@ -153,7 +153,8 @@ export async function itemRoutes(app: FastifyInstance) {
     for (const buf of files) {
       try {
         await assertImage(buf);
-      } catch {
+      } catch (e) {
+        if (e instanceof PhotoBusyError) return reply.code(503).send('image processing busy');
         return reply.badRequest('invalid or oversized image');
       }
     }
@@ -390,7 +391,8 @@ export async function itemRoutes(app: FastifyInstance) {
         const buf = await part.toBuffer();
         try {
           await assertImage(buf);
-        } catch {
+        } catch (e) {
+          if (e instanceof PhotoBusyError) return reply.code(503).send('image processing busy');
           return reply.badRequest('invalid or oversized image');
         }
         bufs.push(buf);
@@ -423,7 +425,8 @@ export async function itemRoutes(app: FastifyInstance) {
     if (!buf) return reply.badRequest('no photo uploaded');
     try {
       await assertImage(buf);
-    } catch {
+    } catch (e) {
+      if (e instanceof PhotoBusyError) return reply.code(503).send('image processing busy');
       return reply.badRequest('invalid or oversized image');
     }
 

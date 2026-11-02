@@ -13,10 +13,34 @@ const PHOTO_DIR = () => path.join(env.dataDir, 'photos');
 sharp.concurrency(2);
 
 // Reject absurd decodes before they happen: every real phone photo fits
-// under 250MP; a crafted bomb does not.
-const MAX_INPUT_PIXELS = 250_000_000;
+// (200MP covers Samsung's max capture mode); a crafted bomb does not.
+const MAX_INPUT_PIXELS = 200_000_000;
 
 export class PhotoError extends Error {}
+export class PhotoBusyError extends PhotoError {}
+
+// Bounds concurrent image work at the REQUEST level (not just libvips
+// threads). Each waiter only queues a closure, and a hard cap on waiters
+// refuses load instead of accumulating: worst-case in-flight memory is
+// (2 processing + 16 waiting) x the 25MB multipart cap.
+const PHOTO_CONCURRENCY = 2;
+const PHOTO_WAITERS = 16;
+let inFlight = 0;
+const waiters: (() => void)[] = [];
+
+async function photoGuard<T>(fn: () => Promise<T>): Promise<T> {
+  if (inFlight >= PHOTO_CONCURRENCY) {
+    if (waiters.length >= PHOTO_WAITERS) throw new PhotoBusyError('image processing busy');
+    await new Promise<void>((r) => waiters.push(r));
+  }
+  inFlight++;
+  try {
+    return await fn();
+  } finally {
+    inFlight--;
+    waiters.shift()?.();
+  }
+}
 
 export async function ensurePhotoDir() {
   await fs.mkdir(PHOTO_DIR(), { recursive: true });
@@ -37,7 +61,9 @@ export async function removePhotoFiles(s: SavedPhoto): Promise<void> {
 
 /** Cheap up-front check so a bad upload is refused before records exist. */
 export async function assertImage(buf: Buffer): Promise<void> {
-  await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().metadata();
+  await photoGuard(() =>
+    sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().metadata(),
+  );
 }
 
 /** Stores an oriented original (max 1600px webp) plus a 320px thumb. */
@@ -50,19 +76,22 @@ export async function savePhotoFile(buf: Buffer): Promise<SavedPhoto> {
   const thumb = path.join(PHOTO_DIR(), thumbName);
   const img = () => sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS });
   try {
-    const meta = await img().rotate().metadata();
-    await img()
-      .rotate()
-      .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 82 })
-      .toFile(out);
-    await img()
-      .rotate()
-      .resize(320, 320, { fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 70 })
-      .toFile(thumb);
-    return { path: name, thumbPath: thumbName, width: meta.width ?? null, height: meta.height ?? null };
+    return await photoGuard(async () => {
+      const meta = await img().rotate().metadata();
+      await img()
+        .rotate()
+        .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toFile(out);
+      await img()
+        .rotate()
+        .resize(320, 320, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 70 })
+        .toFile(thumb);
+      return { path: name, thumbPath: thumbName, width: meta.width ?? null, height: meta.height ?? null };
+    });
   } catch (e) {
+    if (e instanceof PhotoBusyError) throw e;
     // Never leave a half-written pair on disk or a vague 500 for the client.
     await fs.rm(out, { force: true });
     await fs.rm(thumb, { force: true });

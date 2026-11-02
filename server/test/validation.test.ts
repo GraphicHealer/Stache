@@ -129,6 +129,53 @@ describe('checkedLookup (connect-time DNS check)', () => {
       expect(got).toEqual([a.address, a.family]);
     }
   });
+
+  it('blocks IPv4-mapped and NAT64-embedded metadata answers', async () => {
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    for (const addr of ['::ffff:169.254.169.254', '64:ff9b::169.254.169.254', '64:ff9b::a9fe:a9fe']) {
+      const lookup = checkedLookup(() => Promise.resolve({ address: addr, family: 6 }));
+      const err: any = await new Promise((res) => lookup('h.lan', {}, (e) => res(e)));
+      expect(err, addr).toBeInstanceOf(Error);
+    }
+  });
+
+  it('blocks if ANY answer is prohibited - not just the first', async () => {
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    const lookup = checkedLookup(() =>
+      Promise.resolve([
+        { address: '192.168.1.5', family: 4 },
+        { address: 'fe80::a9fe:a9fe', family: 6 },
+      ]),
+    );
+    const err: any = await new Promise((res) => lookup('two-faced.lan', {}, (e) => res(e)));
+    expect(err).toBeInstanceOf(Error);
+    // ...and a clean mixed v4+v6 answer set is fine.
+    const ok = checkedLookup(() =>
+      Promise.resolve([
+        { address: '192.168.1.5', family: 4 },
+        { address: 'fd00::5', family: 6 },
+      ]),
+    );
+    const got: any = await new Promise((res, rej) =>
+      ok('nas.lan', {}, (e, addr, fam) => (e ? rej(e) : res([addr, fam]))),
+    );
+    expect(got).toEqual(['192.168.1.5', 4]);
+  });
+
+  it('works through real dns.lookup with undici-style options', async () => {
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    // Literal IPs never hit DNS - lookup returns them verbatim, still checked.
+    const blocked = checkedLookup();
+    const err: any = await new Promise((res) =>
+      blocked('169.254.169.254', { family: 0, hints: 0 }, (e) => res(e)),
+    );
+    expect(err).toBeInstanceOf(Error);
+    const ok = checkedLookup();
+    const got: any = await new Promise((res, rej) =>
+      ok('127.0.0.1', { family: 0, hints: 0 }, (e, addr, fam) => (e ? rej(e) : res([addr, fam]))),
+    );
+    expect(got).toEqual(['127.0.0.1', 4]);
+  });
 });
 
 describe('callVlm redirect handling', () => {

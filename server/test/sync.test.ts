@@ -140,6 +140,19 @@ describe('photo upload validation', () => {
     const res = await app.inject(multipart('huge.png', png));
     expect(res.statusCode).toBe(400);
   });
+
+  it('concurrent uploads queue through the bounded guard', async () => {
+    const sharp = (await import('sharp')).default;
+    const png = await sharp({
+      create: { width: 1200, height: 900, channels: 3, background: { r: 50, g: 50, b: 50 } },
+    }).png().toBuffer();
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => app.inject(multipart('p.png', png))),
+    );
+    // Each request files or is politely refused - nothing crashes or hangs.
+    for (const r of results) expect([201, 503]).toContain(r.statusCode);
+    expect(results.filter((r) => r.statusCode === 201).length).toBeGreaterThan(0);
+  });
 });
 
 describe('area photo upload is atomic', () => {
@@ -180,5 +193,34 @@ describe('area photo upload is atomic', () => {
     expect(rows.length).toBe(0);
     const filesAfter = fs.readdirSync(photoDir).length;
     expect(filesAfter).toBe(filesBefore);
+  });
+
+  it('a cover-update failure rolls back the new photos too', async () => {
+    const { sqlite } = await import('../src/db');
+    const sharp = (await import('sharp')).default;
+    const png = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: { r: 1, g: 1, b: 1 } },
+    }).png().toBuffer();
+    const fs = await import('node:fs');
+    const photoDir = `${process.env.DATA_DIR}/photos`;
+    const filesBefore = fs.existsSync(photoDir) ? fs.readdirSync(photoDir).length : 0;
+
+    // Force the areas UPDATE (cover assignment) to fail inside the tx.
+    sqlite.exec(
+      "CREATE TRIGGER fail_area_update BEFORE UPDATE ON areas BEGIN SELECT RAISE(ABORT,'boom'); END;",
+    );
+    let status = 0;
+    try {
+      const res = await app.inject(
+        build([{ name: 'photos', filename: 'ok.png', content: png }]),
+      );
+      status = res.statusCode;
+    } finally {
+      sqlite.exec('DROP TRIGGER fail_area_update');
+    }
+    expect(status).toBe(500);
+    const rows = await db.select().from(schema.photos).where(eq(schema.photos.areaId, area.id));
+    expect(rows.length).toBe(0); // tx rolled the row back
+    expect(fs.readdirSync(photoDir).length).toBe(filesBefore); // and files are gone
   });
 });
