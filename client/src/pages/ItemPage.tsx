@@ -345,7 +345,7 @@ export function ItemPage() {
                   checked={editPrivate}
                   onChange={(e) => setEditPrivate(e.target.checked)}
                 />
-                Private - only you can see this
+                Private - Only You can see this Item
               </label>
             )}
             <div className="row">
