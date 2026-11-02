@@ -56,15 +56,6 @@ export function AreaPage() {
 
   const { area, breadcrumb, subareas, items, photos } = data;
 
-  const suggestTags = async () => {
-    const r = await api.get(`/api/areas/${id}/suggest-tags`).catch(() => null);
-    const sug: string[] = r?.suggestions ?? [];
-    if (!sug.length) return toast('No suggestions from this bin\'s items');
-    const merged = [...new Set([...(area.tags ?? []), ...sug])];
-    const res = await api.patch(`/api/areas/${id}`, { tags: merged });
-    toast(`Added: ${sug.join(', ')}`, res.event_ids?.[0]);
-    refresh();
-  };
 
   const resolveLabelArea = async (code: string): Promise<string | null> => {
     const r = await api.get(`/api/labels/${code}`).catch(() => null);
@@ -131,11 +122,24 @@ export function AreaPage() {
     if (mode) await useDest(mode, dest);
   };
 
-  const rename = async () => {
-    const name = window.prompt('Area name (leave blank to clear)', area.name ?? '');
-    if (name === null) return;
-    const r = await api.patch(`/api/areas/${id}`, { name: name || null });
-    toast('Renamed', r.event_ids?.[0]);
+  const [editForm, setEditForm] = useState({ name: '', category: '', tags: '' });
+  const [editDlg, setEditDlg] = useState(false);
+  const openEdit = () => {
+    setEditForm({
+      name: area.name ?? '',
+      category: area.category ?? '',
+      tags: (area.tags ?? []).join(', '),
+    });
+    setEditDlg(true);
+  };
+  const saveEdit = async () => {
+    const r = await api.patch(`/api/areas/${id}`, {
+      name: editForm.name.trim() || null,
+      category: editForm.category.trim() || null,
+      tags: editForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
+    });
+    toast('Saved', r.event_ids?.[0]);
+    setEditDlg(false);
     refresh();
   };
 
@@ -188,7 +192,14 @@ export function AreaPage() {
       <div className="area-head">
         {area.cover_thumb ? <img className="area-cover" src={area.cover_url} alt="" /> : null}
         <div>
-          <h1 onClick={rename} className="editable">{area.name ?? 'unnamed area'}</h1>
+          <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+            <h1>{area.name ?? 'unnamed area'}</h1>
+            <IconBtn icon="pencil" label="Edit area" onClick={openEdit} />
+          </div>
+          {area.category && <div className="muted">{area.category}</div>}
+          {(area.tags ?? []).map((t: string) => (
+            <span key={t} className="badge">{t}</span>
+          ))}
           {(data.label_codes ?? [area.label_code].filter(Boolean)).map((c: string) => (
             <span key={c} className="badge">{c}</span>
           ))}
@@ -205,7 +216,6 @@ export function AreaPage() {
           File things here
         </button>
         <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
-        <IconBtn icon="pencil" label="Rename area" onClick={rename} />
         <KebabMenu
           label="Area actions"
           items={[
@@ -237,39 +247,55 @@ export function AreaPage() {
         />
       </div>
 
-      <label className="row" style={{ gap: 8 }}>
-        <span className="muted">Tags</span>
-        <input
-          className="input"
-          style={{ flex: 1 }}
-          placeholder="christmas, electronics, fragile…"
-          defaultValue={(area.tags ?? []).join(', ')}
-          onBlur={async (e) => {
-            const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean);
-            if (JSON.stringify(tags) === JSON.stringify(area.tags ?? [])) return;
-            const r = await api.patch(`/api/areas/${id}`, { tags });
-            toast('Tags saved', r.event_ids?.[0]);
-            refresh();
-          }}
-        />
-        <button className="btn btn-small btn-ghost" onClick={suggestTags} title="Suggest tags from items in this bin">Suggest</button>
-      </label>
-      <label className="row" style={{ gap: 8 }}>
-        <span className="muted">Category</span>
-        <input
-          className="input"
-          style={{ flex: 1 }}
-          placeholder="prints on the label, e.g. Christmas"
-          defaultValue={area.category ?? ''}
-          onBlur={async (e) => {
-            const v = e.target.value.trim() || null;
-            if (v === (area.category ?? null)) return;
-            const r = await api.patch(`/api/areas/${id}`, { category: v });
-            toast('Category saved', r.event_ids?.[0]);
-            refresh();
-          }}
-        />
-      </label>
+      {editDlg && (
+        <div className="dlg-overlay" onClick={() => setEditDlg(false)}>
+          <div className="dlg" role="dialog" aria-label="Edit area" onClick={(e) => e.stopPropagation()}>
+            <h2>Edit area</h2>
+            <label className="muted">Name</label>
+            <input
+              className="input"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              placeholder="e.g. Christmas bin"
+              autoFocus
+            />
+            <label className="muted">Category <span style={{ opacity: 0.7 }}>(prints on the label)</span></label>
+            <input
+              className="input"
+              value={editForm.category}
+              onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+              placeholder="e.g. Christmas"
+            />
+            <label className="muted">Tags</label>
+            <div className="row" style={{ gap: 6 }}>
+              <input
+                className="input"
+                style={{ flex: 1 }}
+                value={editForm.tags}
+                onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                placeholder="christmas, electronics, fragile…"
+              />
+              <button
+                className="btn btn-small btn-ghost"
+                onClick={async () => {
+                  const r = await api.get(`/api/areas/${id}/suggest-tags`).catch(() => null);
+                  const sug: string[] = r?.suggestions ?? [];
+                  if (!sug.length) return toast('No suggestions from this bin\'s items');
+                  const cur = editForm.tags.split(',').map((t) => t.trim()).filter(Boolean);
+                  setEditForm({ ...editForm, tags: [...new Set([...cur, ...sug])].join(', ') });
+                }}
+                title="Suggest tags from items in this bin"
+              >
+                Suggest
+              </button>
+            </div>
+            <div className="row">
+              <button className="btn" onClick={() => void saveEdit()}>Save</button>
+              <button className="btn" onClick={() => setEditDlg(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {subareas.length > 0 && (
         <>

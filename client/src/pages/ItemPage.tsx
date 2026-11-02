@@ -45,6 +45,8 @@ export function ItemPage() {
   const [linkQ, setLinkQ] = useState<string | null>(null);
   const [linkResults, setLinkResults] = useState<{ id: string; name: string | null; thumb: string | null }[]>([]);
   const [listening, setListening] = useState(false);
+  const [editDlg, setEditDlg] = useState(false);
+  const [editTags, setEditTags] = useState('');
   const recRef = useRef<{ stop: () => void } | null>(null);
 
   const { data: links } = useQuery({
@@ -100,12 +102,6 @@ export function ItemPage() {
     }
   };
 
-  const saveText = () => {
-    const body: Record<string, unknown> = {};
-    if ((name || null) !== item.name) body.name = name || null;
-    if ((desc || null) !== item.description) body.description = desc || null;
-    if (Object.keys(body).length) patch(body);
-  };
 
   const onScan = async (text: string) => {
     setScanning(false);
@@ -283,33 +279,82 @@ export function ItemPage() {
         <CaptureInput onCapture={uploadPhoto} className="btn has-icon"><Icon name="camera" /> Photo</CaptureInput>
       </div>
 
-      <input
-        className="input"
-        placeholder="Name it? (optional)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={saveText}
-      />
-      <div className="row">
-        <textarea
-          className="input"
-          placeholder="Notes? (optional)"
-          rows={2}
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          onBlur={saveText}
-          style={{ flex: 1 }}
+      <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+        <h1 style={{ margin: 0 }}>{item.name ?? 'unnamed item'}</h1>
+        <IconBtn
+          icon="pencil"
+          label="Edit item"
+          onClick={() => {
+            setEditTags((item.tags ?? []).join(', '));
+            setEditDlg(true);
+          }}
         />
-        {'SpeechRecognition' in window || 'webkitSpeechRecognition' in window ? (
-          <IconBtn
-            icon="mic"
-            className={listening ? 'danger' : ''}
-            onClick={toggleVoice}
-            aria-pressed={listening}
-            label={listening ? 'Stop dictating' : 'Dictate a note'}
-          />
-        ) : null}
       </div>
+      {item.description && <p className="muted" style={{ marginTop: 0 }}>{item.description}</p>}
+      {(item.tags ?? []).map((t: string) => (
+        <span key={t} className="badge">{t}</span>
+      ))}
+
+      {editDlg && (
+        <div className="dlg-overlay" onClick={() => setEditDlg(false)}>
+          <div className="dlg" role="dialog" aria-label="Edit item" onClick={(e) => e.stopPropagation()}>
+            <h2>Edit item</h2>
+            <label className="muted">Name</label>
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name it? (optional)"
+              autoFocus
+            />
+            <label className="muted">Notes</label>
+            <div className="row">
+              <textarea
+                className="input"
+                rows={3}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              {'SpeechRecognition' in window || 'webkitSpeechRecognition' in window ? (
+                <IconBtn
+                  icon="mic"
+                  className={listening ? 'danger' : ''}
+                  onClick={toggleVoice}
+                  aria-pressed={listening}
+                  label={listening ? 'Stop dictating' : 'Dictate a note'}
+                />
+              ) : null}
+            </div>
+            <label className="muted">Tags</label>
+            <input
+              className="input"
+              value={editTags}
+              onChange={(e) => setEditTags(e.target.value)}
+              placeholder="comma, separated"
+            />
+            <div className="row">
+              <button
+                className="btn"
+                onClick={() => {
+                  patch(
+                    {
+                      name: name.trim() || null,
+                      description: desc.trim() || null,
+                      tags: editTags.split(',').map((t) => t.trim()).filter(Boolean),
+                    },
+                    'Saved',
+                  );
+                  setEditDlg(false);
+                }}
+              >
+                Save
+              </button>
+              <button className="btn" onClick={() => setEditDlg(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(item.ai_status === 'pending' ||
         (item.ai_status === 'done' && (item.ai_name || item.ai_description))) && (
@@ -329,17 +374,14 @@ export function ItemPage() {
                 onClick={() =>
                   patch(
                     {
-                      // Fills blanks only - never overwrites your text. AI
-                      // tags merge into your real tags, deduped.
-                      name: item.name ?? item.ai_name,
-                      description: item.description ?? item.ai_description,
+                      // Tags only - your name and notes stay yours.
                       tags: [...new Set([...(item.tags ?? []), ...(item.ai_tags ?? [])])],
                     },
-                    'Saved',
+                    'Tags added',
                   )
                 }
               >
-                Use it
+                Add tags
               </button>
             </>
           )}
@@ -351,9 +393,6 @@ export function ItemPage() {
         <span className="qty">×{item.quantity}</span>
         <button className="btn" onClick={() => patch({ quantity: item.quantity + 1 })}>+</button>
         {item.barcode && <span className="badge">{item.barcode}</span>}
-        {(item.tags ?? []).map((t: string) => (
-          <span key={t} className="badge">{t}</span>
-        ))}
       </div>
 
       {(item.detected_codes ?? [])
