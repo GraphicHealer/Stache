@@ -120,6 +120,8 @@ export const printers = sqliteTable('printers', {
   dpi: integer('dpi').notNull().default(203),
   labelWmm: real('label_w_mm').notNull().default(57),
   labelHmm: real('label_h_mm').notNull().default(32),
+  // ZPL ^LT vertical shift (mm) - +down/-up, compensates printers feeding off-center.
+  topOffsetMm: real('top_offset_mm').notNull().default(1),
   // 'label' = single label stock (rolls, Zebra/Dymo-style); 'sheet' =
   // die-cut sheets on a page printer. sheet holds the template spec JSON.
   mediaType: text('media_type').notNull().default('label'),

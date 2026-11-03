@@ -39,6 +39,7 @@ const PrinterCreateSchema = z.object({
   dpi: z.union([z.number(), z.string()]).optional(),
   label_w_mm: z.union([z.number(), z.string()]).optional(),
   label_h_mm: z.union([z.number(), z.string()]).optional(),
+  top_offset_mm: z.union([z.number(), z.string()]).optional(),
   media_type: z.enum(['label', 'sheet']).optional(),
   sheet: SheetChoiceSchema,
 }).passthrough();
@@ -68,7 +69,7 @@ async function publicBaseUrl(): Promise<string | undefined> {
   return cfg.base_url || undefined;
 }
 
-const FIELDS = ['name', 'type', 'host', 'port', 'queue', 'dpi', 'label_w_mm', 'label_h_mm', 'media_type', 'sheet'] as const;
+const FIELDS = ['name', 'type', 'host', 'port', 'queue', 'dpi', 'label_w_mm', 'label_h_mm', 'top_offset_mm', 'media_type', 'sheet'] as const;
 
 const PC_ID = 'pc';
 
@@ -103,6 +104,7 @@ function printerBody(body: Record<string, any>) {
     dpi: body.dpi ? Number(body.dpi) : 203,
     labelWmm: body.label_w_mm ? Number(body.label_w_mm) : 57,
     labelHmm: body.label_h_mm ? Number(body.label_h_mm) : 32,
+    topOffsetMm: body.top_offset_mm != null && body.top_offset_mm !== '' ? Number(body.top_offset_mm) : 1,
     mediaType: body.media_type === 'sheet' ? 'sheet' : 'label',
     sheet: (body.sheet as SheetChoice) ?? null,
   };
@@ -208,7 +210,7 @@ export async function printerRoutes(app: FastifyInstance) {
     for (const f of FIELDS) {
       if (body[f] !== undefined) {
         const key =
-          { label_w_mm: 'labelWmm', label_h_mm: 'labelHmm', media_type: 'mediaType' }[
+          { label_w_mm: 'labelWmm', label_h_mm: 'labelHmm', top_offset_mm: 'topOffsetMm', media_type: 'mediaType' }[
             f as string
           ] ?? f;
         updates[key] = body[f] === '' ? null : body[f];

@@ -24,13 +24,14 @@ interface Printer {
   dpi: number;
   label_w_mm: number;
   label_h_mm: number;
+  top_offset_mm?: number | null;
   media_type?: 'label' | 'sheet';
   sheet?: SheetChoice | null;
 }
 
 const EMPTY_FORM = {
   name: '', type: 'zpl', host: '', port: '9100', queue: '', dpi: '203',
-  label_w_mm: '57', label_h_mm: '32', media: 'label',
+  label_w_mm: '57', label_h_mm: '32', media: 'label', top_offset_mm: '1',
 };
 
 interface SheetForm { preset: string; custom: Record<string, string>; }
@@ -161,6 +162,7 @@ export function LabelsPage() {
         dpi: parseInt(form.dpi, 10) || 203,
         label_w_mm: parseFloat(form.label_w_mm) || 57,
         label_h_mm: parseFloat(form.label_h_mm) || 32,
+        top_offset_mm: parseFloat(form.top_offset_mm) || 0,
         media_type: form.type === 'cups' ? form.media : 'label',
         sheet: form.type === 'cups' && form.media === 'sheet' ? sheetChoice(sheetForm) : null,
       });
@@ -339,6 +341,7 @@ export function LabelsPage() {
                           name: p.name, type: p.type, host: p.host ?? '', port: String(p.port ?? 9100),
                           queue: p.queue ?? '', dpi: String(p.dpi ?? 203),
                           label_w_mm: String(p.label_w_mm ?? 57), label_h_mm: String(p.label_h_mm ?? 32),
+                          top_offset_mm: String(p.top_offset_mm ?? 1),
                           media: p.media_type === 'sheet' ? 'sheet' : 'label',
                         });
                         setEditSheet(
@@ -405,6 +408,14 @@ export function LabelsPage() {
                   <label className="muted">dpi</label>
                   <input className="input" style={{ width: 80 }} value={editForm.dpi}
                     onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })} aria-label="dots per inch" />
+                  {(editForm.type === 'zpl' || editForm.type === 'zpl-legacy') && (
+                    <>
+                      <label className="muted">Top offset mm</label>
+                      <input className="input" style={{ width: 80 }} value={editForm.top_offset_mm}
+                        onChange={(e) => setEditForm({ ...editForm, top_offset_mm: e.target.value })}
+                        aria-label="top offset in millimetres" title="Vertical shift: + down, - up" />
+                    </>
+                  )}
                 </div>
               )}
               <div className="row">
@@ -418,6 +429,7 @@ export function LabelsPage() {
                       dpi: parseInt(editForm.dpi, 10) || 203,
                       label_w_mm: parseFloat(editForm.label_w_mm) || 57,
                       label_h_mm: parseFloat(editForm.label_h_mm) || 32,
+                      top_offset_mm: parseFloat(editForm.top_offset_mm) || 0,
                       media_type: editForm.type === 'cups' ? editForm.media : 'label',
                       sheet: editForm.type === 'cups' && editForm.media === 'sheet' ? sheetChoice(editSheet) : null,
                     });
@@ -548,6 +560,14 @@ export function LabelsPage() {
               <label className="muted">dpi</label>
               <input className="input" style={{ width: 80 }} value={form.dpi}
                 onChange={(e) => setForm({ ...form, dpi: e.target.value })} aria-label="dots per inch" />
+              {(form.type === 'zpl' || form.type === 'zpl-legacy') && (
+                <>
+                  <label className="muted">Top offset mm</label>
+                  <input className="input" style={{ width: 80 }} value={form.top_offset_mm}
+                    onChange={(e) => setForm({ ...form, top_offset_mm: e.target.value })}
+                    aria-label="top offset in millimetres" title="Vertical shift: + down, - up" />
+                </>
+              )}
             </div>
           )}
           <div className="row">
