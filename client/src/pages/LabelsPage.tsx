@@ -25,13 +25,17 @@ interface Printer {
   label_w_mm: number;
   label_h_mm: number;
   top_offset_mm?: number | null;
+  left_offset_mm?: number | null;
+  right_offset_mm?: number | null;
+  bottom_offset_mm?: number | null;
   media_type?: 'label' | 'sheet';
   sheet?: SheetChoice | null;
 }
 
 const EMPTY_FORM = {
   name: '', type: 'zpl', host: '', port: '9100', queue: '', dpi: '203',
-  label_w_mm: '57', label_h_mm: '32', media: 'label', top_offset_mm: '1',
+  label_w_mm: '57', label_h_mm: '32', media: 'label',
+  top_offset_mm: '1', left_offset_mm: '0', right_offset_mm: '0', bottom_offset_mm: '0',
 };
 
 interface SheetForm { preset: string; custom: Record<string, string>; }
@@ -163,6 +167,9 @@ export function LabelsPage() {
         label_w_mm: parseFloat(form.label_w_mm) || 57,
         label_h_mm: parseFloat(form.label_h_mm) || 32,
         top_offset_mm: parseFloat(form.top_offset_mm) || 0,
+        left_offset_mm: parseFloat(form.left_offset_mm) || 0,
+        right_offset_mm: parseFloat(form.right_offset_mm) || 0,
+        bottom_offset_mm: parseFloat(form.bottom_offset_mm) || 0,
         media_type: form.type === 'cups' ? form.media : 'label',
         sheet: form.type === 'cups' && form.media === 'sheet' ? sheetChoice(sheetForm) : null,
       });
@@ -342,6 +349,9 @@ export function LabelsPage() {
                           queue: p.queue ?? '', dpi: String(p.dpi ?? 203),
                           label_w_mm: String(p.label_w_mm ?? 57), label_h_mm: String(p.label_h_mm ?? 32),
                           top_offset_mm: String(p.top_offset_mm ?? 1),
+                          left_offset_mm: String(p.left_offset_mm ?? 0),
+                          right_offset_mm: String(p.right_offset_mm ?? 0),
+                          bottom_offset_mm: String(p.bottom_offset_mm ?? 0),
                           media: p.media_type === 'sheet' ? 'sheet' : 'label',
                         });
                         setEditSheet(
@@ -410,10 +420,12 @@ export function LabelsPage() {
                     onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })} aria-label="dots per inch" />
                   {(editForm.type === 'zpl' || editForm.type === 'zpl-legacy') && (
                     <>
-                      <label className="muted">Top offset mm</label>
-                      <input className="input" style={{ width: 80 }} value={editForm.top_offset_mm}
-                        onChange={(e) => setEditForm({ ...editForm, top_offset_mm: e.target.value })}
-                        aria-label="top offset in millimetres" title="Vertical shift: + down, - up" />
+                      <label className="muted">Margins T/L/R/B mm</label>
+                      {(['top_offset_mm', 'left_offset_mm', 'right_offset_mm', 'bottom_offset_mm'] as const).map((k) => (
+                        <input key={k} className="input" style={{ width: 56 }} value={editForm[k]}
+                          onChange={(e) => setEditForm({ ...editForm, [k]: e.target.value })}
+                          aria-label={k.replace(/_/g, ' ')} title="Inset from that edge (mm)" />
+                      ))}
                     </>
                   )}
                 </div>
@@ -430,6 +442,9 @@ export function LabelsPage() {
                       label_w_mm: parseFloat(editForm.label_w_mm) || 57,
                       label_h_mm: parseFloat(editForm.label_h_mm) || 32,
                       top_offset_mm: parseFloat(editForm.top_offset_mm) || 0,
+                      left_offset_mm: parseFloat(editForm.left_offset_mm) || 0,
+                      right_offset_mm: parseFloat(editForm.right_offset_mm) || 0,
+                      bottom_offset_mm: parseFloat(editForm.bottom_offset_mm) || 0,
                       media_type: editForm.type === 'cups' ? editForm.media : 'label',
                       sheet: editForm.type === 'cups' && editForm.media === 'sheet' ? sheetChoice(editSheet) : null,
                     });
@@ -562,10 +577,12 @@ export function LabelsPage() {
                 onChange={(e) => setForm({ ...form, dpi: e.target.value })} aria-label="dots per inch" />
               {(form.type === 'zpl' || form.type === 'zpl-legacy') && (
                 <>
-                  <label className="muted">Top offset mm</label>
-                  <input className="input" style={{ width: 80 }} value={form.top_offset_mm}
-                    onChange={(e) => setForm({ ...form, top_offset_mm: e.target.value })}
-                    aria-label="top offset in millimetres" title="Vertical shift: + down, - up" />
+                  <label className="muted">Margins T/L/R/B mm</label>
+                  {(['top_offset_mm', 'left_offset_mm', 'right_offset_mm', 'bottom_offset_mm'] as const).map((k) => (
+                    <input key={k} className="input" style={{ width: 56 }} value={form[k]}
+                      onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                      aria-label={k.replace(/_/g, ' ')} title="Inset from that edge (mm)" />
+                  ))}
                 </>
               )}
             </div>

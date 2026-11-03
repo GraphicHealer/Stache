@@ -69,12 +69,14 @@ export async function zplForLabel(
   const rule = (x: number, y: number, len: number) =>
     `^FO${x},${y}^GB${len},${Math.max(2, d(0.35))},${Math.max(2, d(0.35))}^FS`;
 
-  // margin:4 keeps the spec'd quiet zone - if a printer feeds slightly high,
-  // clipped rows are padding, not data modules. ^LT shifts the whole format
-  // vertically per printer setting (+down/-up) for the same reason.
+  // margin:4 keeps the spec'd quiet zone - if a printer feeds slightly off,
+  // clipped rows are padding, not data modules. ^LH shifts the whole format
+  // per-printer: +top/+left inset from that edge, +bottom/+right pull back.
   const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 4 });
   const logoSide = d(m.logo);
-  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LT${d(Number(p.topOffsetMm ?? 0))}`];
+  const shiftX = d(Number(p.leftOffsetMm ?? 0) - Number(p.rightOffsetMm ?? 0));
+  const shiftY = d(Number(p.topOffsetMm ?? 0) - Number(p.bottomOffsetMm ?? 0));
+  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LH${shiftX},${shiftY}`];
   if (m.vertical) {
     if (logoBuf) cmds.push(`^FO${Math.round((w - logoSide) / 2)},${d(1)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
     if (info.name) {
