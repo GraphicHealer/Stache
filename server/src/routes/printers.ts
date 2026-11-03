@@ -149,6 +149,10 @@ export async function printerRoutes(app: FastifyInstance) {
     dpi: r.dpi,
     label_w_mm: r.labelWmm,
     label_h_mm: r.labelHmm,
+    top_offset_mm: r.topOffsetMm,
+    left_offset_mm: r.leftOffsetMm,
+    right_offset_mm: r.rightOffsetMm,
+    bottom_offset_mm: r.bottomOffsetMm,
     media_type: r.mediaType,
     sheet: r.sheet,
     created_at: r.createdAt,
@@ -214,6 +218,7 @@ export async function printerRoutes(app: FastifyInstance) {
     if (!p) return reply.notFound();
     const body = parseBody(PrinterPatchSchema, req.body, reply) as Record<string, any> | null;
     if (!body) return;
+    const numeric = new Set(['port', 'dpi', 'label_w_mm', 'label_h_mm', 'top_offset_mm', 'left_offset_mm', 'right_offset_mm', 'bottom_offset_mm']);
     const updates: Record<string, unknown> = {};
     for (const f of FIELDS) {
       if (body[f] !== undefined) {
@@ -221,7 +226,7 @@ export async function printerRoutes(app: FastifyInstance) {
           { label_w_mm: 'labelWmm', label_h_mm: 'labelHmm', top_offset_mm: 'topOffsetMm', left_offset_mm: 'leftOffsetMm', right_offset_mm: 'rightOffsetMm', bottom_offset_mm: 'bottomOffsetMm', media_type: 'mediaType' }[
             f as string
           ] ?? f;
-        updates[key] = body[f] === '' ? null : body[f];
+        updates[key] = body[f] === '' ? null : numeric.has(f) ? num(body[f]) : body[f];
       }
     }
     if ((updates.name !== undefined && !updates.name) || (updates.type !== undefined && !updates.type))
@@ -291,7 +296,7 @@ export async function printerRoutes(app: FastifyInstance) {
 
   // Legacy Zebras (GX420d etc.) don't do SGD getvar - the ^HH host
   // verification dump carries PRINT WIDTH / LABEL LENGTH / head dpmm.
-  const probeZebraLegacy = async (host: string, port: number) => {
+  const probeZebraLegacy = async (host: string, port: number, calibrate: boolean) => {
     const text = await new Promise<string>((resolve, reject) => {
       const sock = net.createConnection({ host, port, timeout: 4000 });
       let buf = '';
@@ -302,7 +307,7 @@ export async function printerRoutes(app: FastifyInstance) {
       };
       sock.on('timeout', () => done(new Error('printer timed out')));
       sock.on('error', done);
-      sock.on('connect', () => sock.write('^XA^HH^XZ'));
+      sock.on('connect', () => sock.write((calibrate ? '~JC\r\n' : '') + '^XA^HH^XZ'));
       sock.on('data', (d) => {
         buf += d.toString('utf8');
         if (buf.length > 64_000) done();
@@ -338,7 +343,7 @@ export async function printerRoutes(app: FastifyInstance) {
     try {
       const r =
         body.type === 'zpl-legacy'
-          ? await probeZebraLegacy(body.host, body.port ?? 9100)
+          ? await probeZebraLegacy(body.host, body.port ?? 9100, !!body.calibrate)
           : await probeZebra(body.host, body.port ?? 9100, !!body.calibrate);
       return { ok: true, ...r };
     } catch (e) {
@@ -357,7 +362,7 @@ export async function printerRoutes(app: FastifyInstance) {
     try {
       const r =
         p.type === 'zpl-legacy'
-          ? await probeZebraLegacy(p.host, p.port || 9100)
+          ? await probeZebraLegacy(p.host, p.port || 9100, !!calibrate)
           : await probeZebra(p.host, p.port || 9100, !!calibrate);
       const set: Record<string, unknown> = {};
       if (r.label_h_mm) set.labelHmm = r.label_h_mm;

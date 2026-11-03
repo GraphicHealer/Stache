@@ -58,49 +58,55 @@ export async function zplForLabel(
   const d = (mm: number) => Math.round(mm / MM_PER_DOT(p.dpi));
   const w = d(p.labelWmm);
   const h = d(p.labelHmm);
-  const m = labelMetrics(p.labelWmm, p.labelHmm);
+  const off = (v: number | null | undefined) => Number(v ?? 0);
+  const offL = off(p.leftOffsetMm), offR = off(p.rightOffsetMm);
+  const offT = off(p.topOffsetMm), offB = off(p.bottomOffsetMm);
+  const cwmm = Math.max(10, p.labelWmm - offL - offR);
+  const chmm = Math.max(10, p.labelHmm - offT - offB);
+  const cw = d(cwmm);
+  const ch = d(chmm);
+  const m = labelMetrics(cwmm, chmm);
   const qrSide = d(m.qr);
   const clip = (s: string, mmFont: number, widthMm: number) => {
     const max = Math.floor(widthMm / (mmFont * 0.62));
     return zfd(s.length > max && max > 3 ? `${s.slice(0, max - 1)}…` : s);
   };
   const centered = (txt: string, y: number, mmFont: number) =>
-    `^FO0,${y}^A0N,${d(mmFont)},${d(mmFont)}^FB${w},1,0,C,0^FD${zfd(txt)}^FS`;
+    `^FO0,${y}^A0N,${d(mmFont)},${d(mmFont)}^FB${cw},1,0,C,0^FD${zfd(txt)}^FS`;
   const rule = (x: number, y: number, len: number) =>
     `^FO${x},${y}^GB${len},${Math.max(2, d(0.35))},${Math.max(2, d(0.35))}^FS`;
 
-  // margin:4 keeps the spec'd quiet zone - if a printer feeds slightly off,
-  // clipped rows are padding, not data modules. ^LH shifts the whole format
-  // per-printer: +top/+left inset from that edge, +bottom/+right pull back.
-  const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 4 });
+  // margin:1 bakes one module of quiet zone into the bitmap so a clipped
+  // outer row is padding, not data - the rest comes from the white label
+  // stock. ^LH shifts the whole format per-printer: +top/+left inset from
+  // that edge, +bottom/+right pull back.
+  const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 1 });
   const logoSide = d(m.logo);
-  const shiftX = d(Number(p.leftOffsetMm ?? 0) - Number(p.rightOffsetMm ?? 0));
-  const shiftY = d(Number(p.topOffsetMm ?? 0) - Number(p.bottomOffsetMm ?? 0));
-  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LH${shiftX},${shiftY}`];
+  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LH${d(offL)},${d(offT)}`];
   if (m.vertical) {
-    if (logoBuf) cmds.push(`^FO${Math.round((w - logoSide) / 2)},${d(1)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
+    if (logoBuf) cmds.push(`^FO${Math.round((cw - logoSide) / 2)},${d(1)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
     if (info.name) {
       let y = d(m.logo + 6);
       if (info.path) {
-        cmds.push(centered(clip(info.path, m.path, p.labelWmm - 8), y, m.path));
+        cmds.push(centered(clip(info.path, m.path, cwmm - 8), y, m.path));
         y += d(m.path + 1.7);
       }
-      cmds.push(centered(clip(info.name, m.name, p.labelWmm - 8), y, m.name));
+      cmds.push(centered(clip(info.name, m.name, cwmm - 8), y, m.name));
       y += d(m.name + 1.7);
-      if (info.category) cmds.push(centered(clip(info.category, m.cat, p.labelWmm - 8), y, m.cat));
+      if (info.category) cmds.push(centered(clip(info.category, m.cat, cwmm - 8), y, m.cat));
     } else {
-      for (const f of [0.28, 0.38, 0.48]) cmds.push(rule(d(4), Math.round(h * f), w - d(8)));
+      for (const f of [0.28, 0.38, 0.48]) cmds.push(rule(d(4), Math.round(ch * f), cw - d(8)));
     }
-    const qrY = h - qrSide - d(m.code + 2.5);
-    cmds.push(`^FO${Math.round((w - qrSide) / 2)},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
+    const qrY = ch - qrSide - d(m.code + 2.5);
+    cmds.push(`^FO${Math.round((cw - qrSide) / 2)},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
     cmds.push(centered(info.code, qrY + qrSide + d(1), m.code));
   } else {
     const qrX = d(1);
-    const qrY = Math.round((h - qrSide) / 2) - d(2);
+    const qrY = Math.round((ch - qrSide) / 2) - d(2);
     cmds.push(`^FO${qrX},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
     cmds.push(`^FO0,${qrY + qrSide + d(1)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}^FS`);
     const textX = qrSide + d(3);
-    const textWmm = p.labelWmm - m.qr - 6;
+    const textWmm = cwmm - m.qr - 6;
     if (info.name) {
       let y = d(5);
       if (info.path) {
@@ -113,10 +119,10 @@ export async function zplForLabel(
         cmds.push(`^FO${textX},${y}^A0N,${d(m.cat)},${d(m.cat)}^FD${clip(info.category, m.cat, textWmm)}^FS`);
     } else {
       for (const [i, f] of [0.36, 0.62, 0.88].entries())
-        cmds.push(rule(textX, Math.round(h * f), w - textX - d(4) - (i === 2 ? d(m.logo) : 0)));
+        cmds.push(rule(textX, Math.round(ch * f), cw - textX - d(4) - (i === 2 ? d(m.logo) : 0)));
     }
     if (logoBuf)
-      cmds.push(`^FO${w - logoSide - d(0.8)},${h - logoSide - d(0.5)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
+      cmds.push(`^FO${cw - logoSide - d(0.8)},${ch - logoSide - d(0.5)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
   }
   cmds.push('^XZ');
   return cmds.join('\n');

@@ -41,6 +41,37 @@ const EMPTY_FORM = {
 interface SheetForm { preset: string; custom: Record<string, string>; }
 const EMPTY_SHEET: SheetForm = { preset: 'avery-5160', custom: {} };
 
+type MarginValues = {
+  top_offset_mm: string; left_offset_mm: string;
+  right_offset_mm: string; bottom_offset_mm: string;
+};
+
+function MarginBox({ values, onChange }: {
+  values: MarginValues;
+  onChange: (k: keyof MarginValues, v: string) => void;
+}) {
+  const box = (k: keyof MarginValues, edge: 'top' | 'left' | 'right' | 'bottom') => (
+    <input className="input" inputMode="decimal"
+      style={{ gridArea: edge, width: 58, minHeight: 36, textAlign: 'center' }}
+      value={values[k]} onChange={(e) => onChange(k, e.target.value)}
+      aria-label={`${edge} margin mm`} title={`${edge} margin (mm)`} />
+  );
+  return (
+    <div style={{
+      display: 'grid', gap: 4, alignItems: 'center', justifyItems: 'center',
+      gridTemplateAreas: `'. top .' 'left c right' '. bottom .'`,
+    }}>
+      {box('top_offset_mm', 'top')}
+      {box('left_offset_mm', 'left')}
+      <span className="muted" style={{ gridArea: 'c', fontSize: '0.75rem', textAlign: 'center', lineHeight: 1.2 }}>
+        margins<br />mm
+      </span>
+      {box('right_offset_mm', 'right')}
+      {box('bottom_offset_mm', 'bottom')}
+    </div>
+  );
+}
+
 function SheetPicker({
   value, onChange, presets,
 }: { value: SheetForm; onChange: (v: SheetForm) => void; presets: SheetPreset[] }) {
@@ -419,14 +450,8 @@ export function LabelsPage() {
                   <input className="input" style={{ width: 80 }} value={editForm.dpi}
                     onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })} aria-label="dots per inch" />
                   {(editForm.type === 'zpl' || editForm.type === 'zpl-legacy') && (
-                    <>
-                      <label className="muted">Margins T/L/R/B mm</label>
-                      {(['top_offset_mm', 'left_offset_mm', 'right_offset_mm', 'bottom_offset_mm'] as const).map((k) => (
-                        <input key={k} className="input" style={{ width: 56 }} value={editForm[k]}
-                          onChange={(e) => setEditForm({ ...editForm, [k]: e.target.value })}
-                          aria-label={k.replace(/_/g, ' ')} title="Inset from that edge (mm)" />
-                      ))}
-                    </>
+                    <MarginBox values={editForm}
+                      onChange={(k, v) => setEditForm({ ...editForm, [k]: v })} />
                   )}
                 </div>
               )}
@@ -459,10 +484,8 @@ export function LabelsPage() {
                 {(p.type === 'zpl' || p.type === 'zpl-legacy') && (
                   <>
                     <button className="btn" onClick={() => probe(false, p)}>Read values</button>
-                    {p.type === 'zpl' && (
-                      <button className="btn" onClick={() => probe(true, p)}
-                        title="Feeds ~1 label to measure the gap">Calibrate</button>
-                    )}
+                    <button className="btn" onClick={() => probe(true, p)}
+                      title="Feeds ~1 label to measure the gap">Calibrate</button>
                   </>
                 )}
                 <button className="btn" onClick={() => setEditId(null)}>Cancel</button>
@@ -576,14 +599,8 @@ export function LabelsPage() {
               <input className="input" style={{ width: 80 }} value={form.dpi}
                 onChange={(e) => setForm({ ...form, dpi: e.target.value })} aria-label="dots per inch" />
               {(form.type === 'zpl' || form.type === 'zpl-legacy') && (
-                <>
-                  <label className="muted">Margins T/L/R/B mm</label>
-                  {(['top_offset_mm', 'left_offset_mm', 'right_offset_mm', 'bottom_offset_mm'] as const).map((k) => (
-                    <input key={k} className="input" style={{ width: 56 }} value={form[k]}
-                      onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-                      aria-label={k.replace(/_/g, ' ')} title="Inset from that edge (mm)" />
-                  ))}
-                </>
+                <MarginBox values={form}
+                  onChange={(k, v) => setForm({ ...form, [k]: v })} />
               )}
             </div>
           )}
