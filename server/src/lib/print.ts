@@ -69,9 +69,12 @@ export async function zplForLabel(
   const rule = (x: number, y: number, len: number) =>
     `^FO${x},${y}^GB${len},${Math.max(2, d(0.35))},${Math.max(2, d(0.35))}^FS`;
 
-  const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 0 });
+  // margin:4 keeps the spec'd quiet zone - if a printer feeds slightly high,
+  // clipped rows are padding, not data modules. ^LT shifts the format down
+  // ~1mm for the same reason.
+  const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 4 });
   const logoSide = d(m.logo);
-  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`];
+  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LT${d(1)}`];
   if (m.vertical) {
     if (logoBuf) cmds.push(`^FO${Math.round((w - logoSide) / 2)},${d(1)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
     if (info.name) {
