@@ -720,14 +720,14 @@ export function LabelsPage() {
                   ) : (
                     <>
                       <img className="label-qr" src={l.dataUrl} alt={l.code}
-                        style={{ ...abs(1, (ch - m.qr) / 2 - 2, m.qr) }} />
-                      <div style={{ ...abs(1, (ch - m.qr) / 2 - 2 + m.qr + 1, m.qr), fontSize: `${m.code}mm`,
+                        style={{ ...abs(0, 0, m.qr) }} />
+                      <div style={{ ...abs(0, m.qr + 1, m.qr), fontSize: `${m.code}mm`,
                         fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
                       {name ? (
                         <>
-                          {shortPath && txt(clip(shortPath, m.path, textWmm), m.qr + 3, 5, textWmm, m.path)}
-                          {txt(clip(name, m.name, textWmm), m.qr + 3, 5 + (shortPath ? m.path + 1.7 : 0), textWmm, m.name, true)}
-                          {category && txt(clip(category, m.category, textWmm), m.qr + 3, 5 + (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, textWmm, m.category)}
+                          {shortPath && txt(clip(shortPath, m.path, textWmm), m.qr + 3, 0, textWmm, m.path)}
+                          {txt(clip(name, m.name, textWmm), m.qr + 3, (shortPath ? m.path + 1.7 : 0), textWmm, m.name, true)}
+                          {category && txt(clip(category, m.category, textWmm), m.qr + 3, (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, textWmm, m.category)}
                         </>
                       ) : [0.36, 0.62, 0.88].map((f, i) =>
                           rule(ch * f, m.qr + 3, cw - (m.qr + 3) - 4 - (i === 2 ? m.logo : 0)))}

@@ -97,13 +97,13 @@ export async function zplForLabel(
     cmds.push(`^FO${Math.round((cw - qrSide) / 2)},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
     cmds.push(centered(info.code, qrY + qrSide + d(1), m.code));
   } else {
-    const qrY = Math.round((ch - qrSide) / 2);
+    const qrY = 0;
     cmds.push(`^FO0,${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
     cmds.push(`^FO0,${qrY + qrSide + d(1)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}\\&^FS`);
     const textX = qrSide + d(3);
     const textWmm = cwmm - m.qr - 6;
     if (info.name) {
-      let y = d(5);
+      let y = 0;
       if (info.path) {
         cmds.push(`^FO${textX},${y}^A0N,${d(m.path)},${d(m.path)}^FD${clip(info.path, m.path, textWmm)}^FS`);
         y += d(m.path + 1.7);
