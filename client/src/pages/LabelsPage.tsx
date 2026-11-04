@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { api } from '../api';
@@ -619,39 +619,85 @@ export function LabelsPage() {
           <p className="muted">First label at true size - the print includes all {sheet.length}.</p>
           <div className="label-sheet avery">
             {sheet.slice(0, 1).map((l) => {
+              // Mirrors zplForLabel's coordinates (server/src/lib/print.ts) so the
+              // preview shows what the Zebra actually prints, margins included.
               const name = nameFor(l.code);
               const path = pathFor(l.code);
+              const category = categoryFor(l.code);
               const pvW = defP?.media_type === 'sheet' && defSpec ? defSpec.cellW : (defP?.label_w_mm ?? 57);
               const pvH = defP?.media_type === 'sheet' && defSpec ? defSpec.cellH : (defP?.label_h_mm ?? 32);
-              const m = labelMetrics(pvW, pvH);
+              const zpl = !!defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy');
+              const offL = zpl ? Number(defP.left_offset_mm ?? 0) : 0;
+              const offR = zpl ? Number(defP.right_offset_mm ?? 0) : 0;
+              const offT = zpl ? Number(defP.top_offset_mm ?? 0) : 0;
+              const offB = zpl ? Number(defP.bottom_offset_mm ?? 0) : 0;
+              const cw = Math.max(10, pvW - offL - offR);
+              const ch = Math.max(10, pvH - offT - offB);
+              const m = labelMetrics(cw, ch);
+              const clip = (t: string, font: number, widthMm: number) => {
+                const max = Math.floor(widthMm / (font * 0.62));
+                return t.length > max && max > 3 ? `${t.slice(0, max - 1)}…` : t;
+              };
+              const abs = (x: number, y: number, w?: number): CSSProperties =>
+                ({ position: 'absolute', left: `${x}mm`, top: `${y}mm`, ...(w != null ? { width: `${w}mm` } : {}) });
+              const txt = (t: string, x: number, y: number, wmm: number, font: number, bold = false, center = false) => (
+                <div key={`${y}-${t}`} style={{
+                  ...abs(x, y, center ? wmm : undefined),
+                  fontSize: `${font}mm`, fontWeight: bold ? 700 : 400, color: '#000',
+                  lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden',
+                  textAlign: center ? 'center' : 'left', maxWidth: `${wmm}mm`,
+                }}>{t}</div>
+              );
+              const rule = (y: number, x: number, len: number) => (
+                <div key={`r${y}`} style={{ ...abs(x, y, len), height: '0.35mm', background: '#000' }} />
+              );
+              const shortPath = path && path !== name
+                ? (path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path) : null;
+              const textWmm = cw - m.qr - 6;
               return (
-                <div key={l.code} className={`label-cell${m.vertical ? ' vertical' : ''}`} style={{ width: `${pvW}mm`, height: `${pvH}mm` }}>
-                  <div className="label-qrcol">
-                    <img className="label-qr" src={l.dataUrl} alt={l.code} style={{ width: `${m.qr}mm` }} />
-                    <span className="label-code" style={{ fontSize: `${m.code}mm` }}>{l.code}</span>
-                  </div>
-                  <div className="label-info" style={m.vertical ? { paddingTop: `${m.logo + 3}mm` } : undefined}>
-                    {name ? (
-                      <>
-                        {path && path !== name && (
-                          <div className="label-path">
-                            {path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path}
-                          </div>
-                        )}
-                        <div className="label-name" style={{ fontSize: `${m.name}mm` }}>{name}</div>
-                        {categoryFor(l.code) && (
-                          <div className="label-tags" style={{ fontSize: `${m.category}mm` }}>{categoryFor(l.code)}</div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <div className="label-blank" />
-                        <div className="label-blank" />
-                        <div className="label-blank" />
-                      </>
-                    )}
-                    <img className="label-logo" src="/logo-mono.svg" alt="" style={{ width: `${m.logo}mm` }} />
-                  </div>
+                <div key={l.code} className="label-cell" style={{
+                  width: `${pvW}mm`, height: `${pvH}mm`, position: 'relative',
+                  padding: 0, overflow: 'hidden', borderRadius: 0, display: 'block',
+                }}>
+                  {(offL || offR || offT || offB) ? (
+                    <div style={{
+                      ...abs(offL, offT, cw), height: `${ch}mm`,
+                      outline: '1px dashed rgba(0,0,0,0.25)', outlineOffset: '-1px',
+                    }} />
+                  ) : null}
+                  {m.vertical ? (
+                    <>
+                      <img src="/logo-mono.svg" alt="" style={{ ...abs((cw - m.logo) / 2, 1, m.logo) }} />
+                      {name ? (
+                        <>
+                          {shortPath && txt(clip(shortPath, m.path, cw - 8), 0, m.logo + 6, cw, m.path, false, true)}
+                          {txt(clip(name, m.name, cw - 8), 0, m.logo + 6 + (shortPath ? m.path + 1.7 : 0), cw, m.name, true, true)}
+                          {category && txt(clip(category, m.category, cw - 8), 0, m.logo + 6 + (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, cw, m.category, false, true)}
+                        </>
+                      ) : [0.28, 0.38, 0.48].map((f) => rule(ch * f, 4, cw - 8))}
+                      <img className="label-qr" src={l.dataUrl} alt={l.code}
+                        style={{ ...abs((cw - m.qr) / 2, ch - m.qr - m.code - 2.5, m.qr) }} />
+                      <div style={{ ...abs(0, ch - m.code - 1.5, cw), fontSize: `${m.code}mm`,
+                        fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
+                    </>
+                  ) : (
+                    <>
+                      <img className="label-qr" src={l.dataUrl} alt={l.code}
+                        style={{ ...abs(1, (ch - m.qr) / 2 - 2, m.qr) }} />
+                      <div style={{ ...abs(1, (ch - m.qr) / 2 - 2 + m.qr + 1, m.qr), fontSize: `${m.code}mm`,
+                        fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
+                      {name ? (
+                        <>
+                          {shortPath && txt(clip(shortPath, m.path, textWmm), m.qr + 3, 5, textWmm, m.path)}
+                          {txt(clip(name, m.name, textWmm), m.qr + 3, 5 + (shortPath ? m.path + 1.7 : 0), textWmm, m.name, true)}
+                          {category && txt(clip(category, m.category, textWmm), m.qr + 3, 5 + (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, textWmm, m.category)}
+                        </>
+                      ) : [0.36, 0.62, 0.88].map((f, i) =>
+                          rule(ch * f, m.qr + 3, cw - (m.qr + 3) - 4 - (i === 2 ? m.logo : 0)))}
+                      <img src="/logo-mono.svg" alt=""
+                        style={{ ...abs(cw - m.logo - 0.8, ch - m.logo - 0.5, m.logo) }} />
+                    </>
+                  )}
                 </div>
               );
             })}
