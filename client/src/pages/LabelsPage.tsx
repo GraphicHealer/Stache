@@ -697,12 +697,11 @@ export function LabelsPage() {
                   width: `${pvW}mm`, height: `${pvH}mm`, position: 'relative',
                   padding: 0, overflow: 'hidden', borderRadius: 0, display: 'block',
                 }}>
-                  {(offL || offR || offT || offB) ? (
-                    <div style={{
-                      ...abs(offL, offT, cw), height: `${ch}mm`,
-                      outline: '1px dashed rgba(0,0,0,0.25)', outlineOffset: '-1px',
-                    }} />
-                  ) : null}
+                  <div style={{
+                    ...abs(offL, offT, cw), height: `${ch}mm`,
+                    outline: (offL || offR || offT || offB) ? '1px dashed rgba(0,0,0,0.25)' : undefined,
+                    outlineOffset: '-1px',
+                  }}>
                   {m.vertical ? (
                     <>
                       <img src="/logo-mono.svg" alt="" style={{ ...abs((cw - m.logo) / 2, 1, m.logo) }} />
@@ -733,9 +732,10 @@ export function LabelsPage() {
                       ) : [0.36, 0.62, 0.88].map((f, i) =>
                           rule(ch * f, m.qr + 3, cw - (m.qr + 3) - 4 - (i === 2 ? m.logo : 0)))}
                       <img src="/logo-mono.svg" alt=""
-                        style={{ ...abs(cw - m.logo - 0.8, ch - m.logo - 0.5, m.logo) }} />
+                        style={{ ...abs(cw - m.logo, ch - m.logo, m.logo) }} />
                     </>
                   )}
+                  </div>
                 </div>
               );
             })}
