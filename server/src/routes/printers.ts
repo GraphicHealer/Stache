@@ -110,9 +110,9 @@ function printerBody(body: Record<string, any>) {
     labelWmm: body.label_w_mm ? Number(body.label_w_mm) : 57,
     labelHmm: body.label_h_mm ? Number(body.label_h_mm) : 32,
     topOffsetMm: body.top_offset_mm != null && body.top_offset_mm !== '' ? Number(body.top_offset_mm) : 1,
-    leftOffsetMm: num(body.left_offset_mm),
-    rightOffsetMm: num(body.right_offset_mm),
-    bottomOffsetMm: num(body.bottom_offset_mm),
+    leftOffsetMm: body.left_offset_mm != null && body.left_offset_mm !== '' ? num(body.left_offset_mm) : 1,
+    rightOffsetMm: body.right_offset_mm != null && body.right_offset_mm !== '' ? num(body.right_offset_mm) : 1,
+    bottomOffsetMm: body.bottom_offset_mm != null && body.bottom_offset_mm !== '' ? num(body.bottom_offset_mm) : 1,
     mediaType: body.media_type === 'sheet' ? 'sheet' : 'label',
     sheet: (body.sheet as SheetChoice) ?? null,
   };

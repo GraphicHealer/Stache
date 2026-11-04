@@ -74,15 +74,13 @@ export async function zplForLabel(
   const rule = (x: number, y: number, len: number) =>
     `^FO${x},${y}^GB${len},${Math.max(2, d(0.35))},${Math.max(2, d(0.35))}^FS`;
 
-  // margin:1 bakes one module of quiet zone into the bitmap so a clipped
-  // outer row is padding, not data - the rest comes from the white label
-  // stock. ^LH shifts the whole format per-printer: +top/+left inset from
-  // that edge, +bottom/+right pull back.
-  const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 1 });
+  // Layout runs edge-to-edge - the printer's configured margins (^LH +
+  // inset box) supply all breathing room, including the QR quiet zone.
+  const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 0 });
   const logoSide = d(m.logo);
   const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LH${d(offL)},${d(offT)}`, '^CI28'];
   if (m.vertical) {
-    if (logoBuf) cmds.push(`^FO${Math.round((cw - logoSide) / 2)},${d(1)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
+    if (logoBuf) cmds.push(`^FO${Math.round((cw - logoSide) / 2)},0${await gfa(logoBuf, logoSide, logoSide)}^FS`);
     if (info.name) {
       let y = d(m.logo + 6);
       if (info.path) {
@@ -93,15 +91,14 @@ export async function zplForLabel(
       y += d(m.name + 1.7);
       if (info.category) cmds.push(centered(clip(info.category, m.cat, cwmm - 8), y, m.cat));
     } else {
-      for (const f of [0.28, 0.38, 0.48]) cmds.push(rule(d(4), Math.round(ch * f), cw - d(8)));
+      for (const f of [0.28, 0.38, 0.48]) cmds.push(rule(0, Math.round(ch * f), cw));
     }
     const qrY = ch - qrSide - d(m.code + 2.5);
     cmds.push(`^FO${Math.round((cw - qrSide) / 2)},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
     cmds.push(centered(info.code, qrY + qrSide + d(1), m.code));
   } else {
-    const qrX = d(1);
-    const qrY = Math.round((ch - qrSide) / 2) - d(2);
-    cmds.push(`^FO${qrX},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
+    const qrY = Math.round((ch - qrSide) / 2);
+    cmds.push(`^FO0,${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
     cmds.push(`^FO0,${qrY + qrSide + d(1)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}\\&^FS`);
     const textX = qrSide + d(3);
     const textWmm = cwmm - m.qr - 6;
@@ -117,10 +114,10 @@ export async function zplForLabel(
         cmds.push(`^FO${textX},${y}^A0N,${d(m.cat)},${d(m.cat)}^FD${clip(info.category, m.cat, textWmm)}^FS`);
     } else {
       for (const [i, f] of [0.36, 0.62, 0.88].entries())
-        cmds.push(rule(textX, Math.round(ch * f), cw - textX - d(4) - (i === 2 ? d(m.logo) : 0)));
+        cmds.push(rule(textX, Math.round(ch * f), cw - textX - (i === 2 ? d(m.logo) : 0)));
     }
     if (logoBuf)
-      cmds.push(`^FO${cw - logoSide - d(0.8)},${ch - logoSide - d(0.5)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
+      cmds.push(`^FO${cw - logoSide},${ch - logoSide}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
   }
   cmds.push('^XZ');
   return cmds.join('\n');

@@ -36,7 +36,7 @@ interface Printer {
 const EMPTY_FORM = {
   name: '', type: 'zpl', host: '', port: '9100', queue: '', dpi: '203',
   label_w_mm: '57', label_h_mm: '32', media: 'label',
-  top_offset_mm: '1', left_offset_mm: '0', right_offset_mm: '0', bottom_offset_mm: '0',
+  top_offset_mm: '1', left_offset_mm: '1', right_offset_mm: '1', bottom_offset_mm: '1',
 };
 
 interface SheetForm { preset: string; custom: Record<string, string>; }

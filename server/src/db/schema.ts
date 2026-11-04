@@ -123,9 +123,9 @@ export const printers = sqliteTable('printers', {
   // ZPL ^LH home shift (mm): + = inset from that edge, compensates
   // printers feeding off-center. top keeps the v0.6.3 fix as default.
   topOffsetMm: real('top_offset_mm').notNull().default(1),
-  leftOffsetMm: real('left_offset_mm').notNull().default(0),
-  rightOffsetMm: real('right_offset_mm').notNull().default(0),
-  bottomOffsetMm: real('bottom_offset_mm').notNull().default(0),
+  leftOffsetMm: real('left_offset_mm').notNull().default(1),
+  rightOffsetMm: real('right_offset_mm').notNull().default(1),
+  bottomOffsetMm: real('bottom_offset_mm').notNull().default(1),
   // 'label' = single label stock (rolls, Zebra/Dymo-style); 'sheet' =
   // die-cut sheets on a page printer. sheet holds the template spec JSON.
   mediaType: text('media_type').notNull().default('label'),
