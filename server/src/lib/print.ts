@@ -270,10 +270,22 @@ async function cellSvg(
   origin: string,
   spec: SheetSpec,
   px: (mm: number) => number,
+  margins?: { top?: number; left?: number; right?: number; bottom?: number },
 ): Promise<Buffer> {
-  const cw = px(spec.cellW);
-  const ch = px(spec.cellH);
-  const qrSide = px(labelMetrics(spec.cellW, spec.cellH).qr);
+  // Tile stays full cell size; the content box insets by the printer's
+  // margins, same model as ^LH on ZPL - every element below lays out
+  // relative to the inset box, wrapped in a translate group.
+  const cwf = px(spec.cellW);
+  const chf = px(spec.cellH);
+  const ml = margins?.left ?? 0;
+  const mr = margins?.right ?? 0;
+  const mt = margins?.top ?? 0;
+  const mb = margins?.bottom ?? 0;
+  const ox = px(ml);
+  const oy = px(mt);
+  const cw = cwf - ox - px(mr);
+  const ch = chf - oy - px(mb);
+  const qrSide = px(labelMetrics(spec.cellW - ml - mr, spec.cellH - mt - mb).qr);
   const qr = await QRCode.toBuffer(`${origin}/l/${info.code}`, { errorCorrectionLevel: 'M', margin: 0 });
   const qrB64 = `data:image/png;base64,${qr.toString('base64')}`;
   const textX = qrSide + px(1.5);
@@ -282,7 +294,7 @@ async function cellSvg(
     const max = Math.floor(widthMm / (mmFont * 0.62));
     return esc(s.length > max && max > 3 ? `${s.slice(0, max - 1)}…` : s);
   };
-  const m = labelMetrics(spec.cellW, spec.cellH);
+  const m = labelMetrics(spec.cellW - ml - mr, spec.cellH - mt - mb);
   const textW = spec.cellW - (m.vertical ? 6 : m.qr + 6);
   let text = '';
   if (info.name) {
@@ -327,10 +339,12 @@ async function cellSvg(
   const qrY = m.vertical ? ch - qrSide - px(m.code + 2.5) : 0;
   const codeX = m.vertical ? Math.round(cw / 2) : Math.round(qrSide / 2);
   return Buffer.from(
-    `<svg width="${cw}" height="${ch}" xmlns="http://www.w3.org/2000/svg">
+    `<svg width="${cwf}" height="${chf}" xmlns="http://www.w3.org/2000/svg">
+      <g transform="translate(${ox},${oy})">
       <image href="${qrB64}" x="${qrX}" y="${qrY}" width="${qrSide}" height="${qrSide}"/>
       <text x="${codeX}" y="${m.vertical ? qrY + qrSide + px(1) : ch - px(1)}" font-family="monospace" font-size="${font(m.code)}" fill="#444" text-anchor="middle">${esc(info.code)}</text>
       ${text}${logo}
+      </g>
     </svg>`,
   );
 }
@@ -357,7 +371,9 @@ export async function printCupsSheet(p: Printer, codes: string[], origin: string
       const chunk = codes.slice(pg * perPage, (pg + 1) * perPage);
       const tiles = await Promise.all(
         chunk.map(async (c, i) => ({
-          input: await cellSvg(infos.get(c)!, origin, spec, px),
+          input: await cellSvg(infos.get(c)!, origin, spec, px, {
+            top: p.topOffsetMm, left: p.leftOffsetMm, right: p.rightOffsetMm, bottom: p.bottomOffsetMm,
+          }),
           left: px(spec.marginX) + (i % spec.cols) * px(spec.cellW + spec.gapX),
           top: px(spec.marginTop) + Math.floor(i / spec.cols) * px(spec.cellH + spec.gapY),
         })),
