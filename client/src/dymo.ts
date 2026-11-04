@@ -184,7 +184,7 @@ export async function dymoRenderLabel(
     const f = await fw();
     const dataUrl = await QRCode.toDataURL(`${origin}/l/${code}`, {
       errorCorrectionLevel: 'M',
-      margin: 1,
+      margin: 0,
       width: 300,
     });
     const xml = labelXml(code, dataUrl.split(',')[1], p);
@@ -214,7 +214,7 @@ export async function dymoPrintLabels(
   for (const [i, code] of codes.entries()) {
     const dataUrl = await QRCode.toDataURL(`${origin}/l/${code}`, {
       errorCorrectionLevel: 'M',
-      margin: 1,
+      margin: 0,
       width: 300,
     });
     const xml = labelXml(code, dataUrl.split(',')[1], p);

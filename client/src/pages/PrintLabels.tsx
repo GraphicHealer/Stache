@@ -63,7 +63,7 @@ export function PrintLabels() {
     Promise.all(
       labels.map(
         async (l) =>
-          [l.code, await QRCode.toDataURL(`${origin}/l/${l.code}`, { margin: 1, width: 220 })] as const,
+          [l.code, await QRCode.toDataURL(`${origin}/l/${l.code}`, { margin: 0, width: 220 })] as const,
       ),
     ).then((entries) => live && setQrs(Object.fromEntries(entries)));
     return () => {

@@ -228,7 +228,7 @@ export function LabelsPage() {
     const rendered = await Promise.all(
       codes.map(async (code) => ({
         code,
-        dataUrl: await QRCode.toDataURL(`${origin}/l/${code}`, { margin: 1, width: 220 }),
+        dataUrl: await QRCode.toDataURL(`${origin}/l/${code}`, { margin: 0, width: 220 }),
       })),
     );
     setSheet(rendered);
