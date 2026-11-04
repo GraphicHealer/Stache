@@ -409,18 +409,21 @@ export function LabelsPage() {
   // Exact local render of the generated ZPL (zebrash wasm) for Zebra printers;
   // falls back to the DOM approximation below if it can't render.
   const [zplPng, setZplPng] = useState<string | null>(null);
+  const [zplFailed, setZplFailed] = useState(false);
   const [zplRaw, setZplRaw] = useState<string | null>(null);
   const zplDef = defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy') ? defP : null;
   const dymoDef = defP?.type === 'dymo' ? defP : null;
   const [dymoPng, setDymoPng] = useState<string | null>(null);
+  const [dymoFailed, setDymoFailed] = useState(false);
   const firstCode = sheet[0]?.code;
   useEffect(() => {
     setDymoPng(null);
+    setDymoFailed(false);
     if (!dymoDef || !firstCode) return;
     let dead = false;
     dymoRenderLabel(dymoDef, firstCode, window.location.origin)
-      .then((png) => { if (png && !dead) setDymoPng(png); })
-      .catch(() => {});
+      .then((png) => { if (!dead) png ? setDymoPng(png) : setDymoFailed(true); })
+      .catch(() => { if (!dead) setDymoFailed(true); });
     return () => { dead = true; };
   }, [dymoDef?.id, dymoDef?.label_w_mm, dymoDef?.label_h_mm,
       dymoDef?.top_offset_mm, dymoDef?.left_offset_mm,
@@ -428,16 +431,18 @@ export function LabelsPage() {
   useEffect(() => {
     setZplPng(null);
     setZplRaw(null);
+    setZplFailed(false);
     if (!zplDef || !firstCode) return;
     let dead = false;
     (async () => {
       const r = await api
         .get(`/api/labels/${firstCode}/zpl?printer_id=${zplDef.id}`)
         .catch(() => null);
-      if (!r || dead) return;
+      if (!r || dead) { if (!dead) setZplFailed(true); return; }
       setZplRaw(r.zpl);
       const b64 = await renderZplPng(r.zpl, r.w_mm, r.h_mm, r.dpi).catch(() => null);
-      if (b64 && !dead) setZplPng(b64);
+      if (dead) return;
+      if (b64) setZplPng(b64); else setZplFailed(true);
     })();
     return () => {
       dead = true;
@@ -824,6 +829,12 @@ export function LabelsPage() {
                   <img key={l.code} src={`data:image/png;base64,${zplPng}`}
                     alt={`Rendered label ${l.code}`}
                     style={{ width: `${pvW}mm`, height: 'auto', display: 'block', background: '#fff' }} />
+                );
+              }
+              if ((zplDef && !zplFailed) || (dymoDef && !dymoFailed)) {
+                return (
+                  <div key={l.code} className="label-cell"
+                    style={{ width: `${pvW}mm`, height: `${pvH}mm`, background: '#fff' }} />
                 );
               }
               return (
