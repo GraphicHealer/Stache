@@ -833,7 +833,10 @@ export function LabelsPage() {
               }
               if ((zplDef && !zplFailed) || (dymoDef && !dymoFailed)) {
                 return (
-                  <div key={l.code} style={{ width: `${pvW}mm`, height: `${pvH}mm` }} />
+                  <div key={l.code} className="muted"
+                    style={{ width: `${pvW}mm`, height: `${pvH}mm`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>
+                    Loading preview…
+                  </div>
                 );
               }
               return (
