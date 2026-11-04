@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { api } from '../api';
 import { useApp } from '../context';
-import { dymoPrintLabels } from '../dymo';
+import { dymoPrintLabels, dymoProbe, dymoRenderLabel } from '../dymo';
 import { Icon, IconBtn, PrintDialog } from '../components/Bits';
 import { resolveSheet, type SheetChoice, type SheetPreset } from '../lib/sheets';
 import { labelMetrics } from '../lib/labelmetrics';
@@ -241,7 +241,7 @@ export function LabelsPage() {
     setBusy(true);
     try {
       if (p.type === 'dymo') {
-        await dymoPrintLabels(p.name, codes, window.location.origin, (done, total) =>
+        await dymoPrintLabels(p, codes, window.location.origin, (done, total) =>
           setProgress(`Printing ${done}/${total}…`),
         );
         setProgress(null);
@@ -269,6 +269,31 @@ export function LabelsPage() {
       toast(`Detected ${r.label_w_mm ?? '?'}×${r.label_h_mm ?? '?'}mm @ ${r.dpi}dpi`);
       const fill = (set: (v: any) => void, f: any) =>
         set({ ...f, label_w_mm: r.label_w_mm ? String(r.label_w_mm) : f.label_w_mm, label_h_mm: r.label_h_mm ? String(r.label_h_mm) : f.label_h_mm, dpi: String(r.dpi ?? f.dpi) });
+      if (target) {
+        fill(setEditForm, editForm);
+        await api.patch(`/api/printers/${target.id}`, {
+          label_w_mm: r.label_w_mm ?? undefined,
+          label_h_mm: r.label_h_mm ?? undefined,
+          dpi: r.dpi ?? undefined,
+        }).catch(() => {});
+        toast('Detected values saved');
+      } else {
+        fill(setForm, form);
+      }
+      refetchPrinters();
+    } catch (e) {
+      toast(`Detect failed: ${(e as Error).message}`);
+    }
+  };
+
+  // Client-side Dymo probe - the DYMO Connect service only exists on the
+  // browser's machine, so this never goes through the server.
+  const dymoRead = async (target?: Printer) => {
+    try {
+      const r = await dymoProbe(target ? target.name : form.name);
+      toast(`DYMO ${r.connected ? 'connected' : 'not connected'}: ${r.label_w_mm ?? '?'}×${r.label_h_mm ?? '?'}mm @ ${r.dpi ?? '?'}dpi`);
+      const fill = (set: (v: any) => void, f: any) =>
+        set({ ...f, label_w_mm: r.label_w_mm ? String(r.label_w_mm) : f.label_w_mm, label_h_mm: r.label_h_mm ? String(r.label_h_mm) : f.label_h_mm, dpi: r.dpi ? String(r.dpi) : f.dpi });
       if (target) {
         fill(setEditForm, editForm);
         await api.patch(`/api/printers/${target.id}`, {
@@ -319,7 +344,20 @@ export function LabelsPage() {
   const [zplPng, setZplPng] = useState<string | null>(null);
   const [zplRaw, setZplRaw] = useState<string | null>(null);
   const zplDef = defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy') ? defP : null;
+  const dymoDef = defP?.type === 'dymo' ? defP : null;
+  const [dymoPng, setDymoPng] = useState<string | null>(null);
   const firstCode = sheet[0]?.code;
+  useEffect(() => {
+    setDymoPng(null);
+    if (!dymoDef || !firstCode) return;
+    let dead = false;
+    dymoRenderLabel(dymoDef, firstCode, window.location.origin)
+      .then((png) => { if (png && !dead) setDymoPng(png); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [dymoDef?.id, dymoDef?.label_w_mm, dymoDef?.label_h_mm,
+      dymoDef?.top_offset_mm, dymoDef?.left_offset_mm,
+      dymoDef?.right_offset_mm, dymoDef?.bottom_offset_mm, firstCode]);
   useEffect(() => {
     setZplPng(null);
     setZplRaw(null);
@@ -480,7 +518,7 @@ export function LabelsPage() {
                   <label className="muted">dpi</label>
                   <input className="input" style={{ width: 80 }} value={editForm.dpi}
                     onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })} aria-label="dots per inch" />
-                  {(editForm.type === 'zpl' || editForm.type === 'zpl-legacy') && (
+                  {(editForm.type === 'zpl' || editForm.type === 'zpl-legacy' || editForm.type === 'dymo') && (
                     <MarginBox values={editForm}
                       onChange={(k, v) => setEditForm({ ...editForm, [k]: v })} />
                   )}
@@ -518,6 +556,9 @@ export function LabelsPage() {
                     <button className="btn" onClick={() => probe(true, p)}
                       title="Feeds ~1 label to measure the gap">Calibrate</button>
                   </>
+                )}
+                {p.type === 'dymo' && (
+                  <button className="btn" onClick={() => dymoRead(p)}>Read values</button>
                 )}
                 <button className="btn" onClick={() => setEditId(null)}>Cancel</button>
               </div>
@@ -597,6 +638,11 @@ export function LabelsPage() {
               </div>
             </>
           )}
+          {form.type === 'dymo' && (
+            <div className="row">
+              <button className="btn" disabled={!form.name} onClick={() => dymoRead()}>Read values</button>
+            </div>
+          )}
           {form.type === 'cups' && (
             <>
               <div className="row">
@@ -629,7 +675,7 @@ export function LabelsPage() {
               <label className="muted">dpi</label>
               <input className="input" style={{ width: 80 }} value={form.dpi}
                 onChange={(e) => setForm({ ...form, dpi: e.target.value })} aria-label="dots per inch" />
-              {(form.type === 'zpl' || form.type === 'zpl-legacy') && (
+              {(form.type === 'zpl' || form.type === 'zpl-legacy' || form.type === 'dymo') && (
                 <MarginBox values={form}
                   onChange={(k, v) => setForm({ ...form, [k]: v })} />
               )}
@@ -685,6 +731,13 @@ export function LabelsPage() {
               const shortPath = path && path !== name
                 ? (path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path) : null;
               const textWmm = cw - m.qr - 6;
+              if (dymoPng && dymoDef) {
+                return (
+                  <img key={l.code} src={dymoPng}
+                    alt={`Rendered label ${l.code}`}
+                    style={{ width: `${pvW}mm`, height: 'auto', display: 'block', background: '#fff' }} />
+                );
+              }
               if (zplPng && zplDef) {
                 return (
                   <img key={l.code} src={`data:image/png;base64,${zplPng}`}

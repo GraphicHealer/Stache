@@ -444,7 +444,7 @@ export function PrintDialog({
     try {
       if (p.type === 'dymo') {
         const { dymoPrintLabels } = await import('../dymo');
-        await dymoPrintLabels(p.name, repeated, window.location.origin);
+        await dymoPrintLabels(p, repeated, window.location.origin);
         api.post('/api/labels/mark-printed', { codes: repeated }).catch(() => {});
       } else {
         await api.post('/api/labels/print', { printer_id: p.id, codes: repeated });
