@@ -317,10 +317,12 @@ export function LabelsPage() {
   // Exact local render of the generated ZPL (zebrash wasm) for Zebra printers;
   // falls back to the DOM approximation below if it can't render.
   const [zplPng, setZplPng] = useState<string | null>(null);
+  const [zplRaw, setZplRaw] = useState<string | null>(null);
   const zplDef = defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy') ? defP : null;
   const firstCode = sheet[0]?.code;
   useEffect(() => {
     setZplPng(null);
+    setZplRaw(null);
     if (!zplDef || !firstCode) return;
     let dead = false;
     (async () => {
@@ -328,6 +330,7 @@ export function LabelsPage() {
         .get(`/api/labels/${firstCode}/zpl?printer_id=${zplDef.id}`)
         .catch(() => null);
       if (!r || dead) return;
+      setZplRaw(r.zpl);
       const b64 = await renderZplPng(r.zpl, r.w_mm, r.h_mm, r.dpi).catch(() => null);
       if (b64 && !dead) setZplPng(b64);
     })();
@@ -737,6 +740,14 @@ export function LabelsPage() {
               );
             })}
           </div>
+          {zplRaw && (
+            <details style={{ marginTop: 8 }}>
+              <summary className="muted" style={{ cursor: 'pointer' }}>Show generated ZPL</summary>
+              <textarea readOnly className="input" value={zplRaw}
+                onFocus={(e) => e.target.select()}
+                style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: '0.75rem', marginTop: 6 }} />
+            </details>
+          )}
         </>
       )}
 

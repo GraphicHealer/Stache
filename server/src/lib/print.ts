@@ -70,7 +70,7 @@ export async function zplForLabel(
     return zfd(s.length > max && max > 3 ? `${s.slice(0, max - 1)}…` : s);
   };
   const centered = (txt: string, y: number, mmFont: number) =>
-    `^FO0,${y}^A0N,${d(mmFont)},${d(mmFont)}^FB${cw},1,0,C,0^FD${zfd(txt)}^FS`;
+    `^FO0,${y}^A0N,${d(mmFont)},${d(mmFont)}^FB${cw},1,0,C,0^FD${zfd(txt)}\\&^FS`;
   const rule = (x: number, y: number, len: number) =>
     `^FO${x},${y}^GB${len},${Math.max(2, d(0.35))},${Math.max(2, d(0.35))}^FS`;
 
@@ -80,7 +80,7 @@ export async function zplForLabel(
   // that edge, +bottom/+right pull back.
   const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 1 });
   const logoSide = d(m.logo);
-  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LH${d(offL)},${d(offT)}`];
+  const cmds: string[] = ['^XA', `^PW${w}`, `^LL${h}`, `^LH${d(offL)},${d(offT)}`, '^CI28'];
   if (m.vertical) {
     if (logoBuf) cmds.push(`^FO${Math.round((cw - logoSide) / 2)},${d(1)}${await gfa(logoBuf, logoSide, logoSide)}^FS`);
     if (info.name) {
@@ -102,7 +102,7 @@ export async function zplForLabel(
     const qrX = d(1);
     const qrY = Math.round((ch - qrSide) / 2) - d(2);
     cmds.push(`^FO${qrX},${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
-    cmds.push(`^FO0,${qrY + qrSide + d(1)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}^FS`);
+    cmds.push(`^FO0,${qrY + qrSide + d(1)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}\\&^FS`);
     const textX = qrSide + d(3);
     const textWmm = cwmm - m.qr - 6;
     if (info.name) {
