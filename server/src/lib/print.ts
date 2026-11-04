@@ -6,7 +6,7 @@ import path from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
-import zplImage from 'zpl-image';
+import { rgbaToACS } from 'zpl-image-ts/acs';
 import type { Printer } from '../db/schema';
 import { db } from '../db';
 import { areas, labels } from '../db/schema';
@@ -14,8 +14,6 @@ import { PAGE_SIZES, resolveSheet, type SheetSpec } from './sheetspec';
 
 const MM_PER_DOT = (dpi: number) => 25.4 / dpi;
 
-// zpl-image is CJS/UMD - named imports break under ESM bundling.
-const { rgbaToACS } = zplImage;
 
 function sendTcp(host: string, port: number, payload: string | Buffer): Promise<void> {
   return new Promise((resolve, reject) => {
