@@ -128,6 +128,20 @@ export async function zplForLabel(
   return cmds.join('\n');
 }
 
+/** ZPL for one stored label code - same build path as printZpl (preview use). */
+export async function labelZpl(p: Printer, code: string, origin: string): Promise<string | null> {
+  const infos = await cellInfos([code]);
+  const info = infos.get(code);
+  if (!info) return null;
+  let logoBuf: Buffer | null = null;
+  try {
+    logoBuf = await fs.readFile(path.join(process.cwd(), 'client', 'dist', 'logo-mono.svg'));
+  } catch {
+    // no logo asset - label previews without it
+  }
+  return zplForLabel(info, `${origin}/l/${code}`, p, logoBuf);
+}
+
 export async function printZpl(p: Printer, codes: string[], origin: string): Promise<void> {
   if (!p.host) throw new Error('printer host not set');
   const infos = await cellInfos(codes);

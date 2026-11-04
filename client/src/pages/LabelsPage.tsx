@@ -7,6 +7,7 @@ import { dymoPrintLabels } from '../dymo';
 import { Icon, IconBtn, PrintDialog } from '../components/Bits';
 import { resolveSheet, type SheetChoice, type SheetPreset } from '../lib/sheets';
 import { labelMetrics } from '../lib/labelmetrics';
+import { renderZplPng } from '../lib/zplrender';
 
 interface SheetLabel {
   code: string;
@@ -312,6 +313,33 @@ export function LabelsPage() {
   }, [printerData?.default_id]);
 
   const defP = printers.find((p) => p.id === defaultId) ?? printers[0];
+
+  // Exact local render of the generated ZPL (zebrash wasm) for Zebra printers;
+  // falls back to the DOM approximation below if it can't render.
+  const [zplPng, setZplPng] = useState<string | null>(null);
+  const zplDef = defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy') ? defP : null;
+  const firstCode = sheet[0]?.code;
+  useEffect(() => {
+    setZplPng(null);
+    if (!zplDef || !firstCode) return;
+    let dead = false;
+    (async () => {
+      const r = await api
+        .get(`/api/labels/${firstCode}/zpl?printer_id=${zplDef.id}`)
+        .catch(() => null);
+      if (!r || dead) return;
+      const b64 = await renderZplPng(r.zpl, r.w_mm, r.h_mm, r.dpi).catch(() => null);
+      if (b64 && !dead) setZplPng(b64);
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [
+    firstCode,
+    zplDef?.id, zplDef?.label_w_mm, zplDef?.label_h_mm, zplDef?.dpi,
+    zplDef?.top_offset_mm, zplDef?.left_offset_mm,
+    zplDef?.right_offset_mm, zplDef?.bottom_offset_mm,
+  ]);
   const defSpec = defP?.media_type === 'sheet' ? resolveSheet(defP.sheet ?? null, presets) : null;
   const cap = defSpec && defSpec.cols && defSpec.rows ? defSpec.cols * defSpec.rows : 1;
   useEffect(() => {
@@ -654,6 +682,13 @@ export function LabelsPage() {
               const shortPath = path && path !== name
                 ? (path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path) : null;
               const textWmm = cw - m.qr - 6;
+              if (zplPng && zplDef) {
+                return (
+                  <img key={l.code} src={`data:image/png;base64,${zplPng}`}
+                    alt={`Rendered label ${l.code}`}
+                    style={{ width: `${pvW}mm`, height: 'auto', display: 'block', background: '#fff' }} />
+                );
+              }
               return (
                 <div key={l.code} className="label-cell" style={{
                   width: `${pvW}mm`, height: `${pvH}mm`, position: 'relative',

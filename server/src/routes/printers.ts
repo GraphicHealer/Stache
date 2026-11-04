@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { asc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { labels, printers, settings } from '../db/schema';
-import { printLabels } from '../lib/print';
+import { printLabels, labelZpl } from '../lib/print';
 import { requireAdmin } from '../lib/guards';
 import { getDigestConfig } from '../lib/digest';
 import { parseBody } from '../lib/validate';
@@ -380,6 +380,20 @@ export async function printerRoutes(app: FastifyInstance) {
   });
 
   // Print specific label codes to a printer.
+  // Generated ZPL for one label on a saved Zebra - lets the client render an
+  // exact preview locally (zebrash wasm) instead of approximating layout.
+  app.get('/api/labels/:code/zpl', async (req, reply) => {
+    const { code } = req.params as { code: string };
+    const { printer_id } = req.query as { printer_id?: string };
+    if (!CODE_RE.test(code)) return reply.badRequest('invalid label code');
+    const [p] = await db.select().from(printers).where(eq(printers.id, printer_id ?? ''));
+    if (!p || (p.type !== 'zpl' && p.type !== 'zpl-legacy'))
+      return reply.notFound('zpl printer not found');
+    const zpl = await labelZpl(p, code.toUpperCase(), originOf(req, await publicBaseUrl()));
+    if (!zpl) return reply.notFound('unknown label code');
+    return { zpl, w_mm: p.labelWmm, h_mm: p.labelHmm, dpi: p.dpi };
+  });
+
   app.post('/api/labels/print', async (req, reply) => {
     const body = parseBody(PrintLabelsSchema, req.body, reply);
     if (!body) return;
