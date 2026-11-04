@@ -20,7 +20,7 @@ export function labelMetrics(wMm: number, hMm: number): LabelMetrics {
   const s = Math.min(3, Math.max(1, Math.min(wMm, hMm) / 25.4));
   return {
     vertical,
-    qr: vertical ? Math.min(wMm * 0.72, hMm * 0.42) : Math.min(hMm * 0.82, wMm * 0.4),
+    qr: vertical ? Math.min(wMm * 0.72, hMm * 0.42) : Math.min(hMm - 2.1 * s - 1, wMm * 0.5),
     code: 2.1 * s,
     path: 2.3 * s,
     name: 3.4 * s,

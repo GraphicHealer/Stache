@@ -99,7 +99,7 @@ export async function zplForLabel(
   } else {
     const qrY = 0;
     cmds.push(`^FO0,${qrY}${await gfa(qr, qrSide, qrSide)}^FS`);
-    cmds.push(`^FO0,${qrY + qrSide + d(1)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}\\&^FS`);
+    cmds.push(`^FO0,${ch - d(m.code)}^A0N,${d(m.code)},${d(m.code)}^FB${qrSide + d(2)},1,0,C,0^FD${zfd(info.code)}\\&^FS`);
     const textX = qrSide + d(3);
     const textWmm = cwmm - m.qr - 6;
     if (info.name) {
@@ -157,9 +157,13 @@ export async function labelPng(code: string, url: string, p: Printer): Promise<B
   const w = Math.round(p.labelWmm / MM_PER_DOT(p.dpi));
   const h = Math.round(p.labelHmm / MM_PER_DOT(p.dpi));
   const qr = await QRCode.toBuffer(url, { errorCorrectionLevel: 'M', margin: 1 });
-  const qrSide = Math.round(Math.min(w, h) * 0.72);
-  const qrImg = await sharp(qr).resize(qrSide, qrSide, { kernel: 'nearest' }).png().toBuffer();
+  const off = (v?: number | null) => Math.round(Number(v ?? 0) / MM_PER_DOT(p.dpi));
+  const iw = Math.max(10, w - off(p.leftOffsetMm) - off(p.rightOffsetMm));
+  const ih = Math.max(10, h - off(p.topOffsetMm) - off(p.bottomOffsetMm));
   const textH = Math.round(4 / MM_PER_DOT(p.dpi));
+  const gap = Math.round(1 / MM_PER_DOT(p.dpi));
+  const qrSide = Math.min(iw, ih - textH - gap);
+  const qrImg = await sharp(qr).resize(qrSide, qrSide, { kernel: 'nearest' }).png().toBuffer();
   const text = Buffer.from(
     `<svg width="${w}" height="${textH}" xmlns="http://www.w3.org/2000/svg">
       <text x="50%" y="80%" font-family="monospace" font-size="${Math.round(textH * 0.7)}"
@@ -175,8 +179,8 @@ export async function labelPng(code: string, url: string, p: Printer): Promise<B
     },
   })
     .composite([
-      { input: qrImg, left: Math.round((w - qrSide) / 2), top: Math.round((h - qrSide - textH) / 2) },
-      { input: text, left: 0, top: h - textH },
+      { input: qrImg, left: off(p.leftOffsetMm) + Math.round((iw - qrSide) / 2), top: off(p.topOffsetMm) },
+      { input: text, left: 0, top: off(p.topOffsetMm) + ih - textH },
     ])
     .png()
     .toBuffer();
@@ -255,7 +259,7 @@ function labelMetrics(w: number, h: number) {
   const s = Math.min(3, Math.max(1, Math.min(w, h) / 25.4));
   return {
     vertical,
-    qr: vertical ? Math.min(w * 0.72, h * 0.42) : Math.min(h * 0.82, w * 0.4),
+    qr: vertical ? Math.min(w * 0.72, h * 0.42) : Math.min(h - 2.1 * s - 1, w * 0.5),
     code: 2.1 * s, path: 2.3 * s, name: 3.4 * s, cat: 2.3 * s,
     logo: vertical ? Math.min(h * 0.22, w * 0.6, 48) : Math.min(10 * s, h * 0.25, w * 0.3),
   };
@@ -320,12 +324,12 @@ async function cellSvg(
     // logo asset missing - cells still print fine without it
   }
   const qrX = m.vertical ? Math.round((cw - qrSide) / 2) : 0;
-  const qrY = m.vertical ? ch - qrSide - px(m.code + 2.5) : Math.round((ch - qrSide) / 2) - px(2);
+  const qrY = m.vertical ? ch - qrSide - px(m.code + 2.5) : 0;
   const codeX = m.vertical ? Math.round(cw / 2) : Math.round(qrSide / 2);
   return Buffer.from(
     `<svg width="${cw}" height="${ch}" xmlns="http://www.w3.org/2000/svg">
       <image href="${qrB64}" x="${qrX}" y="${qrY}" width="${qrSide}" height="${qrSide}"/>
-      <text x="${codeX}" y="${qrY + qrSide + px(1)}" font-family="monospace" font-size="${font(m.code)}" fill="#444" text-anchor="middle">${esc(info.code)}</text>
+      <text x="${codeX}" y="${m.vertical ? qrY + qrSide + px(1) : ch - px(1)}" font-family="monospace" font-size="${font(m.code)}" fill="#444" text-anchor="middle">${esc(info.code)}</text>
       ${text}${logo}
     </svg>`,
   );

@@ -774,7 +774,7 @@ export function LabelsPage() {
                     <>
                       <img className="label-qr" src={l.dataUrl} alt={l.code}
                         style={{ ...abs(0, 0, m.qr) }} />
-                      <div style={{ ...abs(0, m.qr + 1, m.qr), fontSize: `${m.code}mm`,
+                      <div style={{ ...abs(0, ch - m.code, m.qr), fontSize: `${m.code}mm`,
                         fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
                       {name ? (
                         <>

@@ -79,7 +79,7 @@ function labelXml(code: string, qrPngBase64: string, p?: DymoPrinterLike): strin
   const y0 = off(p?.top_offset_mm);
   const cw = Math.max(500, w - x0 - off(p?.right_offset_mm));
   const ch = Math.max(300, h - y0 - off(p?.bottom_offset_mm));
-  const qrSide = Math.min(ch, Math.round(cw * 0.42));
+  const qrSide = Math.min(ch - 700, Math.round(cw * 0.5));
   const tx = x0 + qrSide + 120;
   return `<?xml version="1.0" encoding="utf-8"?>
 <DieCutLabel Version="8.0" Units="twips">
@@ -129,7 +129,7 @@ function labelXml(code: string, qrPngBase64: string, p?: DymoPrinterLike): strin
           </Attributes>
         </Element>
       </StyledText>
-      <Bounds X="${tx}" Y="${y0 + Math.round(ch / 2) - 300}" Width="${x0 + cw - tx - 60}" Height="600"/>
+      <Bounds X="${tx}" Y="${y0 + ch - 600}" Width="${x0 + cw - tx - 60}" Height="600"/>
     </TextObject>
   </ObjectInfo>
 </DieCutLabel>`;
