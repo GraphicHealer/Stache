@@ -833,8 +833,7 @@ export function LabelsPage() {
               }
               if ((zplDef && !zplFailed) || (dymoDef && !dymoFailed)) {
                 return (
-                  <div key={l.code} className="label-cell"
-                    style={{ width: `${pvW}mm`, height: `${pvH}mm`, background: '#fff' }} />
+                  <div key={l.code} style={{ width: `${pvW}mm`, height: `${pvH}mm` }} />
                 );
               }
               return (
