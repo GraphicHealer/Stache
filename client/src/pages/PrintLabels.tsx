@@ -20,6 +20,7 @@ interface PrintSheet {
   spec: SheetSpec | null;
   labelW: number;
   labelH: number;
+  margins?: { top: number; left: number; right: number; bottom: number };
   labels: PrintLabel[];
 }
 
@@ -50,6 +51,8 @@ export function PrintLabels() {
   const labels = useMemo(() => sheet?.labels ?? [], [sheet]);
   const spec = sheet?.spec ?? null;
   const mode = sheet?.mode ?? 'sheet';
+  const mg = sheet?.margins ?? { top: 0, left: 0, right: 0, bottom: 0 };
+  const pad = `${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm`;
 
   useEffect(() => {
     document.title = 'Stache labels';
@@ -95,12 +98,15 @@ export function PrintLabels() {
   }
 
   const cell = (l: PrintLabel) => {
-    const m = labelMetrics(spec?.cellW ?? sheet.labelW, spec?.cellH ?? sheet.labelH);
+    const m = labelMetrics(
+      (spec?.cellW ?? sheet.labelW) - mg.left - mg.right,
+      (spec?.cellH ?? sheet.labelH) - mg.top - mg.bottom,
+    );
     return (
     <div
       key={l.code}
       className={`pcell${m.vertical ? ' vertical' : ''}`}
-      style={spec ? { height: `${spec.cellH}mm` } : undefined}
+      style={{ ...(spec ? { height: `${spec.cellH}mm` } : {}), padding: pad }}
     >
       <div className="pqrcol">
         {qrs[l.code] && (
@@ -138,14 +144,14 @@ export function PrintLabels() {
     <div
       key={l.code}
       className="plabel"
-      style={{ width: `${sheet.labelW}mm`, height: `${sheet.labelH}mm` }}
+      style={{ width: `${sheet.labelW}mm`, height: `${sheet.labelH}mm`, padding: pad }}
     >
       {qrs[l.code] && (
         <img
           src={qrs[l.code]}
           alt=""
           onLoad={() => setLoaded((n) => n + 1)}
-          style={{ width: `${labelMetrics(sheet.labelW, sheet.labelH).qr}mm` }}
+          style={{ width: `${labelMetrics(sheet.labelW - mg.left - mg.right, sheet.labelH - mg.top - mg.bottom).qr}mm` }}
         />
       )}
       <span className="pcode">{l.code}</span>

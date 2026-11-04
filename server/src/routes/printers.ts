@@ -7,7 +7,8 @@ import { requireAdmin } from '../lib/guards';
 import { getDigestConfig } from '../lib/digest';
 import { parseBody } from '../lib/validate';
 import { LABEL_CODE_RE } from '../lib/labelcode';
-import { DEFAULT_SHEET, SHEET_PRESETS, resolveSheet, type SheetChoice } from '../lib/sheetspec';
+import { DEFAULT_SHEET, SHEET_PRESETS, resolveSheet, type SheetChoice, type SheetSpec } from '../lib/sheetspec';
+type SavedSheet = { id: string; name: string; spec: SheetSpec };
 import { z } from 'zod';
 import net from 'node:net';
 
@@ -93,6 +94,10 @@ async function pcPrinter() {
     label_h_mm: Number(cfg.label_h_mm) || 32,
     media_type: (cfg.media_type as string) ?? 'sheet',
     sheet: (cfg.sheet as SheetChoice) ?? DEFAULT_SHEET,
+    top_offset_mm: Number(cfg.top_offset_mm) || 0,
+    left_offset_mm: Number(cfg.left_offset_mm) || 0,
+    right_offset_mm: Number(cfg.right_offset_mm) || 0,
+    bottom_offset_mm: Number(cfg.bottom_offset_mm) || 0,
     created_at: null,
   };
 }
@@ -167,7 +172,36 @@ export async function printerRoutes(app: FastifyInstance) {
   }));
 
   // Sheet template presets - shared by the PC printer, CUPS sheets, the UI.
-  app.get('/api/sheet-templates', async () => ({ templates: SHEET_PRESETS }));
+  app.get('/api/sheet-templates', async () => {
+    const [row] = await db.select().from(settings).where(eq(settings.key, 'custom_sheets'));
+    const saved = ((row?.value as any)?.sheets ?? []) as SavedSheet[];
+    return { templates: [...SHEET_PRESETS, ...saved] };
+  });
+
+  // Saved custom sheet specs - shared by every sheet-capable printer (CUPS + PC).
+  app.post('/api/sheet-templates', { preHandler: requireAdmin }, async (req, reply) => {
+    const b = req.body as { name?: string; spec?: SheetSpec } | undefined;
+    const spec = b?.spec;
+    if (!b?.name?.trim() || !spec || !(Number(spec.cols) > 0) || !(Number(spec.rows) > 0)
+      || !(Number(spec.cellW) > 0) || !(Number(spec.cellH) > 0))
+      return reply.code(400).send({ error: 'name and a valid spec are required' });
+    const id = `custom-${crypto.randomUUID()}`;
+    const [row] = await db.select().from(settings).where(eq(settings.key, 'custom_sheets'));
+    const list = [ ...(((row?.value as any)?.sheets ?? []) as SavedSheet[]), { id, name: b.name.trim(), spec } ];
+    await db.insert(settings).values({ key: 'custom_sheets', value: { sheets: list } as any })
+      .onConflictDoUpdate({ target: settings.key, set: { value: { sheets: list } as any } });
+    return { id, name: b.name.trim(), spec };
+  });
+
+  app.delete('/api/sheet-templates/:id', { preHandler: requireAdmin }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!id.startsWith('custom-')) return reply.code(400).send({ error: 'built-in presets cannot be deleted' });
+    const [row] = await db.select().from(settings).where(eq(settings.key, 'custom_sheets'));
+    const list = (((row?.value as any)?.sheets ?? []) as SavedSheet[]).filter((t) => t.id !== id);
+    await db.insert(settings).values({ key: 'custom_sheets', value: { sheets: list } as any })
+      .onConflictDoUpdate({ target: settings.key, set: { value: { sheets: list } as any } });
+    return { ok: true };
+  });
 
   // The built-in PC printer is configured, not created/deleted.
   app.patch('/api/printers/pc', { preHandler: requireAdmin }, async (req, reply) => {
@@ -178,6 +212,10 @@ export async function printerRoutes(app: FastifyInstance) {
         label_w_mm: z.union([z.number(), z.string()]).optional(),
         label_h_mm: z.union([z.number(), z.string()]).optional(),
         dpi: z.union([z.number(), z.string()]).optional(),
+        top_offset_mm: z.union([z.number(), z.string()]).optional(),
+        left_offset_mm: z.union([z.number(), z.string()]).optional(),
+        right_offset_mm: z.union([z.number(), z.string()]).optional(),
+        bottom_offset_mm: z.union([z.number(), z.string()]).optional(),
       }),
       req.body,
       reply,
@@ -189,6 +227,10 @@ export async function printerRoutes(app: FastifyInstance) {
       label_w_mm: body.label_w_mm ? Number(body.label_w_mm) : 57,
       label_h_mm: body.label_h_mm ? Number(body.label_h_mm) : 32,
       dpi: body.dpi ? Number(body.dpi) : 300,
+      top_offset_mm: Number(body.top_offset_mm) || 0,
+      left_offset_mm: Number(body.left_offset_mm) || 0,
+      right_offset_mm: Number(body.right_offset_mm) || 0,
+      bottom_offset_mm: Number(body.bottom_offset_mm) || 0,
     };
     if (cfg.media_type === 'sheet' && !resolveSheet(cfg.sheet))
       return reply.badRequest('invalid sheet spec');

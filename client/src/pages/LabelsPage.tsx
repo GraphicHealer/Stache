@@ -5,7 +5,7 @@ import { api } from '../api';
 import { useApp } from '../context';
 import { dymoPrintLabels, dymoProbe, dymoRenderLabel } from '../dymo';
 import { Icon, IconBtn, PrintDialog } from '../components/Bits';
-import { resolveSheet, type SheetChoice, type SheetPreset } from '../lib/sheets';
+import { PAGE_SIZES, resolveSheet, type SheetChoice, type SheetPreset, type SheetSpec } from '../lib/sheets';
 import { labelMetrics } from '../lib/labelmetrics';
 import { renderZplPng } from '../lib/zplrender';
 
@@ -76,7 +76,33 @@ function MarginBox({ values, onChange }: {
 function SheetPicker({
   value, onChange, presets,
 }: { value: SheetForm; onChange: (v: SheetForm) => void; presets: SheetPreset[] }) {
+  const { toast } = useApp();
+  const qc = useQueryClient();
+  const [saveName, setSaveName] = useState('');
   const c = value.custom;
+  const save = async () => {
+    const spec = resolveSheet({ preset: 'custom', custom: c }, presets);
+    if (!spec || !saveName.trim()) return;
+    try {
+      const r = await api.post('/api/sheet-templates', { name: saveName.trim(), spec });
+      setSaveName('');
+      qc.invalidateQueries({ queryKey: ['sheet-templates'] });
+      onChange({ ...value, preset: r.id });
+      toast('Preset saved - available on all sheet printers');
+    } catch (e) {
+      toast(`Save failed: ${(e as Error).message}`);
+    }
+  };
+  const remove = async () => {
+    try {
+      await api.del(`/api/sheet-templates/${value.preset}`);
+      qc.invalidateQueries({ queryKey: ['sheet-templates'] });
+      onChange({ ...value, preset: 'custom' });
+      toast('Preset deleted');
+    } catch (e) {
+      toast(`Delete failed: ${(e as Error).message}`);
+    }
+  };
   const setC = (k: string, v: string) => onChange({ ...value, custom: { ...c, [k]: v } });
   const num = (k: string, label: string, w = 56) => (
     <label key={k} className="muted" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8rem' }}>
@@ -94,6 +120,7 @@ function SheetPicker({
         </select>
       </div>
       {value.preset === 'custom' && (
+        <>
         <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
           {num('cellW', 'cell w')} {num('cellH', 'h')}
           {num('cols', 'cols', 44)} {num('rows', 'rows', 44)}
@@ -105,8 +132,42 @@ function SheetPicker({
             <option value="a4">A4</option>
           </select>
         </div>
+        <SheetPreview spec={resolveSheet({ preset: 'custom', custom: c }, presets)} />
+        <div className="row" style={{ gap: 8 }}>
+          <input className="input" style={{ flex: 1, minHeight: 36 }} placeholder="Save as preset (e.g. My drawer labels)"
+            value={saveName} onChange={(e) => setSaveName(e.target.value)} />
+          <button className="btn" disabled={!saveName.trim()} onClick={save}>Save preset</button>
+        </div>
+      </>
+      )}
+      {value.preset.startsWith('custom-') && (
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-ghost" onClick={remove}>Delete saved preset</button>
+        </div>
       )}
     </>
+  );
+}
+
+function SheetPreview({ spec }: { spec: SheetSpec | null }) {
+  if (!spec) return null;
+  const page = PAGE_SIZES[spec.page];
+  const scale = 130 / page.w;
+  return (
+    <div className="muted" style={{ fontSize: '0.75rem', marginTop: 4 }}>
+      {spec.cols}&times;{spec.rows} = {spec.cols * spec.rows} labels &middot; {spec.cellW}&times;{spec.cellH}mm cells on {page.w}&times;{page.h}mm
+      <div style={{
+        width: `${page.w * scale}px`, height: `${page.h * scale}px`, background: '#fff',
+        border: '1px solid #555', margin: '4px auto', boxSizing: 'border-box',
+        padding: `${spec.marginTop * scale}px ${spec.marginX * scale}px`,
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${spec.cols}, ${spec.cellW * scale}px)`, gap: `${spec.gapY * scale}px ${spec.gapX * scale}px` }}>
+          {Array.from({ length: spec.cols * spec.rows }).map((_, i) => (
+            <div key={i} style={{ width: `${spec.cellW * scale}px`, height: `${spec.cellH * scale}px`, border: '1px dashed #999', boxSizing: 'border-box' }} />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -138,8 +199,8 @@ export function LabelsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [editSheet, setEditSheet] = useState<SheetForm>(EMPTY_SHEET);
-  const [pcForm, setPcForm] = useState<{ media: 'label' | 'sheet'; sheet: SheetForm; w: string; h: string; dpi: string }>({
-    media: 'sheet', sheet: EMPTY_SHEET, w: '57', h: '32', dpi: '300',
+  const [pcForm, setPcForm] = useState<{ media: 'label' | 'sheet'; sheet: SheetForm; w: string; h: string; dpi: string; mt: string; ml: string; mr: string; mb: string }>({
+    media: 'sheet', sheet: EMPTY_SHEET, w: '57', h: '32', dpi: '300', mt: '1', ml: '1', mr: '1', mb: '1',
   });
   const [sheetForm, setSheetForm] = useState<SheetForm>(EMPTY_SHEET);
 
@@ -224,6 +285,12 @@ export function LabelsPage() {
         spec: isSheet ? pcSpec : null,
         labelW: pc?.label_w_mm ?? 57,
         labelH: pc?.label_h_mm ?? 32,
+        margins: {
+          top: pc?.top_offset_mm ?? 0,
+          left: pc?.left_offset_mm ?? 0,
+          right: pc?.right_offset_mm ?? 0,
+          bottom: pc?.bottom_offset_mm ?? 0,
+        },
         labels: codes.map((code) => ({
           code,
           name: nameFor(code),
@@ -430,6 +497,10 @@ export function LabelsPage() {
                         : EMPTY_SHEET,
                       w: String(p.label_w_mm ?? 57),
                       h: String(p.label_h_mm ?? 32),
+                      mt: String(p.top_offset_mm ?? 0),
+                      ml: String(p.left_offset_mm ?? 0),
+                      mr: String(p.right_offset_mm ?? 0),
+                      mb: String(p.bottom_offset_mm ?? 0),
                       dpi: String(p.dpi ?? 300),
                     });
                   }}
@@ -586,6 +657,12 @@ export function LabelsPage() {
                     onChange={(e) => setPcForm({ ...pcForm, h: e.target.value })} />
                 </div>
               )}
+              <MarginBox
+                values={{ top_offset_mm: pcForm.mt, left_offset_mm: pcForm.ml, right_offset_mm: pcForm.mr, bottom_offset_mm: pcForm.mb }}
+                onChange={(k, v) => {
+                  const map = { top_offset_mm: 'mt', left_offset_mm: 'ml', right_offset_mm: 'mr', bottom_offset_mm: 'mb' } as const;
+                  setPcForm({ ...pcForm, [map[k as keyof typeof map]]: v });
+                }} />
               <div className="row">
                 <button className="btn" onClick={async () => {
                   try {
@@ -595,6 +672,10 @@ export function LabelsPage() {
                       label_w_mm: parseFloat(pcForm.w) || 57,
                       label_h_mm: parseFloat(pcForm.h) || 32,
                       dpi: parseInt(pcForm.dpi, 10) || 300,
+                      top_offset_mm: parseFloat(pcForm.mt) || 0,
+                      left_offset_mm: parseFloat(pcForm.ml) || 0,
+                      right_offset_mm: parseFloat(pcForm.mr) || 0,
+                      bottom_offset_mm: parseFloat(pcForm.mb) || 0,
                     });
                     setEditPc(false);
                     refetchPrinters();
