@@ -833,8 +833,6 @@ export function LabelsPage() {
                 }}>
                   <div style={{
                     ...abs(offL, offT, cw), height: `${ch}mm`,
-                    outline: (offL || offR || offT || offB) ? '1px dashed rgba(0,0,0,0.25)' : undefined,
-                    outlineOffset: '-1px',
                   }}>
                   {m.vertical ? (
                     <>
