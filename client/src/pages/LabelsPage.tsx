@@ -785,10 +785,10 @@ export function LabelsPage() {
               const pvW = defP?.media_type === 'sheet' && defSpec ? defSpec.cellW : (defP?.label_w_mm ?? 57);
               const pvH = defP?.media_type === 'sheet' && defSpec ? defSpec.cellH : (defP?.label_h_mm ?? 32);
               const zpl = !!defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy');
-              const offL = zpl ? Number(defP.left_offset_mm ?? 0) : 0;
-              const offR = zpl ? Number(defP.right_offset_mm ?? 0) : 0;
-              const offT = zpl ? Number(defP.top_offset_mm ?? 0) : 0;
-              const offB = zpl ? Number(defP.bottom_offset_mm ?? 0) : 0;
+              const offL = Number(defP?.left_offset_mm ?? 0);
+              const offR = Number(defP?.right_offset_mm ?? 0);
+              const offT = Number(defP?.top_offset_mm ?? 0);
+              const offB = Number(defP?.bottom_offset_mm ?? 0);
               const cw = Math.max(10, pvW - offL - offR);
               const ch = Math.max(10, pvH - offT - offB);
               const m = labelMetrics(cw, ch);
