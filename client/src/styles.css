@@ -201,7 +201,7 @@ textarea.input { resize: vertical; }
 .label-blank { border-bottom: 2px solid #000; height: 1em; margin: 8px 4mm 0 0; }
 /* Avery cells render at true physical size on screen too - real preview. */
 .label-sheet.avery { grid-template-columns: repeat(auto-fill, 66.675mm); gap: 3.175mm; }
-.label-sheet.avery .label-cell { height: 25.4mm; padding: 2mm; overflow: hidden; border: 1px dashed var(--border); }
+.label-sheet.avery .label-cell { height: 25.4mm; padding: 2mm; overflow: hidden; }
 .label-sheet.avery .label-qr { width: 21mm; }
 /* On screen only the first cell is a preview; print shows them all. */
 .label-sheet .label-cell:nth-child(n+2) { display: none; }
