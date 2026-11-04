@@ -9,6 +9,10 @@ services:
       PORT: 8080
       DATA_DIR: /data
       TZ: ${TZ:-UTC}   # digest "time" setting uses this timezone
+      # Reverse-proxy/tunnel support (set in .env, never committed):
+      STACHE_BASE_URL: ${STACHE_BASE_URL:-}        # public origin, e.g. https://stache.example.com
+      STACHE_TRUSTED_ORIGINS: ${STACHE_TRUSTED_ORIGINS:-}
+      STACHE_TRUST_PROXY: ${STACHE_TRUST_PROXY:-0} # 1 to honor X-Forwarded-* from the proxy
     volumes:
       - data:/data   # SQLite db + photos + model cache all live here
     ports:
