@@ -834,7 +834,7 @@ export function LabelsPage() {
               if ((zplDef && !zplFailed) || (dymoDef && !dymoFailed)) {
                 return (
                   <div key={l.code} className="muted"
-                    style={{ width: `${pvW}mm`, height: `${pvH}mm`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>
+                    style={{ width: `${pvW}mm`, height: `${pvH}mm`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', border: '1px dashed var(--border)' }}>
                     Loading preview…
                   </div>
                 );
