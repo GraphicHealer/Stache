@@ -18,6 +18,10 @@ permissions:
   contents: read
 
 jobs:
+  # Typecheck+build first - no point compiling images for code that doesn't.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   discover:
     runs-on: ubuntu-latest
     outputs:
@@ -98,7 +102,7 @@ jobs:
           done
 
   build:
-    needs: discover
+    needs: [ci, discover]
     name: Build ${{ matrix.app }} (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
