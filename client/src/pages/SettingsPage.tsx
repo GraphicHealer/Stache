@@ -11,7 +11,7 @@ const CATS: { to: string; icon: IconName; title: string; desc: string }[] = [
   { to: '/settings/printers', icon: 'printer', title: 'Printers', desc: 'Label printer setup and testing' },
 ];
 
-/** Settings landing page - five categories, nothing more. */
+/** Settings landing page - six categories, nothing more. */
 export function SettingsPage() {
   const { user } = useApp();
   return (

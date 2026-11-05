@@ -297,12 +297,12 @@ export function PrinterSettings() {
         set({ ...f, label_w_mm: r.label_w_mm ? String(r.label_w_mm) : f.label_w_mm, label_h_mm: r.label_h_mm ? String(r.label_h_mm) : f.label_h_mm, dpi: String(r.dpi ?? f.dpi) });
       if (target) {
         fill(setEditForm, editForm);
-        await api.patch(`/api/printers/${target.id}`, {
+        const saved = await api.patch(`/api/printers/${target.id}`, {
           label_w_mm: r.label_w_mm ?? undefined,
           label_h_mm: r.label_h_mm ?? undefined,
           dpi: r.dpi ?? undefined,
-        }).catch(() => {});
-        toast('Detected values saved');
+        }).catch((e) => (toast(`Save failed: ${e.message}`), null));
+        if (saved !== null) toast('Detected values saved');
       } else {
         fill(setForm, form);
       }
@@ -322,12 +322,12 @@ export function PrinterSettings() {
         set({ ...f, label_w_mm: r.label_w_mm ? String(r.label_w_mm) : f.label_w_mm, label_h_mm: r.label_h_mm ? String(r.label_h_mm) : f.label_h_mm, dpi: r.dpi ? String(r.dpi) : f.dpi });
       if (target) {
         fill(setEditForm, editForm);
-        await api.patch(`/api/printers/${target.id}`, {
+        const saved = await api.patch(`/api/printers/${target.id}`, {
           label_w_mm: r.label_w_mm ?? undefined,
           label_h_mm: r.label_h_mm ?? undefined,
           dpi: r.dpi ?? undefined,
-        }).catch(() => {});
-        toast('Detected values saved');
+        }).catch((e) => (toast(`Save failed: ${e.message}`), null));
+        if (saved !== null) toast('Detected values saved');
       } else {
         fill(setForm, form);
       }
@@ -428,7 +428,13 @@ export function PrinterSettings() {
                     icon="trash"
                     className="btn-small btn-ghost"
                     label={`Remove ${p.name}`}
-                    onClick={() => api.del(`/api/printers/${p.id}`).then(refetchPrinters)}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete printer "${p.name}"?`)) return;
+                      const r = await api.del(`/api/printers/${p.id}`).catch((e) => (toast(e.message), null));
+                      if (!r) return;
+                      refetchPrinters();
+                      toast('Printer deleted');
+                    }}
                   />
                 </>
               )}

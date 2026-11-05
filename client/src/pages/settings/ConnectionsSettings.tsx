@@ -190,7 +190,9 @@ export function ConnectionsSettings() {
                   className="btn-ghost"
                   label={`Revoke ${c.name}`}
                   onClick={async () => {
-                    await api.del(`/api/settings/mcp/${c.id}`);
+                    if (!confirm(`Revoke "${c.name}"? This connection may be used by other household members or integrations - they all lose access immediately.`)) return;
+                    const r = await api.del(`/api/settings/mcp/${c.id}`).catch((e) => (toast(e.message), null));
+                    if (!r) return;
                     qc.invalidateQueries({ queryKey: ['settings-mcp'] });
                     toast('Revoked');
                   }}
