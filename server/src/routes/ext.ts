@@ -168,22 +168,19 @@ export async function extRoutes(app: FastifyInstance) {
     if (query.status && ['home', 'out', 'lent', 'unaccounted', 'gone'].includes(query.status))
       where.push(eq(items.status, query.status));
     if (q) {
-      // Multi-field contains match in SQL - LIKE wildcards are stripped so
-      // the user's query stays literal, matching the old includes() semantics.
-      const needle = q.replace(/[%_]/g, '');
-      if (!needle) {
-        where.push(sql`1 = 0`); // a bare-wildcard query can match nothing
-      } else {
-        const pattern = `%${needle}%`;
-        where.push(
-          or(
-            sql`lower(${items.name}) LIKE ${pattern}`,
-            sql`lower(${items.description}) LIKE ${pattern}`,
-            sql`lower(${items.barcode}) LIKE ${pattern}`,
-            sql`lower(${items.tags}) LIKE ${pattern}`,
-          )!,
-        );
-      }
+      // Multi-field contains match in SQL. Escape LIKE metacharacters (and
+      // the escape char itself) + an explicit ESCAPE clause, so user input
+      // stays literal - the same semantics the old includes() had.
+      const esc = q.replace(/[\\%_]/g, (m) => '\\' + m);
+      const pattern = `%${esc}%`;
+      where.push(
+        or(
+          sql`lower(${items.name}) LIKE ${pattern} ESCAPE '\\'`,
+          sql`lower(${items.description}) LIKE ${pattern} ESCAPE '\\'`,
+          sql`lower(${items.barcode}) LIKE ${pattern} ESCAPE '\\'`,
+          sql`lower(${items.tags}) LIKE ${pattern} ESCAPE '\\'`,
+        )!,
+      );
     }
 
     // Filter + paginate entirely in SQL - one page never loads the inventory.

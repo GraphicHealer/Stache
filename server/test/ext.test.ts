@@ -418,9 +418,14 @@ describe('/api/v1 writes', () => {
       expect(r.json().items.length).toBeGreaterThanOrEqual(1);
     }
 
-    // LIKE metacharacters in the query stay literal (old includes() semantics)
+    // LIKE metacharacters are escaped, not stripped: '%' searches literally.
+    const pct = await mk('50% off coupon', {});
     const wild = await app.inject({ method: 'GET', url: '/api/v1/items?q=%25', headers: v1() });
-    expect(wild.json().total).toBe(0);
+    expect(wild.json().total).toBe(1);
+    expect(wild.json().items[0].id).toBe(pct.id);
+    // '_' is literal too - if it acted as a wildcard, '5_%' would match '50%'.
+    const und = await app.inject({ method: 'GET', url: '/api/v1/items?q=5_%25', headers: v1() });
+    expect(und.json().total).toBe(0);
 
     // combined filters: q + status (gone items are hidden_at -> excluded anyway)
     const gone = await app.inject({
