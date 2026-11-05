@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { and, asc, desc, eq, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { db, sqlite } from '../db';
 import { env } from '../env';
 import { areas, events, items, user } from '../db/schema';
@@ -38,19 +38,39 @@ export async function miscRoutes(app: FastifyInstance) {
       .from(events)
       .orderBy(desc(events.createdAt))
       .limit(Math.min(100, parseInt(limit ?? '30', 10) || 30));
-    const visible = [];
+    const visible: (typeof events.$inferSelect)[] = [];
     for (const e of rows) {
       if (await eventVisibleToUser(e.entityType, e.entityId, uid)) visible.push(e);
     }
     const names = new Map(
       (await db.select({ id: user.id, name: user.name }).from(user)).map((u) => [u.id, u.name]),
     );
+    // Resolve entity names so clients can render "who did what" without
+    // per-event lookups. Visibility is already filtered above.
+    const idsFor = (t: string) =>
+      [...new Set(visible.filter((e) => e.entityType === t).map((e) => e.entityId!))];
+    const ent = new Map<string, string | null>();
+    const [itemIds, areaIds] = [idsFor('item'), idsFor('area')];
+    for (const e of visible) if (e.entityType === 'label' && e.entityId) ent.set(`label:${e.entityId}`, e.entityId);
+    if (itemIds.length)
+      for (const r of await db
+        .select({ id: items.id, name: items.name })
+        .from(items)
+        .where(inArray(items.id, itemIds)))
+        ent.set(`item:${r.id}`, r.name);
+    if (areaIds.length)
+      for (const r of await db
+        .select({ id: areas.id, name: areas.name })
+        .from(areas)
+        .where(inArray(areas.id, areaIds)))
+        ent.set(`area:${r.id}`, r.name);
     return {
       events: visible.map((e) => ({
         id: e.id,
         type: e.type,
         entity_type: e.entityType,
         entity_id: e.entityId,
+        entity_name: e.entityId ? (ent.get(`${e.entityType}:${e.entityId}`) ?? null) : null,
         payload: e.payload,
         user_id: e.userId,
         user_name: e.userId ? (names.get(e.userId) ?? 'someone') : null,

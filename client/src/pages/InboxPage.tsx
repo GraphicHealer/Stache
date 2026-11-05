@@ -163,7 +163,7 @@ export function InboxPage() {
                     )
                   }
                 >
-                  Back home
+                  Put back
                 </button>
               </div>
             </div>

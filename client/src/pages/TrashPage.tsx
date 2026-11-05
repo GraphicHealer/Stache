@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../context';
 import { IconBtn } from '../components/Bits';
+import { describeEvent } from '../lib/events';
 
 /**
  * Trash + activity: hidden items and archived areas (restorable, or purgeable
@@ -27,7 +28,8 @@ export function TrashPage() {
 
   const purgeItem = async (id: string) => {
     if (!window.confirm('Delete permanently? This removes photos too - NOT undoable.')) return;
-    await api.del(`/api/items/${id}/purge`).catch((e) => (toast(e.message), null));
+    const r = await api.del(`/api/items/${id}/purge`).catch((e) => (toast(e.message), null));
+    if (!r) return;
     toast('Purged');
     refresh();
   };
@@ -88,7 +90,7 @@ export function TrashPage() {
       {(ev?.events ?? []).map((e: any) => (
         <div key={e.id} className="out-row">
           <div className="out-info">
-            <span>{e.type}{e.undone ? ' (undone)' : ''}</span>
+            <span>{describeEvent(e)}{e.undone ? ' (undone)' : ''}</span>
             <span className="muted">
               {e.user_name ?? 'system'} · {new Date(e.created_at).toLocaleString()}
             </span>

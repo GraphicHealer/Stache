@@ -8,26 +8,7 @@ import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
 import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu } from '../components/Bits';
 
-function describeEvent(e: { type: string; payload?: any }): string {
-  const p = e.payload ?? {};
-  switch (e.type) {
-    case 'item.filed': return 'filed';
-    case 'item.moved': return 'moved';
-    case 'item.updated': return 'edited';
-    case 'item.status': return `status → ${p.next?.status ?? 'changed'}`;
-    case 'item.hidden': return 'hidden';
-    case 'item.restored': return 'restored';
-    case 'item.not_here': return 'marked not here';
-    case 'item.linked': return 'linked to another item';
-    case 'item.unlinked': return 'unlinked';
-    case 'item.receipt_attached': return 'receipt attached';
-    case 'item.receipt_detached': return 'receipt removed';
-    case 'item.merged': return `merged${p.loser_name ? ` "${p.loser_name}"` : ' a duplicate'} into this`;
-    case 'item.photo_replaced': return 'photo re-shot';
-    case 'stocktake': return 'stocktake';
-    default: return e.type;
-  }
-}
+import { describeEvent } from '../lib/events';
 
 export function ItemPage() {
   const { id = '' } = useParams();
@@ -473,7 +454,7 @@ export function ItemPage() {
 
       <div className="row">
         {item.status !== 'home' ? (
-          <button className="btn" onClick={() => patch({ status: 'home' }, 'Back home')}>Back home</button>
+          <button className="btn" onClick={() => patch({ status: 'home' }, 'Put back')}>Put back</button>
         ) : (
           <>
             <button className="btn" onClick={() => patch({ status: 'out' }, 'Marked out')}>Out</button>
@@ -648,7 +629,7 @@ export function ItemPage() {
             {history!.events.map((e: any) => (
               <li key={e.id} className={e.undone ? 'muted' : ''}>
                 <span className="muted">{new Date(e.created_at).toLocaleString()}</span>{' '}
-                {describeEvent(e)}
+                {describeEvent({ ...e, entity_name: e.entity_name ?? item?.name ?? null })}
                 {e.user_name ? ` - ${e.user_name}` : e.actor ? ` - ${e.actor}` : ''}
                 {e.undone ? ' (undone)' : ''}
               </li>

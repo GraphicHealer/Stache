@@ -110,7 +110,7 @@ const MORE = [
     icon: <svg {...ICON_PROPS}><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>,
   },
   {
-    to: '/settings', label: 'Setup',
+    to: '/settings', label: 'Settings',
     icon: <svg {...ICON_PROPS}><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" /></svg>,
   },
 ];

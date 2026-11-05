@@ -182,7 +182,8 @@ export function SettingsPage() {
               label={`Remove ${u.name}`}
               onClick={async () => {
                 if (!window.confirm(`Remove ${u.name}? Their private items become invisible to everyone.`)) return;
-                await api.del(`/api/users/${u.id}`).catch((e) => (toast(e.message), null));
+                const r = await api.del(`/api/users/${u.id}`).catch((e) => (toast(e.message), null));
+                if (!r) return;
                 qc.invalidateQueries({ queryKey: ['users'] });
                 toast('Member removed');
               }}
