@@ -20,6 +20,8 @@ Do not blindly apply recommendations that have already been addressed.
 
 ## 1.1 Personal AI connections are a first-class feature
 
+> **✅ DONE** — shipped: members create/manage their own `/api/me/mcp-connections` (name, read/read-write, one-time hashed token, last-used, revoke) with a Settings → AI connections UI and per-client setup snippets. Implemented via 3.1-3.7 below.
+
 Users should be able to connect their own MCP-compatible AI assistants to their own Stache inventory.
 
 This is an important product requirement, not merely an extension of the existing shared MCP integration.
@@ -41,6 +43,8 @@ The guiding principle:
 **Stache owns the inventory, but users own the intelligence they connect to it.**
 
 ## 1.2 Establish three distinct integration access models
+
+> **✅ DONE** — three contexts exist: personal (`kind='personal'` + owner → shared + own private only), shared (`kind='shared'` → shared-only, unchanged, independently revocable), and administrative is separated by absence - no admin/user-management capability exists through MCP or `/api/v1` at all. An admin-owned personal connection gets no admin tools.
 
 Do not simply expand the existing shared-only MCP permissions to allow access to private items.
 
@@ -92,6 +96,8 @@ Do not expose user management, account administration, global settings, or other
 If administrative MCP capabilities are ever introduced, they must require explicit administrative authorization and separate scopes.
 
 ## 1.3 Preserve existing security boundaries
+
+> **✅ DONE** — visibility enforced server-side via `itemVisible(conn.ownerId)`/`owns()` on every path (search pre-filter + post-filter, direct ID, area contents, photos, writes). Knowing an ID doesn't bypass. Writes reuse `recordEventTx` - same events/undo as the app. No MCP-only security duplicates.
 
 The existing private-item implementation is an important security boundary.
 
@@ -847,6 +853,8 @@ Do not conflate REST API tokens, shared integration tokens, and personal MCP cre
 
 ## 6.1 Inspect before implementing
 
+> **✅ DONE** — every finding was verified against current code first; already-fixed items (SSRF guard, hidden checks on list paths) were preserved rather than re-applied.
+
 Before changing code:
 
 1. Fetch the latest repository state.
@@ -871,6 +879,8 @@ In particular, preserve:
 
 ## 6.2 Keep the product simple
 
+> **✅ DONE** — personal connections reuse `mcp_tokens` (one auth system, no parallel token table), reuse `itemVisible`/`searchItemIds`/`recordEventTx` rather than MCP-specific variants, and the UI adds one settings section - no OAuth machinery, no scope sprawl.
+
 Stache's defining product philosophy is simplicity.
 
 The backend can be sophisticated, but the user experience should remain approachable.
@@ -887,6 +897,8 @@ Avoid:
 Use sensible defaults and clear descriptions.
 
 ## 6.3 Preserve compatibility
+
+> **✅ DONE** — migration defaults `kind='shared'` + `owner_id=NULL` so existing connections behave identically; `/api/v1` responses only gain fields (`total`, `limit`, `offset`, `deduplicated`); legacy plaintext MCP tokens still upgrade on first use.
 
 Be careful with:
 
@@ -907,6 +919,8 @@ If a database migration is required:
 Do not silently reinterpret existing shared tokens as personal tokens.
 
 ## 6.4 Testing requirements
+
+> **✅ DONE** — ext.test.ts 22 cases (auth, multipart, signed URLs, validation, dedupe, pagination, hidden) + mcp.test.ts 11 cases (full isolation matrix incl. cross-member direct-ID, read-only tool hiding, revoke). Full server suite: 105/105 green (needs `--hookTimeout 120000` on slow Docker volumes). stache-ha pytest runs in CI - green after the hassfest strings fix.
 
 Run the relevant test suites for all three repositories.
 
