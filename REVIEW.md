@@ -643,6 +643,8 @@ Review the current implementation before changing it.
 
 ## 4.1 Use runtime service schemas
 
+> **✅ DONE** — all six services register real Voluptuous schemas (required `query`/`item_id`/`code`, `status` enum, positive-int quantity, `tags` list, `vol.Exclusive` area + photo_path/photo_url). `services.yaml` is docs-only again.
+
 **Priority: P2 — Reliability**
 
 Previously identified:
@@ -666,6 +668,8 @@ If still applicable:
 Do not rely on `services.yaml` as runtime validation. It only helps the Home Assistant UI.
 
 ## 4.2 Resolve multi-instance service lifecycle
+
+> **✅ DONE** — explicit single-instance: `async_step_user` aborts (`single_instance_allowed`) when an entry exists; reconfigure the existing entry instead. Services resolve one client unambiguously.
 
 **Priority: P2 — Reliability**
 
@@ -695,6 +699,8 @@ Do not add unnecessary multi-instance complexity if the integration is not inten
 
 ## 4.3 Enforce photo file size limits
 
+> **✅ DONE** — `photo_path` is `stat()`-ed before `read_bytes`; >25MB rejects with a clear ServiceValidationError (allowlist check retained). compileall passes; the pytest suite runs in CI (fcntl/Unix-only).
+
 **Priority: P2 — Resource Safety**
 
 Previously identified:
@@ -713,6 +719,8 @@ If still applicable:
 
 ## 4.4 Preserve shared-integration access boundaries
 
+> **✅ DONE** — HA authenticates with a shared `api_tokens` row (`ownerId` always NULL → `itemVisible(null)` = shared-only) and `mcp_tokens` default `kind='shared'`; no path to personal/private data exists. The shared boundary is load-bearing in both directions.
+
 The Home Assistant integration is a shared integration, not a personal AI connection.
 
 It must retain shared-inventory-only access.
@@ -728,6 +736,8 @@ Its token should remain independently revocable.
 Repository: `GraphicHealer/stache-site`
 
 ## 5.1 Fix Swagger UI authentication persistence
+
+> **✅ DONE** — `persistAuthorization: false` in `stache-site/src/pages/api.astro` - a token entered in Try-it-out never lands in localStorage.
 
 **Priority: P2 — Security**
 
@@ -751,6 +761,8 @@ If still enabled:
 - Recommend read-only tokens for documentation/testing when possible.
 
 ## 5.2 Correct production CORS behavior in the interactive API reference
+
+> **✅ DONE** — verified: `app.ts` registers CORS only when `!env.isProd` - prod sends no CORS headers, so the browser can't call a remote instance from the site. Chose the simplest secure path: site is a reference; docs corrected to say scripts/HA call the API directly.
 
 **Priority: P2 — Functional**
 
@@ -778,6 +790,8 @@ Choose the simplest secure implementation.
 
 ## 5.3 Correct item photo documentation
 
+> **✅ DONE** — `concepts.md` no longer claims every item has a photo: 'photo-first - not mandatory; API/CSV/JSON import can create items without one.' Philosophy preserved, claim accurate.
+
 The concepts documentation previously implied that every inventory item has a photo.
 
 However, the API, CSV import, and JSON import can create items without one.
@@ -789,6 +803,8 @@ Explain that Stache is photo-first, but photos are not mandatory for every item 
 Preserve the product philosophy without making technically inaccurate claims.
 
 ## 5.4 Document personal MCP connections
+
+> **✅ DONE** — `extras/mcp.md` rewritten around the two connection kinds (personal = shared + your private, member-managed; shared = shared-only, admin-managed). Create/revoke/scopes/client setup covered without token-internals noise.
 
 Add a dedicated documentation section explaining personal AI connections.
 
@@ -811,6 +827,8 @@ Do not turn this into an unnecessarily technical explanation of OAuth, bearer-to
 Users should understand what they are granting access to and how to control it.
 
 ## 5.5 Document REST API token security
+
+> **✅ DONE** — `api/index.md` gains a token-security block: separate from sessions, scoped, revocable, hashed, shared-only (private items are never exposed to the REST API), store safely, prefer `read`.
 
 Ensure the API documentation clearly explains:
 
