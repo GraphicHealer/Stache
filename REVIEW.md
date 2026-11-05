@@ -531,6 +531,8 @@ AI connections should not bypass the normal application rules.
 
 ## 3.5 Provide a user-friendly MCP connection management interface
 
+> **✅ DONE** — Settings → **AI connections**: name + read-only/read-write picker, one-time token display, endpoint copy, last-used, confirmed revoke. Clearly separate from admin-managed shared MCP + API tokens.
+
 Add a dedicated section to the Stache settings interface.
 
 Suggested name:
@@ -574,6 +576,8 @@ Do not expose the full token again after creation.
 The UI must clearly distinguish personal AI connections from shared integrations such as Home Assistant.
 
 ## 3.6 Provide client-specific setup instructions
+
+> **✅ DONE** — expandable 'Set up your AI client' block with copyable configs: Claude Desktop/Cursor `mcpServers` JSON, Claude Code `mcp add`, ChatGPT connectors, VS Code `servers` — bearer-token placeholder, never real credentials.
 
 The connection page should help users connect their AI assistant.
 

@@ -89,6 +89,13 @@ export function SettingsPage() {
   const [schedLoaded, setSchedLoaded] = useState(false);
   const [connName, setConnName] = useState('');
   const [connScope, setConnScope] = useState<'read' | 'read-write'>('read-write');
+  const [aiName, setAiName] = useState('');
+  const [aiScope, setAiScope] = useState<'read' | 'read-write'>('read-write');
+  const [aiToken, setAiToken] = useState<{ token: string; endpoint: string } | null>(null);
+  const { data: meConns, refetch: refetchMeConns } = useQuery({
+    queryKey: ['me-mcp-connections'],
+    queryFn: () => api.get('/api/me/mcp-connections'),
+  });
   const [tokName, setTokName] = useState('');
   const [tokScope, setTokScope] = useState<'read' | 'read-write'>('read-write');
   const [newApiToken, setNewApiToken] = useState<string | null>(null);
@@ -405,6 +412,111 @@ export function SettingsPage() {
             <IconBtn icon="copy" className="btn-small" label="Copy token" onClick={() => copy(newToken)} />
             <IconBtn icon="x" className="btn-small btn-ghost" label="Dismiss token" onClick={() => setNewToken(null)} />
           </div>
+        </div>
+      )}
+
+      <h2>AI connections</h2>
+      <p className="muted">
+        Your personal AI assistants (Claude, ChatGPT…) can see the shared inventory plus
+        your private items - shared household integrations like Home Assistant stay
+        shared-only. Each connection gets its own endpoint and bearer token.
+      </p>
+      {(meConns?.connections ?? []).map((c: any) => (
+        <div key={c.id} className="suggest">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <b>{c.name}</b>
+            <IconBtn
+              icon="trash"
+              className="btn-ghost"
+              label={`Revoke ${c.name}`}
+              onClick={async () => {
+                if (!confirm(`Revoke "${c.name}"? The AI assistant loses access immediately.`)) return;
+                await api.del(`/api/me/mcp-connections/${c.id}`);
+                refetchMeConns();
+                toast('Revoked');
+              }}
+            />
+          </div>
+          <div className="row">
+            <code className="mcp-url">{`${window.location.origin}/mcp/${c.slug}`}</code>
+            <IconBtn icon="copy" className="btn-small" label="Copy endpoint" onClick={() => copy(`${window.location.origin}/mcp/${c.slug}`)} />
+          </div>
+          <p className="muted">
+            {c.scope === 'read' ? 'Read only' : 'Read + write'} ·{' '}
+            {c.last_used_at ? `Last used ${new Date(c.last_used_at).toLocaleString()}` : 'Never used'}
+          </p>
+        </div>
+      ))}
+      <div className="row">
+        <input
+          className="input"
+          placeholder="Name, e.g. Claude"
+          value={aiName}
+          onChange={(e) => setAiName(e.target.value)}
+        />
+        <select
+          className="input"
+          style={{ maxWidth: '150px' }}
+          value={aiScope}
+          onChange={(e) => setAiScope(e.target.value as 'read' | 'read-write')}
+        >
+          <option value="read-write">Read + write</option>
+          <option value="read">Read only</option>
+        </select>
+        <button
+          className="btn"
+          onClick={async () => {
+            if (!aiName.trim()) return;
+            const r = await api.post('/api/me/mcp-connections', { name: aiName.trim(), scope: aiScope });
+            setAiName('');
+            setAiToken({ token: r.token, endpoint: `${window.location.origin}${r.endpoint}` });
+            refetchMeConns();
+            toast('AI connection created');
+          }}
+        >
+          Add
+        </button>
+      </div>
+      {aiToken && (
+        <div className="suggest">
+          <p><b>Token (shown once - store it now):</b></p>
+          <div className="row">
+            <code className="mcp-url">{aiToken.token}</code>
+            <IconBtn icon="copy" className="btn-small" label="Copy token" onClick={() => copy(aiToken.token)} />
+            <IconBtn icon="x" className="btn-small btn-ghost" label="Dismiss token" onClick={() => setAiToken(null)} />
+          </div>
+          <details>
+            <summary className="muted">Set up your AI client</summary>
+            <p className="muted" style={{ margin: '.5rem 0' }}>Paste these into your client's MCP config; replace <code>&lt;token&gt;</code> with the token above.</p>
+            {[
+              ['Claude Desktop / Cursor', `{
+  "mcpServers": {
+    "stache": {
+      "url": "${aiToken.endpoint}",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}`],
+              ['Claude Code', `claude mcp add stache --transport http ${aiToken.endpoint} -H "Authorization: Bearer <token>"`],
+              ['ChatGPT', `Settings > Connectors > Create: URL ${aiToken.endpoint}, bearer token <token>`],
+              ['VS Code (MCP)', `{
+  "servers": {
+    "stache": {
+      "url": "${aiToken.endpoint}",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}`],
+            ].map(([label, cfg]) => (
+              <div key={label} className="row" style={{ alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <p className="muted" style={{ marginBottom: '.25rem' }}>{label}</p>
+                  <pre className="mcp-url" style={{ whiteSpace: 'pre-wrap' }}>{cfg}</pre>
+                </div>
+                <IconBtn icon="copy" className="btn-small" label={`Copy ${label} config`} onClick={() => copy(cfg)} />
+              </div>
+            ))}
+          </details>
         </div>
       )}
 
