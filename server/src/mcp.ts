@@ -4,12 +4,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { itemVisible } from './lib/visibility';
 import { db, queryOne } from './db';
 import { areas, items, labels, mcpTokens, photos } from './db/schema';
 import { breadcrumb } from './lib/breadcrumb';
 import { searchItemIds } from './lib/textsearch';
 import { recordEventTx, type EventType } from './lib/events';
 import { photoUrl, thumbUrl } from './lib/photos';
+import { signPhotoUrl } from './lib/signed';
 
 const text = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
@@ -18,7 +20,13 @@ const text = (data: unknown) => ({
 const pathOf = async (areaId: string) =>
   (await breadcrumb(areaId)).map((c) => c.name ?? 'unnamed').join(' › ');
 
-function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
+function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | null }): McpServer {
+  // Visibility: shared connections (ownerId null) see shared items only;
+  // personal connections see shared + the owner's private items. Never the
+  // client-supplied id - always the authenticated connection's owner.
+  const vis = itemVisible(conn.ownerId);
+  const owns = (i: { isPrivate: boolean; ownerId: string | null }) =>
+    !i.isPrivate || i.ownerId === conn.ownerId;
   const server = new McpServer({ name: 'stache', version: '0.1.0' });
   const actor = `mcp:${conn.slug}`;
   // Read-scope connections get the read tools only - write tools aren't
@@ -33,7 +41,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
       inputSchema: { query: z.string() },
     },
     async ({ query }) => {
-      const ids = searchItemIds(query, null, 25).map((r) => r.id);
+      const ids = searchItemIds(query, conn.ownerId, 25).map((r) => r.id);
       if (!ids.length) return text({ results: [] });
       const rows = await db
         .select({
@@ -44,7 +52,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
           status: items.status,
         })
         .from(items)
-        .where(and(inArray(items.id, ids), eq(items.isPrivate, false)));
+        .where(and(inArray(items.id, ids), vis));
       const order = new Map(ids.map((id, i) => [id, i]));
       rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
       const results = await Promise.all(
@@ -84,7 +92,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
       const contents = await db
         .select()
         .from(items)
-        .where(and(eq(items.areaId, area_id), isNull(items.hiddenAt), eq(items.isPrivate, false)))
+        .where(and(eq(items.areaId, area_id), isNull(items.hiddenAt), vis))
         .orderBy(asc(items.createdAt));
       return text({
         path: crumb.map((c) => c.name ?? 'unnamed').join(' › '),
@@ -104,7 +112,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
     },
     async ({ item_id }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i || i.isPrivate) return text({ error: 'item not found' });
+      if (!i || !owns(i) || i.hiddenAt) return text({ error: 'item not found' });
       const pics = await db.select().from(photos).where(eq(photos.itemId, item_id));
       return text({
         item: {
@@ -112,7 +120,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
           barcode: i.barcode, status: i.status, lent_to: i.lentTo,
         },
         path: await pathOf(i.areaId),
-        photos: pics.map((p) => photoUrl(p)),
+        photos: pics.map((p) => signPhotoUrl(photoUrl(p), 60 * 60 * 1000)),
       });
     },
   );
@@ -125,7 +133,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
     },
     async ({ item_id, area_id }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i || i.isPrivate) return text({ error: 'item not found' });
+      if (!i || !owns(i) || i.hiddenAt) return text({ error: 'item not found' });
       const [a] = await db.select().from(areas).where(eq(areas.id, area_id));
       if (!a || a.archivedAt) return text({ error: 'area not found' });
       db.transaction((tx) => {
@@ -189,6 +197,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
           .insert(items)
           .values({
             areaId,
+            ownerId: conn.ownerId ?? null,
             name: name ?? null,
             description: description ?? null,
             quantity: quantity ?? 1,
@@ -225,7 +234,7 @@ function buildMcpServer(conn: { slug: string; scope: string }): McpServer {
     },
     async ({ item_id, status, lent_to, ...fields }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i || i.isPrivate || i.hiddenAt) return text({ error: 'item not found' });
+      if (!i || !owns(i) || i.hiddenAt) return text({ error: 'item not found' });
 
       const edits: Record<string, unknown> = {};
       const prev: Record<string, unknown> = {};
@@ -352,7 +361,7 @@ export function registerMcp(app: FastifyInstance) {
         .set({ lastUsedAt: new Date() })
         .where(eq(mcpTokens.id, conn.id))
         .catch(() => {});
-      const server = buildMcpServer({ slug: conn.slug, scope: conn.scope });
+      const server = buildMcpServer({ slug: conn.slug, scope: conn.scope, ownerId: conn.ownerId });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });

@@ -390,6 +390,8 @@ This is a major feature requirement.
 
 ## 3.1 Design personal connection ownership
 
+> **✅ DONE** — `mcp_tokens` extended (`kind`, `owner_id`; existing rows stay `shared`/NULL). Personal connections: `/api/me/mcp-connections` CRUD (session-scoped, `ownerId` from `req.user`, never the body). Token is hashed, shown once.
+
 Personal MCP connections must belong to a specific authenticated Stache user.
 
 Review the existing MCP implementation and token model before deciding whether to extend the existing structure or introduce a dedicated personal connection model.
@@ -422,6 +424,8 @@ Revoking a connection must immediately prevent further authentication.
 
 ## 3.2 Separate personal tokens from shared integration tokens
 
+> **✅ DONE** — `kind` column separates contexts; `itemVisible(null)` = shared-only unchanged, `itemVisible(ownerId)` = shared + owner's private. Admin `/api/settings/mcp` manages shared; members manage personal via `/api/me/mcp-connections`.
+
 Do not silently change the meaning of existing MCP tokens.
 
 Existing shared integrations should retain their existing shared-only access behavior.
@@ -443,6 +447,8 @@ The actual permission implementation may use a different internal representation
 For personal connections, the owner identity must come from the authenticated connection record, never from an arbitrary user ID supplied by the MCP client.
 
 ## 3.3 Implement ownership-aware MCP authorization
+
+> **✅ DONE** — every MCP read/write uses `itemVisible(conn.ownerId)` + `owns()` checks; search passes `conn.ownerId` to `searchItemIds`; `add_item` stamps `ownerId`; photos are 1h-signed URLs. Server-side only - the client can't spoof ownership.
 
 Review all existing MCP tools.
 
@@ -468,6 +474,8 @@ For shared connections:
 Do not trust the AI client to supply correct ownership information.
 
 ## 3.4 Expand MCP capabilities around real inventory tasks
+
+> **✅ DONE** — existing toolset already covers the review matrix (search/list/areas/resolve + file/move/update with events+undo). No MCP-only duplicates - same helpers as the app.
 
 Review the existing MCP tools and preserve useful existing functionality.
 
@@ -592,6 +600,8 @@ Where a client requires a different configuration, provide a copyable example.
 Never put real credentials in documentation or source control.
 
 ## 3.7 MCP security and isolation tests
+
+> **✅ DONE** — `mcp.test.ts` personal suite: shared+own-private visible, cross-member private invisible on search AND direct ID, write denied cross-member, read-only has no write tools, revoke → immediate 404, shared stays shared-only. 11/11 pass.
 
 This is a mandatory part of the feature.
 

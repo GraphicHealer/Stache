@@ -199,6 +199,10 @@ export const mcpTokens = sqliteTable('mcp_tokens', {
   lastUsedAt: ts('last_used_at'),
   // 'read' | 'read-write' - whether the connection gets write tools.
   scope: text('scope').notNull().default('read-write'),
+  // 'shared' (null owner - integrations like HA) | 'personal' (owned by a
+  // user; sees shared + that owner's private items). Existing rows stay shared.
+  kind: text('kind').notNull().default('shared'),
+  ownerId: text('owner_id'),
 });
 
 /** A receipt photo linked to an item (one receipt can cover many items). */

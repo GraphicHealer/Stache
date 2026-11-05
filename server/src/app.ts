@@ -32,6 +32,7 @@ import { outRoutes } from './routes/out';
 import { reviewRoutes } from './routes/review';
 import { registerMcp } from './mcp';
 import { extRoutes } from './routes/ext';
+import { connectionRoutes } from './routes/connections';
 
 export function buildApp() {
   const app = Fastify({
@@ -211,6 +212,7 @@ export function buildApp() {
   app.register(outRoutes);
   app.register(reviewRoutes);
   app.register(extRoutes);
+  app.register(connectionRoutes);
   registerMcp(app);
 
   app.setNotFoundHandler((req, reply) => {
