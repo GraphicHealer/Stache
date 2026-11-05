@@ -231,7 +231,7 @@ export function AreaPage() {
           toast(`Filing into ${area.name ?? 'area'}`);
           nav('/');
         }}>
-          File things here
+          Add items to {area.name ?? 'this area'}
         </button>
         <KebabMenu
           className="page-menu"
@@ -323,8 +323,7 @@ export function AreaPage() {
               id: a.id,
               name: a.name,
               thumb: a.cover_thumb,
-              sub: [a.label_code, a.item_count ? `${a.item_count} item${a.item_count === 1 ? '' : 's'}` : null]
-                .filter(Boolean).join(' · ') || undefined,
+              sub: a.item_count ? `${a.item_count} item${a.item_count === 1 ? '' : 's'}` : undefined,
             }))}
             linkTo={(aid) => `/areas/${aid}`}
             placeholderLogo

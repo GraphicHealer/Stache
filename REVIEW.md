@@ -121,6 +121,8 @@ Do not redesign the Home screen simply to make the desktop fallback look like a 
 
 ## 4. Browse / Areas
 
+> **✅ DONE (Stage 4)** — card subtitles show item counts instead of ST-codes; long-press help already present; empty states use the muted copy.
+
 Improve area navigation and visual recognition.
 
 Recommended changes:
@@ -137,6 +139,8 @@ Recommended changes:
 Area photos should be optional. Do not make users complete extra work just to create an area.
 
 ## 5. Area Details
+
+> **✅ DONE** — area name stays dominant (edit is icon-only); nested-area subtitles show counts not codes; "File things here" → "Add items to {area}".
 
 Refine the area header to improve information hierarchy.
 
@@ -270,6 +274,8 @@ The exact labels should be checked against the existing functionality before cha
 Preserve the simple Put back action and use consistent terminology across the application.
 
 ## 10. Labels
+
+> **✅ DONE** — workflow-first order: preview → default printer → generate/print → unclaimed list; all printer management collapsed into an expandable "Printers & setup" section; generated/in-use/unclaimed explained; raw origin URL no longer shown inline.
 
 The Labels experience should prioritize the user's goal: printing QR labels.
 

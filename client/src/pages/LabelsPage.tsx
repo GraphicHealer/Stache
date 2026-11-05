@@ -471,9 +471,235 @@ export function LabelsPage() {
     <div className="page">
       <h1>Labels</h1>
       <p className="muted">
-        {labels.length} generated · {claimed} in use. QR codes point at{' '}
-        <code>{window.location.origin}/l/…</code> - print from the address you'll scan against.
+        {labels.length} labels generated - {claimed} in use on areas,{unclaimed.length}{' '}
+        unclaimed. Print from the address you'll actually scan against:
+        QR codes open this Stache on whatever host you're printing from.
       </p>
+      {sheet.length > 0 && (
+        <>
+          <h2>Label preview</h2>
+          <p className="muted">First label at true size - the print includes all {sheet.length}.</p>
+          <div className="label-sheet avery">
+            {sheet.slice(0, 1).map((l) => {
+              // Mirrors zplForLabel's coordinates (server/src/lib/print.ts) so the
+              // preview shows what the Zebra actually prints, margins included.
+              const name = nameFor(l.code);
+              const path = pathFor(l.code);
+              const category = categoryFor(l.code);
+              const pvW = defP?.media_type === 'sheet' && defSpec ? defSpec.cellW : (defP?.label_w_mm ?? 57);
+              const pvH = defP?.media_type === 'sheet' && defSpec ? defSpec.cellH : (defP?.label_h_mm ?? 32);
+              const zpl = !!defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy');
+              const offL = Number(defP?.left_offset_mm ?? 0);
+              const offR = Number(defP?.right_offset_mm ?? 0);
+              const offT = Number(defP?.top_offset_mm ?? 0);
+              const offB = Number(defP?.bottom_offset_mm ?? 0);
+              const cw = Math.max(10, pvW - offL - offR);
+              const ch = Math.max(10, pvH - offT - offB);
+              const m = labelMetrics(cw, ch);
+              const clip = (t: string, font: number, widthMm: number) => {
+                const max = Math.floor(widthMm / (font * 0.62));
+                return t.length > max && max > 3 ? `${t.slice(0, max - 1)}…` : t;
+              };
+              const abs = (x: number, y: number, w?: number): CSSProperties =>
+                ({ position: 'absolute', left: `${x}mm`, top: `${y}mm`, ...(w != null ? { width: `${w}mm` } : {}) });
+              const txt = (t: string, x: number, y: number, wmm: number, font: number, bold = false, center = false) => (
+                <div key={`${y}-${t}`} style={{
+                  ...abs(x, y, center ? wmm : undefined),
+                  fontSize: `${font}mm`, fontWeight: bold ? 700 : 400, color: '#000',
+                  lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden',
+                  textAlign: center ? 'center' : 'left', maxWidth: `${wmm}mm`,
+                }}>{t}</div>
+              );
+              const rule = (y: number, x: number, len: number) => (
+                <div key={`r${y}`} style={{ ...abs(x, y, len), height: '0.35mm', background: '#000' }} />
+              );
+              const shortPath = path && path !== name
+                ? (path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path) : null;
+              const textWmm = cw - m.qr - 6;
+              if (dymoPng && dymoDef) {
+                return (
+                  <img key={l.code} src={dymoPng}
+                    alt={`Rendered label ${l.code}`}
+                    style={{ width: `${pvW}mm`, height: 'auto', display: 'block', background: '#fff' }} />
+                );
+              }
+              if (zplPng && zplDef) {
+                return (
+                  <img key={l.code} src={`data:image/png;base64,${zplPng}`}
+                    alt={`Rendered label ${l.code}`}
+                    style={{ width: `${pvW}mm`, height: 'auto', display: 'block', background: '#fff' }} />
+                );
+              }
+              if ((zplDef && !zplFailed) || (dymoDef && !dymoFailed)) {
+                return (
+                  <div key={l.code} className="muted"
+                    style={{ width: `${pvW}mm`, height: `${pvH}mm`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', border: '1px dashed var(--border)' }}>
+                    Loading preview…
+                  </div>
+                );
+              }
+              return (
+                <div key={l.code} className="label-cell" style={{
+                  width: `${pvW}mm`, height: `${pvH}mm`, position: 'relative',
+                  padding: 0, overflow: 'hidden', borderRadius: 0, display: 'block',
+                }}>
+                  <div style={{
+                    ...abs(offL, offT, cw), height: `${ch}mm`,
+                  }}>
+                  {m.vertical ? (
+                    <>
+                      <img src="/logo-mono.svg" alt="" style={{ ...abs((cw - m.logo) / 2, 1, m.logo) }} />
+                      {name ? (
+                        <>
+                          {shortPath && txt(clip(shortPath, m.path, cw - 8), 0, m.logo + 6, cw, m.path, false, true)}
+                          {txt(clip(name, m.name, cw - 8), 0, m.logo + 6 + (shortPath ? m.path + 1.7 : 0), cw, m.name, true, true)}
+                          {category && txt(clip(category, m.category, cw - 8), 0, m.logo + 6 + (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, cw, m.category, false, true)}
+                        </>
+                      ) : [0.28, 0.38, 0.48].map((f) => rule(ch * f, 4, cw - 8))}
+                      <img className="label-qr" src={l.dataUrl} alt={l.code}
+                        style={{ ...abs((cw - m.qr) / 2, ch - m.qr - m.code - 2.5, m.qr) }} />
+                      <div style={{ ...abs(0, ch - m.code - 1.5, cw), fontSize: `${m.code}mm`,
+                        fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
+                    </>
+                  ) : (
+                    <>
+                      <img className="label-qr" src={l.dataUrl} alt={l.code}
+                        style={{ ...abs(0, 0, m.qr) }} />
+                      <div style={{ ...abs(0, ch - m.code, m.qr), fontSize: `${m.code}mm`,
+                        fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
+                      {name ? (
+                        <>
+                          {shortPath && txt(clip(shortPath, m.path, textWmm), m.qr + 3, 0, textWmm, m.path)}
+                          {txt(clip(name, m.name, textWmm), m.qr + 3, (shortPath ? m.path + 1.7 : 0), textWmm, m.name, true)}
+                          {category && txt(clip(category, m.category, textWmm), m.qr + 3, (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, textWmm, m.category)}
+                        </>
+                      ) : [0.36, 0.62, 0.88].map((f, i) =>
+                          rule(ch * f, m.qr + 3, cw - (m.qr + 3) - 4 - (i === 2 ? m.logo : 0)))}
+                      <img src="/logo-mono.svg" alt=""
+                        style={{ ...abs(cw - m.logo, ch - m.logo, m.logo) }} />
+                    </>
+                  )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {zplRaw && (
+            <details style={{ marginTop: 8 }}>
+              <summary className="muted" style={{ cursor: 'pointer' }}>Show generated ZPL</summary>
+              <textarea readOnly className="input" value={zplRaw}
+                onFocus={(e) => e.target.select()}
+                style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: '0.75rem', marginTop: 6 }} />
+            </details>
+          )}
+        </>
+      )}
+
+      <div className="row">
+        <label className="muted" htmlFor="default-printer">Default printer</label>
+        <select
+          id="default-printer"
+          className="input"
+          style={{ width: 'auto' }}
+          value={defaultId}
+          onChange={async (e) => {
+            setDefaultId(e.target.value);
+            await api.post('/api/printers/default', { id: e.target.value }).catch(() => {});
+          }}
+        >
+          {printers.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="row">
+        <input
+          className="input"
+          style={{ width: 72 }}
+          inputMode="numeric"
+          aria-label="Number of labels to add"
+          value={addN}
+          onChange={(e) => setAddN(e.target.value)}
+        />
+        <button
+          className="btn"
+          disabled={busy || !(parseInt(addN, 10) > 0)}
+          onClick={() => { const n = parseInt(addN, 10); newBatch(n); }}
+        >
+          Add {parseInt(addN, 10) > 0 ? addN : 'N'}
+        </button>
+        {printCodes.length > 0 && (
+          <button className="btn has-icon" onClick={() => setPrintDlg(true)}>
+            <Icon name="printer" /> Print {printCodes.length}
+          </button>
+        )}
+        {claimed > 0 && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => render(labels.filter((l: any) => l.area_id).map((l: any) => l.code))}
+          >
+            Claimed labels
+          </button>
+        )}
+      </div>
+      {progress && <p className="muted">{progress}</p>}
+
+      <div className="row spread">
+        <h2>Unclaimed labels</h2>
+        {unclaimed.length > 0 && (
+          <label className="row muted" style={{ gap: 6, margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={sel.size === unclaimed.length && unclaimed.length > 0}
+              onChange={(e) =>
+                setSel(e.target.checked ? new Set(unclaimed.map((l: any) => l.code)) : new Set())
+              }
+              aria-label="Select all unclaimed labels"
+            />
+            all
+          </label>
+        )}
+        {sel.size > 0 && (
+          <button
+            className="btn btn-small danger"
+            onClick={async () => {
+              if (!window.confirm(`Delete ${sel.size} unclaimed label code(s)?`)) return;
+              const r = await api.post('/api/labels/delete', { codes: [...sel] }).catch((e) => (toast(e.message), null));
+              if (r) {
+                toast(`Deleted ${r.deleted}${r.skipped ? `, ${r.skipped} claimed skipped` : ''}`);
+                setSel(new Set());
+                qc.invalidateQueries({ queryKey: ['labels'] });
+              }
+            }}
+          >
+            Delete {sel.size}
+          </button>
+        )}
+      </div>
+      <div className="label-list">
+        {unclaimed.map((l: any) => (
+          <div key={l.code} className="label-row">
+            <span className="row" style={{ margin: 0 }}>
+              <input
+                type="checkbox"
+                aria-label={`Select ${l.code}`}
+                checked={sel.has(l.code)}
+                onChange={(e) => {
+                  const next = new Set(sel);
+                  e.target.checked ? next.add(l.code) : next.delete(l.code);
+                  setSel(next);
+                }}
+              />
+              <code>{l.code}</code>
+            </span>
+            {l.printed ? <span className="pill">printed</span> : <span className="muted">unclaimed</span>}
+          </div>
+        ))}
+        {unclaimed.length === 0 && <p className="muted">No unclaimed codes - every label is in use.</p>}
+      </div>
+
+      <details className="printer-admin">
+        <summary><b>Printers & setup</b></summary>
       <h2>Printers</h2>
       {printers.map((p) => (
         <div key={p.id}>
@@ -775,229 +1001,8 @@ export function LabelsPage() {
       ) : (
         <button className="btn" onClick={() => setAdding(true)}>+ Add printer</button>
       )}
+      </details>
 
-      {sheet.length > 0 && (
-        <>
-          <h2>Label preview</h2>
-          <p className="muted">First label at true size - the print includes all {sheet.length}.</p>
-          <div className="label-sheet avery">
-            {sheet.slice(0, 1).map((l) => {
-              // Mirrors zplForLabel's coordinates (server/src/lib/print.ts) so the
-              // preview shows what the Zebra actually prints, margins included.
-              const name = nameFor(l.code);
-              const path = pathFor(l.code);
-              const category = categoryFor(l.code);
-              const pvW = defP?.media_type === 'sheet' && defSpec ? defSpec.cellW : (defP?.label_w_mm ?? 57);
-              const pvH = defP?.media_type === 'sheet' && defSpec ? defSpec.cellH : (defP?.label_h_mm ?? 32);
-              const zpl = !!defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy');
-              const offL = Number(defP?.left_offset_mm ?? 0);
-              const offR = Number(defP?.right_offset_mm ?? 0);
-              const offT = Number(defP?.top_offset_mm ?? 0);
-              const offB = Number(defP?.bottom_offset_mm ?? 0);
-              const cw = Math.max(10, pvW - offL - offR);
-              const ch = Math.max(10, pvH - offT - offB);
-              const m = labelMetrics(cw, ch);
-              const clip = (t: string, font: number, widthMm: number) => {
-                const max = Math.floor(widthMm / (font * 0.62));
-                return t.length > max && max > 3 ? `${t.slice(0, max - 1)}…` : t;
-              };
-              const abs = (x: number, y: number, w?: number): CSSProperties =>
-                ({ position: 'absolute', left: `${x}mm`, top: `${y}mm`, ...(w != null ? { width: `${w}mm` } : {}) });
-              const txt = (t: string, x: number, y: number, wmm: number, font: number, bold = false, center = false) => (
-                <div key={`${y}-${t}`} style={{
-                  ...abs(x, y, center ? wmm : undefined),
-                  fontSize: `${font}mm`, fontWeight: bold ? 700 : 400, color: '#000',
-                  lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden',
-                  textAlign: center ? 'center' : 'left', maxWidth: `${wmm}mm`,
-                }}>{t}</div>
-              );
-              const rule = (y: number, x: number, len: number) => (
-                <div key={`r${y}`} style={{ ...abs(x, y, len), height: '0.35mm', background: '#000' }} />
-              );
-              const shortPath = path && path !== name
-                ? (path.endsWith(` / ${name}`) ? path.slice(0, -` / ${name}`.length) : path) : null;
-              const textWmm = cw - m.qr - 6;
-              if (dymoPng && dymoDef) {
-                return (
-                  <img key={l.code} src={dymoPng}
-                    alt={`Rendered label ${l.code}`}
-                    style={{ width: `${pvW}mm`, height: 'auto', display: 'block', background: '#fff' }} />
-                );
-              }
-              if (zplPng && zplDef) {
-                return (
-                  <img key={l.code} src={`data:image/png;base64,${zplPng}`}
-                    alt={`Rendered label ${l.code}`}
-                    style={{ width: `${pvW}mm`, height: 'auto', display: 'block', background: '#fff' }} />
-                );
-              }
-              if ((zplDef && !zplFailed) || (dymoDef && !dymoFailed)) {
-                return (
-                  <div key={l.code} className="muted"
-                    style={{ width: `${pvW}mm`, height: `${pvH}mm`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', border: '1px dashed var(--border)' }}>
-                    Loading preview…
-                  </div>
-                );
-              }
-              return (
-                <div key={l.code} className="label-cell" style={{
-                  width: `${pvW}mm`, height: `${pvH}mm`, position: 'relative',
-                  padding: 0, overflow: 'hidden', borderRadius: 0, display: 'block',
-                }}>
-                  <div style={{
-                    ...abs(offL, offT, cw), height: `${ch}mm`,
-                  }}>
-                  {m.vertical ? (
-                    <>
-                      <img src="/logo-mono.svg" alt="" style={{ ...abs((cw - m.logo) / 2, 1, m.logo) }} />
-                      {name ? (
-                        <>
-                          {shortPath && txt(clip(shortPath, m.path, cw - 8), 0, m.logo + 6, cw, m.path, false, true)}
-                          {txt(clip(name, m.name, cw - 8), 0, m.logo + 6 + (shortPath ? m.path + 1.7 : 0), cw, m.name, true, true)}
-                          {category && txt(clip(category, m.category, cw - 8), 0, m.logo + 6 + (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, cw, m.category, false, true)}
-                        </>
-                      ) : [0.28, 0.38, 0.48].map((f) => rule(ch * f, 4, cw - 8))}
-                      <img className="label-qr" src={l.dataUrl} alt={l.code}
-                        style={{ ...abs((cw - m.qr) / 2, ch - m.qr - m.code - 2.5, m.qr) }} />
-                      <div style={{ ...abs(0, ch - m.code - 1.5, cw), fontSize: `${m.code}mm`,
-                        fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
-                    </>
-                  ) : (
-                    <>
-                      <img className="label-qr" src={l.dataUrl} alt={l.code}
-                        style={{ ...abs(0, 0, m.qr) }} />
-                      <div style={{ ...abs(0, ch - m.code, m.qr), fontSize: `${m.code}mm`,
-                        fontFamily: 'monospace', textAlign: 'center', color: '#000' }}>{l.code}</div>
-                      {name ? (
-                        <>
-                          {shortPath && txt(clip(shortPath, m.path, textWmm), m.qr + 3, 0, textWmm, m.path)}
-                          {txt(clip(name, m.name, textWmm), m.qr + 3, (shortPath ? m.path + 1.7 : 0), textWmm, m.name, true)}
-                          {category && txt(clip(category, m.category, textWmm), m.qr + 3, (shortPath ? m.path + 1.7 : 0) + m.name + 1.7, textWmm, m.category)}
-                        </>
-                      ) : [0.36, 0.62, 0.88].map((f, i) =>
-                          rule(ch * f, m.qr + 3, cw - (m.qr + 3) - 4 - (i === 2 ? m.logo : 0)))}
-                      <img src="/logo-mono.svg" alt=""
-                        style={{ ...abs(cw - m.logo, ch - m.logo, m.logo) }} />
-                    </>
-                  )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {zplRaw && (
-            <details style={{ marginTop: 8 }}>
-              <summary className="muted" style={{ cursor: 'pointer' }}>Show generated ZPL</summary>
-              <textarea readOnly className="input" value={zplRaw}
-                onFocus={(e) => e.target.select()}
-                style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: '0.75rem', marginTop: 6 }} />
-            </details>
-          )}
-        </>
-      )}
-
-      <div className="row">
-        <label className="muted" htmlFor="default-printer">Default printer</label>
-        <select
-          id="default-printer"
-          className="input"
-          style={{ width: 'auto' }}
-          value={defaultId}
-          onChange={async (e) => {
-            setDefaultId(e.target.value);
-            await api.post('/api/printers/default', { id: e.target.value }).catch(() => {});
-          }}
-        >
-          {printers.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-      </div>
-      <div className="row">
-        <input
-          className="input"
-          style={{ width: 72 }}
-          inputMode="numeric"
-          aria-label="Number of labels to add"
-          value={addN}
-          onChange={(e) => setAddN(e.target.value)}
-        />
-        <button
-          className="btn"
-          disabled={busy || !(parseInt(addN, 10) > 0)}
-          onClick={() => { const n = parseInt(addN, 10); newBatch(n); }}
-        >
-          Add {parseInt(addN, 10) > 0 ? addN : 'N'}
-        </button>
-        {printCodes.length > 0 && (
-          <button className="btn has-icon" onClick={() => setPrintDlg(true)}>
-            <Icon name="printer" /> Print {printCodes.length}
-          </button>
-        )}
-        {claimed > 0 && (
-          <button
-            className="btn btn-ghost"
-            onClick={() => render(labels.filter((l: any) => l.area_id).map((l: any) => l.code))}
-          >
-            Claimed labels
-          </button>
-        )}
-      </div>
-      {progress && <p className="muted">{progress}</p>}
-
-      <div className="row spread">
-        <h2>Unclaimed labels</h2>
-        {unclaimed.length > 0 && (
-          <label className="row muted" style={{ gap: 6, margin: 0 }}>
-            <input
-              type="checkbox"
-              checked={sel.size === unclaimed.length && unclaimed.length > 0}
-              onChange={(e) =>
-                setSel(e.target.checked ? new Set(unclaimed.map((l: any) => l.code)) : new Set())
-              }
-              aria-label="Select all unclaimed labels"
-            />
-            all
-          </label>
-        )}
-        {sel.size > 0 && (
-          <button
-            className="btn btn-small danger"
-            onClick={async () => {
-              if (!window.confirm(`Delete ${sel.size} unclaimed label code(s)?`)) return;
-              const r = await api.post('/api/labels/delete', { codes: [...sel] }).catch((e) => (toast(e.message), null));
-              if (r) {
-                toast(`Deleted ${r.deleted}${r.skipped ? `, ${r.skipped} claimed skipped` : ''}`);
-                setSel(new Set());
-                qc.invalidateQueries({ queryKey: ['labels'] });
-              }
-            }}
-          >
-            Delete {sel.size}
-          </button>
-        )}
-      </div>
-      <div className="label-list">
-        {unclaimed.map((l: any) => (
-          <div key={l.code} className="label-row">
-            <span className="row" style={{ margin: 0 }}>
-              <input
-                type="checkbox"
-                aria-label={`Select ${l.code}`}
-                checked={sel.has(l.code)}
-                onChange={(e) => {
-                  const next = new Set(sel);
-                  e.target.checked ? next.add(l.code) : next.delete(l.code);
-                  setSel(next);
-                }}
-              />
-              <code>{l.code}</code>
-            </span>
-            {l.printed ? <span className="pill">printed</span> : <span className="muted">unclaimed</span>}
-          </div>
-        ))}
-        {unclaimed.length === 0 && <p className="muted">No unclaimed codes - every label is in use.</p>}
-      </div>
       <PrintDialog
         open={printDlg}
         onClose={() => {
