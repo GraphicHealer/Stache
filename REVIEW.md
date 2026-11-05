@@ -430,6 +430,8 @@ The current SettingsPage.tsx is a large, monolithic component. Refactor it into 
 
 ### A. Household & Account
 
+> **✅ DONE** — members (name primary, email secondary, role badge), add-member (admin), password change, secondary sign-out. Sharing explanation preserved. Removal toast now only fires on success.
+
 For everyday household and account management.
 
 Include:
@@ -457,6 +459,8 @@ IMPORTANT: Review the existing member-removal handler. The current implementatio
 Sign out should be a secondary action rather than competing visually with account management.
 
 ### B. AI & Automation
+
+> **✅ DONE** — provider/model/backfill/reminders+webhooks together; model choices described by benefit (fastest/balanced/best) with technical names secondary; `Backfill AI/ML` renamed `Reprocess existing items`.
 
 For AI features and automatic behavior.
 
@@ -496,6 +500,8 @@ For reminders and webhooks:
 - Preserve existing webhook functionality.
 
 ### C. Connections & Integrations
+
+> **✅ DONE** — `My personal connections` first (member-scoped), `Household connections` + `API tokens` admin-gated below; setup instructions live behind an expandable details tag; shared-vs-personal distinction explained inline.
 
 For connecting Stache to external applications and AI assistants.
 
@@ -545,6 +551,8 @@ Make revocation consequences clear.
 Long setup instructions should be expandable or otherwise secondary to the main connection controls.
 
 ### D. Data & Backups
+
+> **✅ DONE** — Export & Import, Backups, Restore in one admin-gated page; zip-vs-snapshot distinction + encryption-key warning + server-vs-downloaded backup caveat explained inline; restore confirmation + safeguards preserved.
 
 For importing, exporting, protecting, and restoring inventory data.
 
@@ -608,6 +616,8 @@ Do not accidentally remove existing safeguards.
 
 ### E. Maintenance
 
+> **✅ DONE** — own page; check-first flow with a readable 3-row diagnostic summary; repair actions only appear when there's something to fix; admin-gated with a clear non-admin message.
+
 For administrative repair and diagnostic operations.
 
 Include:
@@ -642,6 +652,8 @@ AI backfill belongs under AI & Automation, not Maintenance.
 
 ## 17. Settings landing page
 
+> **✅ DONE** — `/settings` is now a scannable landing page: five category cards (icon + title + description + link affordance), signed-in summary, version footer. No individual settings exposed.
+
 Create a Settings landing page containing five clearly identifiable categories:
 
 1. Household & Account
@@ -661,6 +673,8 @@ The landing page should be easy to scan.
 Do not expose every individual setting on the landing page.
 
 ## 18. Dedicated Settings sections
+
+> **✅ DONE** — subpage routes: `/settings/household` `/settings/ai` `/settings/integrations` `/settings/data` `/settings/maintenance`, each with a `← Settings` back affordance via `SettingsShell`.
 
 My preferred approach is to give the larger categories their own subpages, with consistent Settings navigation and headers.
 
@@ -706,6 +720,8 @@ Do not assume all of these should share the same permission requirement. Preserv
 # Part 6 — Technical Refactoring Requirements
 
 ## 20. Break up SettingsPage.tsx
+
+> **✅ DONE (Stage 2)** — 1079-line monolith split: `SettingsPage` (landing) + `pages/settings/{Household,AI,Connections,Data,Maintenance}Settings.tsx` + `SettingsShell` shared header + `import.ts` helpers.
 
 The current SettingsPage.tsx is a large component containing many unrelated workflows.
 

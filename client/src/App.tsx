@@ -12,6 +12,11 @@ import { SearchPage } from './pages/SearchPage';
 import { InboxPage } from './pages/InboxPage';
 import { LabelsPage } from './pages/LabelsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { HouseholdSettings } from './pages/settings/HouseholdSettings';
+import { AISettings } from './pages/settings/AISettings';
+import { ConnectionsSettings } from './pages/settings/ConnectionsSettings';
+import { DataSettings } from './pages/settings/DataSettings';
+import { MaintenanceSettings } from './pages/settings/MaintenanceSettings';
 import { OutPage } from './pages/OutPage';
 import { TrashPage } from './pages/TrashPage';
 import { ReviewPage } from './pages/ReviewPage';
@@ -195,6 +200,11 @@ export function App() {
           <Route path="/labels" element={<LabelsPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/household" element={<HouseholdSettings />} />
+          <Route path="/settings/ai" element={<AISettings />} />
+          <Route path="/settings/integrations" element={<ConnectionsSettings />} />
+          <Route path="/settings/data" element={<DataSettings />} />
+          <Route path="/settings/maintenance" element={<MaintenanceSettings />} />
           <Route
             path="*"
             element={
