@@ -12,7 +12,14 @@ permissions:
   packages: write
 
 jobs:
+  # Gate: the image only builds if the full validation pipeline passes.
+  ci:
+    uses: ./.github/workflows/ci.yml
+  validate:
+    uses: ./.github/workflows/app-validation.yml
+
   docker:
+    needs: [ci, validate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
