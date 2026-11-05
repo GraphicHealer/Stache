@@ -1,0 +1,134 @@
+# Home Assistant app (add-on) validation: config schema, linting, and a
+# no-push multi-arch build of the app image per stache/config.yaml's
+# declared architectures. Dynamic discovery - new app dirs are picked up
+# automatically, nothing is hardcoded per-app.
+
+name: App validation
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**/*.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.apps.outputs.matrix }}
+      count: ${{ steps.apps.outputs.count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: apps
+        run: |
+          python3 - <<'PY'
+          import glob, json, yaml, sys
+
+          VALID = {'amd64', 'aarch64', 'armhf', 'armv7', 'i386'}
+          jobs = []
+          for path in sorted(glob.glob('*/config.yaml')):
+              cfg = yaml.safe_load(open(path))
+              name = cfg.get('slug', path.split('/')[0])
+              archs = cfg.get('arch') or []
+              bad = set(archs) - VALID
+              if bad:
+                  sys.exit(f'{path}: unsupported arch values: {sorted(bad)}')
+              if not cfg.get('image'):
+                  sys.exit(f'{path}: app has no image: field - nothing to validate')
+              for a in archs:
+                  jobs.append({'app': name, 'arch': a, 'image': cfg['image'],
+                               'context': '.', 'dockerfile': 'Dockerfile'})
+          if not jobs:
+              sys.exit('no HA app configs found')
+          m = {'include': jobs}
+          print('Discovered:', json.dumps(m, indent=2))
+          with open(__import__('os').environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'matrix={json.dumps(m)}\ncount={len(jobs)}\n')
+          PY
+
+  app-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Validate app config.yaml schema
+        run: |
+          python3 - <<'PY'
+          import glob, yaml, sys, re
+
+          REQUIRED = {'name', 'version', 'slug', 'description', 'arch'}
+          for path in sorted(glob.glob('*/config.yaml')):
+              cfg = yaml.safe_load(open(path))
+              missing = REQUIRED - set(cfg or {})
+              if missing:
+                  sys.exit(f'{path}: missing required keys {sorted(missing)}')
+              if not re.fullmatch(r'[a-z0-9_]+', cfg['slug']):
+                  sys.exit(f'{path}: invalid slug {cfg["slug"]!r}')
+              if not cfg['arch']:
+                  sys.exit(f'{path}: arch list must not be empty')
+              print(f'{path}: ok ({cfg["name"]} {cfg["version"]}, arch={cfg["arch"]})')
+          PY
+      - name: yamllint
+        run: |
+          pip install yamllint
+          yamllint -d relaxed */config.yaml .github/workflows/*.yml
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Hadolint on Dockerfiles
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde003 # v3.3.0
+        with:
+          dockerfile: Dockerfile
+      - name: ShellCheck on shell scripts
+        run: |
+          mapfile -t scripts < <(find . -name '*.sh' -not -path './node_modules/*')
+          if [ "${#scripts[@]}" -eq 0 ]; then echo 'no shell scripts'; exit 0; fi
+          shellcheck "${scripts[@]}"
+
+  build:
+    needs: discover
+    name: Build ${{ matrix.app }} (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: QEMU for cross-arch emulation
+        if: matrix.arch != 'amd64'
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - name: Build image (validation only - no push)
+        uses: home-assistant/builder/actions/build-image@7412f0023ea9b6e58e8bb5059f1660f51376f49a # 2026.09.0
+        with:
+          arch: ${{ matrix.arch }}
+          image: ${{ matrix.image }}
+          image-tags: ci-validation
+          version: ci
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: 'false'
+          cosign: 'false'
+          load: ${{ matrix.arch == 'amd64' }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Runtime smoke test (amd64 only)
+        if: matrix.arch == 'amd64'
+        run: |
+          docker run -d --name smoke -p 8080:8080 ${{ matrix.image }}:ci-validation
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/health; then
+              docker logs smoke
+              docker rm -f smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs smoke
+          docker rm -f smoke
+          echo 'container did not become healthy'
+          exit 1
