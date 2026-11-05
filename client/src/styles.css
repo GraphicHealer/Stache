@@ -4,11 +4,28 @@
   --panel-2: #232833;
   --surface-2: var(--panel-2);
   --border: #2c3340;
+  --hover: #3a4353;
   --text: #e8eaee;
   --muted: #9aa3b2;
   --accent: #f2b233;
   --danger: #e0615f;
-  color-scheme: dark;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --panel-2: #e9ebf0;
+    --border: #d4d8e0;
+    --hover: #c3c9d4;
+    --text: #1a1c20;
+    --muted: #5b6370;
+    --accent: #b57708;
+    --danger: #b83a38;
+  }
+  /* White "paper" previews need an edge on the light app background. */
+  .label-cell, .sheet-page, .plabel, .pcell { border: 1px solid var(--border); }
 }
 
 * { box-sizing: border-box; }
@@ -55,7 +72,7 @@ code { color: var(--muted); }
   text-decoration: none;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
-.btn:hover { border-color: #3a4353; }
+.btn:hover { border-color: var(--hover); }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.5; }
 .btn-big { min-height: 64px; font-size: 1.15rem; width: 100%; }
@@ -140,7 +157,7 @@ textarea.input { resize: vertical; }
   text-align: left; cursor: pointer; text-decoration: none; font: inherit;
   transition: border-color 0.15s ease, transform 0.1s ease;
 }
-.card:hover { border-color: #3a4353; }
+.card:hover { border-color: var(--hover); }
 .card.selected { border-color: var(--accent); border-width: 2px; }
 .card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .thumb-placeholder { width: 100%; aspect-ratio: 1; background: var(--panel-2); }
