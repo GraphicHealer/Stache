@@ -2,16 +2,18 @@
 // Home Assistant. Mirrors the session API's semantics: same event payloads so
 // undo works identically, shared items only (private items are never exposed).
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { apiTokens, areas, items, labels, photos, type ApiToken } from '../db/schema';
 import { recordEvent, recordEventTx } from '../lib/events';
-import { assertImage, insertPhoto, photoUrl, savePhotoFile, thumbUrl, PhotoBusyError } from '../lib/photos';
+import { assertImage, photoUrl, removePhotoFiles, savePhotoFile, thumbUrl, PhotoBusyError, type SavedPhoto } from '../lib/photos';
+import { signPhotoUrl } from '../lib/signed';
 import { analyzeItemPhoto } from '../lib/ml';
 import { detectAndStore } from './items';
 import { kickAi, maybeQueueItem } from '../lib/ai';
 import { parseBody } from '../lib/validate';
 import { badAiUrl, checkedLookup } from '../lib/urlcheck';
+import { requireAdmin } from '../lib/guards';
 import { Agent, fetch as undiciFetch } from 'undici';
 import { z } from 'zod';
 import crypto from 'node:crypto';
@@ -100,15 +102,16 @@ async function resolveArea(ref: { area_id?: string; area_label?: string; area_na
 }
 
 export async function extRoutes(app: FastifyInstance) {
-  // --- Token management (session-guarded like /api/settings/mcp) -------------
+  // --- Shared-integration token management - admin only. Personal AI -----
+  // --- connections have their own ownership-aware endpoints (Phase 2). -------
 
-  app.get('/api/settings/api-tokens', async () => ({
+  app.get('/api/settings/api-tokens', { preHandler: requireAdmin }, async () => ({
     tokens: (await db.select().from(apiTokens).orderBy(asc(apiTokens.createdAt))).map(
       ({ tokenHash: _h, ...t }) => t,
     ),
   }));
 
-  app.post('/api/settings/api-tokens', async (req, reply) => {
+  app.post('/api/settings/api-tokens', { preHandler: requireAdmin }, async (req, reply) => {
     const body = parseBody(TokenCreateSchema, req.body, reply);
     if (!body) return;
     const token = crypto.randomBytes(24).toString('base64url');
@@ -120,7 +123,7 @@ export async function extRoutes(app: FastifyInstance) {
     return reply.code(201).send({ token: pub, secret: token });
   });
 
-  app.delete('/api/settings/api-tokens/:id', async (req) => {
+  app.delete('/api/settings/api-tokens/:id', { preHandler: requireAdmin }, async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(apiTokens).where(eq(apiTokens.id, id));
     return { ok: true };
@@ -156,32 +159,59 @@ export async function extRoutes(app: FastifyInstance) {
   app.get('/api/v1/items', async (req, reply) => {
     const ctx = await apiAuth(req, reply);
     if (!ctx) return;
-    const q = ((req.query as { q?: string }).q ?? '').trim().toLowerCase();
+    const query = req.query as { q?: string; limit?: string; offset?: string; area_id?: string; status?: string };
+    const q = (query.q ?? '').trim().toLowerCase();
+    const limit = Math.min(200, Math.max(1, Number.parseInt(query.limit ?? '50') || 50));
+    const offset = Math.max(0, Number.parseInt(query.offset ?? '0') || 0);
+    const where = [eq(items.isPrivate, false), isNull(items.hiddenAt)];
+    if (query.area_id) where.push(eq(items.areaId, query.area_id));
+    if (query.status && ['home', 'out', 'lent', 'unaccounted', 'gone'].includes(query.status))
+      where.push(eq(items.status, query.status));
+
+    if (q) {
+      // Multi-field contains search - paginate the matched set.
+      const rows = await db
+        .select()
+        .from(items)
+        .where(and(...where))
+        .orderBy(asc(items.createdAt));
+      const matched = rows.filter((i) =>
+        [i.name, i.description, i.barcode, (i.tags as string[] | null)?.join(' ')].some(
+          (f) => f && String(f).toLowerCase().includes(q),
+        ),
+      );
+      return { items: matched.slice(offset, offset + limit).map(itemJson), total: matched.length, limit, offset };
+    }
+
+    // No search term - paginate in SQL so one page never loads the inventory.
     const rows = await db
       .select()
       .from(items)
-      .where(and(eq(items.isPrivate, false), isNull(items.hiddenAt)))
-      .orderBy(asc(items.createdAt));
-    const matched = q
-      ? rows.filter((i) =>
-          [i.name, i.description, i.barcode, (i.tags as string[] | null)?.join(' ')].some(
-            (f) => f && String(f).toLowerCase().includes(q),
-          ),
-        )
-      : rows;
-    return { items: matched.slice(0, 50).map(itemJson), total: matched.length };
+      .where(and(...where))
+      .orderBy(asc(items.createdAt))
+      .limit(limit)
+      .offset(offset);
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(items)
+      .where(and(...where));
+    return { items: rows.map(itemJson), total: n, limit, offset };
   });
 
   app.get('/api/v1/items/:id', async (req, reply) => {
     const ctx = await apiAuth(req, reply);
     if (!ctx) return;
     const { id } = req.params as { id: string };
-    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false)));
+    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false), isNull(items.hiddenAt)));
     if (!item) return reply.notFound('item not found');
     const itemPhotos = await db.select().from(photos).where(eq(photos.itemId, id)).orderBy(asc(photos.createdAt));
     return {
       item: itemJson(item),
-      photos: itemPhotos.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })),
+      photos: itemPhotos.map((p) => ({
+        id: p.id,
+        url: signPhotoUrl(photoUrl(p), 60 * 60 * 1000),
+        thumb: signPhotoUrl(thumbUrl(p), 60 * 60 * 1000),
+      })),
     };
   });
 
@@ -207,9 +237,12 @@ export async function extRoutes(app: FastifyInstance) {
     area_name: z.string().optional(),
     name: z.string().max(200).nullish(),
     description: z.string().max(2000).nullish(),
-    quantity: z.union([z.number(), z.string()]).optional(),
+    quantity: z
+      .preprocess((v) => (v === '' || v == null ? undefined : Number(v)), z.number().int().min(1).max(1_000_000))
+      .optional(),
     barcode: z.string().max(64).nullish(),
     tags: z.array(z.string().max(40)).max(20).optional(),
+    client_id: z.string().max(100).optional(),
     photo_url: z.string().url().optional(),
   });
 
@@ -222,10 +255,20 @@ export async function extRoutes(app: FastifyInstance) {
     if (req.isMultipart()) {
       for await (const part of req.parts()) {
         if (part.type === 'file') files.push(await part.toBuffer());
-        else if (typeof part.value === 'string') fields[part.fieldname] = part.value;
+        else if (typeof part.value === 'string') {
+          const prev = fields[part.fieldname];
+          if (prev === undefined) fields[part.fieldname] = part.value;
+          else if (Array.isArray(prev)) prev.push(part.value);
+          else fields[part.fieldname] = [prev, part.value];
+        }
       }
     } else {
       Object.assign(fields, (req.body ?? {}) as Record<string, unknown>);
+    }
+    // Multipart sends one field per value - normalize array fields so a
+    // single `tags=x` also parses as an array.
+    for (const key of ['tags']) {
+      if (typeof fields[key] === 'string') fields[key] = [fields[key]];
     }
     const body = parseBody(ItemCreateSchema, fields, reply);
     if (!body) return;
@@ -253,8 +296,21 @@ export async function extRoutes(app: FastifyInstance) {
         if (!res.ok) throw new Error(`fetch ${res.status}`);
         const len = Number(res.headers.get('content-length') ?? 0);
         if (len > 25 * 1024 * 1024) throw new Error('too large');
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length > 25 * 1024 * 1024) return reply.badRequest('photo exceeds 25MB');
+        // Enforce on actual bytes - a lying content-length can't sneak a huge
+        // body into memory; the stream is cancelled past the cap.
+        const stream = res.body;
+        if (!stream) throw new Error('empty body');
+        const chunks: Buffer[] = [];
+        let got = 0;
+        for await (const chunk of stream as AsyncIterable<Buffer>) {
+          got += chunk.length;
+          if (got > 25 * 1024 * 1024) {
+            await stream.cancel().catch(() => {});
+            throw new Error('too large');
+          }
+          chunks.push(chunk);
+        }
+        const buf = Buffer.concat(chunks);
         await assertImage(buf);
         files.push(buf);
       } catch (e) {
@@ -263,34 +319,68 @@ export async function extRoutes(app: FastifyInstance) {
       }
     }
 
-    const area = await resolveArea(body);
-    if (!area) return reply.badRequest('area not found - pass area_id, area_label, or area_name');
+    const areaRefs = [body.area_id, body.area_label, body.area_name].filter((v) => typeof v === 'string' && v.trim() !== '');
+    if (areaRefs.length !== 1) return reply.badRequest('pass exactly one of area_id, area_label, or area_name');
 
-    const { item, ev } = db.transaction((tx) => {
-      const [i] = tx
-        .insert(items)
-        .values({
-          areaId: area.id,
-          name: body.name ?? null,
-          description: body.description ?? null,
-          quantity: Math.max(1, Number(body.quantity) || 1),
-          barcode: body.barcode ?? null,
-          tags: body.tags ?? null,
-        })
-        .returning()
-        .all();
-      const e = recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: area.id }, null, actor(ctx.tok));
-      return { item: i, ev: e };
-    });
-
-    for (const buf of files) {
-      const saved = await savePhotoFile(buf);
-      const p = await insertPhoto(saved, { itemId: item.id });
-      analyzeItemPhoto(item.id, p.id, p.path).catch((e) =>
-        console.error('[ml] analyze failed:', e.message),
-      );
+    // client_id dedupe: a retried create returns the first item instead of
+    // filing a duplicate (same mechanism the offline outbox uses).
+    if (body.client_id) {
+      const [existing] = await db.select().from(items).where(eq(items.clientId, body.client_id));
+      if (existing) return { item: itemJson(existing), deduplicated: true };
     }
-    if (files.length) {
+
+    const area = await resolveArea(body);
+    if (!area) return reply.badRequest('area not found');
+
+    // Validate + stage every photo BEFORE the item transaction, so a bad or
+    // half-written image can't leave a partially-created item. Staged files
+    // are removed if the tx rolls back (same pattern as area photo uploads).
+    const staged: SavedPhoto[] = [];
+    try {
+      for (const buf of files) {
+        await assertImage(buf);
+        staged.push(await savePhotoFile(buf));
+      }
+    } catch (e) {
+      for (const s of staged) await removePhotoFiles(s);
+      if (e instanceof PhotoBusyError) return reply.code(503).send('image processing busy');
+      return reply.badRequest('invalid or oversized image');
+    }
+
+    const { item, ev, saved: savedPhotos } = (() => {
+      try {
+        return db.transaction((tx) => {
+          const [i] = tx
+            .insert(items)
+            .values({
+              areaId: area.id,
+              name: body.name ?? null,
+              description: body.description ?? null,
+              quantity: body.quantity ?? 1,
+              barcode: body.barcode ?? null,
+              tags: body.tags ?? null,
+              clientId: body.client_id ?? null,
+            })
+            .returning()
+            .all();
+          const saved = staged.map((s) =>
+            tx.insert(photos).values({ ...s, itemId: i.id, areaId: null }).returning().get(),
+          );
+          const e = recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: area.id }, null, actor(ctx.tok));
+          return { item: i, ev: e, saved };
+        });
+      } catch (e) {
+        for (const s of staged) void removePhotoFiles(s);
+        throw e;
+      }
+    })();
+
+    savedPhotos.forEach((p, idx) =>
+      analyzeItemPhoto(item.id, p.id, staged[idx].path).catch((e) =>
+        console.error('[ml] analyze failed:', e.message),
+      ),
+    );
+    if (staged.length) {
       detectAndStore(item.id, files).catch(() => {});
       await maybeQueueItem(item.id);
       kickAi();
@@ -302,7 +392,9 @@ export async function extRoutes(app: FastifyInstance) {
     area_id: z.string().optional(),
     name: z.string().max(200).nullish(),
     description: z.string().max(2000).nullish(),
-    quantity: z.union([z.number(), z.string()]).optional(),
+    quantity: z
+      .preprocess((v) => (v === '' || v == null ? undefined : Number(v)), z.number().int().min(1).max(1_000_000))
+      .optional(),
     barcode: z.string().max(64).nullish(),
     tags: z.array(z.string().max(40)).max(20).optional(),
     status: z.enum(['home', 'out', 'lent', 'unaccounted', 'gone']).optional(),
@@ -315,7 +407,7 @@ export async function extRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = parseBody(ItemPatchSchema, req.body, reply);
     if (!body) return;
-    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false)));
+    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false), isNull(items.hiddenAt)));
     if (!item) return reply.notFound('item not found');
 
     const evs: { type: Parameters<typeof recordEventTx>[1]; payload: Record<string, unknown> }[] = [];
@@ -369,7 +461,7 @@ export async function extRoutes(app: FastifyInstance) {
       }
     }
     if (body.quantity !== undefined) {
-      const q = Math.max(1, Number(body.quantity) || 1);
+      const q = body.quantity;
       if (q !== item.quantity) {
         prev.quantity = item.quantity;
         next.quantity = q;
@@ -408,8 +500,10 @@ export async function extRoutes(app: FastifyInstance) {
     if (!ctx) return;
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { area_id?: string; area_label?: string; area_name?: string };
-    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false)));
+    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false), isNull(items.hiddenAt)));
     if (!item) return reply.notFound('item not found');
+    const areaRefs = [body.area_id, body.area_label, body.area_name].filter((v) => typeof v === 'string' && v.trim() !== '');
+    if (areaRefs.length !== 1) return reply.badRequest('pass exactly one of area_id, area_label, or area_name');
     const area = await resolveArea(body);
     if (!area) return reply.badRequest('area not found');
     const { eventId } = db.transaction((tx) => {
