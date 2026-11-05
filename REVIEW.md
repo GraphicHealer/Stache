@@ -153,6 +153,8 @@ Review status badges for consistency. For example, an item marked Out and an ite
 
 ## 6. Item Details
 
+> **✅ DONE** — photo → name → AI suggest → qty/status hierarchy; destination-aware Put back; badge treatments for out/lent retained. (See AI suggestions + Everyday actions marks.)
+
 This is one of the most important screens to refine because it represents the information users interact with most often.
 
 ### Item information
@@ -168,6 +170,8 @@ Keep optional information secondary.
 
 ### AI suggestions
 
+> **✅ DONE (Stage 3)** — compact card labelled "AI suggests"; Apply merges suggested tags (+ suggested name only when the item is unnamed - yours always wins) into ordinary fields and clears ai_*, so it stops being emphasised as AI. Dismiss clears without applying.
+
 AI-generated suggestions should not visually compete with confirmed item information.
 
 Improve the presentation so that:
@@ -179,6 +183,8 @@ Improve the presentation so that:
 Keep AI suggestions compact when possible.
 
 ### Everyday actions
+
+> **✅ DONE** — "Put back" names the destination ("Put back to Garage" via the breadcrumb); terminology now consistent with Inbox/Out/Trash.
 
 Make actions explicit and contextual.
 
@@ -218,6 +224,8 @@ Do not add unnecessary metadata to search results. The purpose is to identify an
 
 ## 8. Inbox
 
+> **✅ DONE** — triage labelled "Needs attention"; away section renamed "Items away" (out + lent, consistent with Out page + Trash). Put-back wording consistent.
+
 Clarify the distinction between pending work and item status.
 
 The Inbox currently combines concepts such as:
@@ -245,6 +253,8 @@ If the review queue is empty, indicate that clearly and avoid giving an empty qu
 Use consistent return terminology throughout Inbox and Item Details.
 
 ## 9. Out / Missing
+
+> **✅ DONE** — page already split away vs unaccounted; section renamed "Items away" for Inbox consistency. "Put back" used throughout.
 
 Review the terminology used for items that are away versus items that are genuinely misplaced.
 

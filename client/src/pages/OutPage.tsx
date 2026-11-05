@@ -143,7 +143,7 @@ export function OutPage() {
           )}
         </div>
       )}
-      {section('Out', data?.out ?? [])}
+      {section('Items away', data?.out ?? [])}
       {section('Unaccounted for', data?.unaccounted ?? [])}
       {shop?.items?.length > 0 && (
         <section>

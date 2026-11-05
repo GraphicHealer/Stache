@@ -76,6 +76,8 @@ export function ItemPage() {
   if (error || !data) return <div className="page"><p className="muted">Item not found.</p></div>;
 
   const { item, breadcrumb, photos } = data;
+  // Last breadcrumb entry = the item's home area (the put-back destination).
+  const homeName = breadcrumb?.[breadcrumb.length - 1]?.name ?? null;
 
   const patch = async (body: Record<string, unknown>, message?: string) => {
     try {
@@ -394,30 +396,42 @@ export function ItemPage() {
             <p className="muted">AI is looking at the photo…</p>
           ) : (
             <>
-              <p className="muted">AI suggests:</p>
+              <p className="muted">AI suggests</p>
               {item.ai_name && <div><b>{item.ai_name}</b></div>}
               {item.ai_description && <div className="muted">{item.ai_description}</div>}
               {(item.ai_tags ?? []).map((t: string) => (
                 <span key={t} className="badge">{t}</span>
               ))}
-              <button
-                className="btn"
-                onClick={() =>
-                  patch(
-                    {
-                      // Tags only - your name and notes stay yours. Clears
-                      // the suggestion fields so the card dismisses.
-                      tags: [...new Set([...(item.tags ?? []), ...(item.ai_tags ?? [])])],
-                      ai_name: null,
-                      ai_description: null,
-                      ai_tags: [],
-                    },
-                    'Tags added',
-                  )
-                }
-              >
-                Add tags
-              </button>
+              <div className="row">
+                <button
+                  className="btn"
+                  onClick={() =>
+                    patch(
+                      {
+                        // Applies the suggestion into ordinary fields (name only
+                        // when the item is unnamed - yours always wins), then
+                        // clears the suggestion so it stops being "AI".
+                        ...(item.name ? {} : { name: item.ai_name }),
+                        tags: [...new Set([...(item.tags ?? []), ...(item.ai_tags ?? [])])],
+                        ai_name: null,
+                        ai_description: null,
+                        ai_tags: [],
+                      },
+                      'Applied',
+                    )
+                  }
+                >
+                  Apply
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() =>
+                    patch({ ai_name: null, ai_description: null, ai_tags: [] }, 'Dismissed')
+                  }
+                >
+                  Dismiss
+                </button>
+              </div>
             </>
           )}
         </div>
@@ -454,7 +468,9 @@ export function ItemPage() {
 
       <div className="row">
         {item.status !== 'home' ? (
-          <button className="btn" onClick={() => patch({ status: 'home' }, 'Put back')}>Put back</button>
+          <button className="btn" onClick={() => patch({ status: 'home' }, 'Put back')}>
+            Put back{homeName ? ` to ${homeName}` : ''}
+          </button>
         ) : (
           <>
             <button className="btn" onClick={() => patch({ status: 'out' }, 'Marked out')}>Out</button>

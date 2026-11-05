@@ -72,6 +72,7 @@ export function InboxPage() {
 
       {current && (
         <div className="triage">
+          <h2 className="triage-heading">Needs attention</h2>
           <p className="muted">
             {later.size > 0 ? `${items.length} to go · ` : ''}{idx + 1} / {items.length}
           </p>
@@ -144,7 +145,7 @@ export function InboxPage() {
 
       {(data?.lent_out ?? []).length > 0 && (
         <>
-          <h2>Out / lent</h2>
+          <h2>Items away</h2>
           {(data?.lent_out ?? []).map((i: any) => (
             <div key={i.id} className="inbox-card">
               {i.thumb ? <img src={i.thumb} alt="" /> : <div className="thumb-placeholder" />}
