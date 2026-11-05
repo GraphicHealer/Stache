@@ -13,6 +13,11 @@ on:
     paths-ignore: ['**/*.md', 'docs/**']
   workflow_dispatch:
   workflow_call:
+    inputs:
+      build-images:
+        description: Run the per-arch image builds (false = checks only)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -103,6 +108,7 @@ jobs:
 
   build:
     needs: [ci, discover]
+    if: ${{ inputs.build-images != false }}
     name: Build ${{ matrix.app }} (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:

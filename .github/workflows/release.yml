@@ -16,6 +16,8 @@ jobs:
   # app-validation runs ci.yml internally first - one dependency covers all.
   validate:
     uses: ./.github/workflows/app-validation.yml
+    with:
+      build-images: false
 
   docker:
     needs: validate
