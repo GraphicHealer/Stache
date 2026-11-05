@@ -47,6 +47,8 @@ Standardize the following across the application:
 
 ### Buttons
 
+> **✅ VERIFIED (Stage 5)** — existing three-level system: `.btn` primary, `.btn-ghost` secondary/tertiary, `.danger` for destructive; icon-only is `IconBtn`.
+
 Establish three consistent button levels:
 
 - Primary: The most important action on a screen.
@@ -58,6 +60,8 @@ Use these consistently throughout the application.
 Dangerous actions should have an unmistakable visual distinction without making the interface unnecessarily alarming.
 
 ### Typography
+
+> **✅ VERIFIED** — h1 page title vs h2 muted section heading vs card `<b>` titles vs `.muted` metadata - already distinct levels, used consistently.
 
 Establish consistent visual levels for:
 - Page titles.
@@ -71,6 +75,8 @@ Avoid making every section heading look like a page heading.
 
 ### Headers
 
+> **✅ VERIFIED** — `row spread` + h1 + actions is the common pattern; settings subpages share `SettingsShell` (back link + title).
+
 Standardize page header structure, including:
 - Page title.
 - Contextual information.
@@ -81,6 +87,8 @@ Maintain a predictable action area so users do not have to relearn where control
 
 ### Cards
 
+> **✅ VERIFIED** — shared `ItemGrid` language; areas get the stache-logo placeholder + item counts, items get photo thumbs - distinct identities already.
+
 Area cards and item cards should share the same visual language but retain distinct identities.
 
 An area represents a physical location. An item represents a physical object.
@@ -88,6 +96,8 @@ An area represents a physical location. An item represents a physical object.
 Their presentation should make that distinction immediately apparent.
 
 ### Icon-only controls
+
+> **✅ VERIFIED** — `IconBtn`'s `label` is a required prop mapped to `aria-label` (TS-enforced; audit found 0 unlabeled usages); `.icon-btn` touch targets ≥36px.
 
 All icon-only controls must have accessible names.
 
