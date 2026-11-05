@@ -34,7 +34,11 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 COPY server/package.json server/
 COPY client/package.json client/
-RUN npm ci --omit=dev && npm cache clean --force
+# Prod node_modules are copied from the deps stage (which has python3/make/
+# g++): native modules like better-sqlite3 arrive already compiled - this
+# stage has no toolchain and `npm ci` would try to rebuild them from source.
+COPY --from=deps /app/node_modules ./node_modules
+RUN npm prune --omit=dev && npm cache clean --force
 
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/server/migrations server/migrations
