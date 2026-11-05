@@ -426,18 +426,46 @@ describe('/api/v1 writes', () => {
     // '_' is literal too - if it acted as a wildcard, '5_%' would match '50%'.
     const und = await app.inject({ method: 'GET', url: '/api/v1/items?q=5_%25', headers: v1() });
     expect(und.json().total).toBe(0);
+    // ...and '_' matches literally when present in the data.
+    const und2 = await mk('bin_top_left', {});
+    const undHit = await app.inject({ method: 'GET', url: '/api/v1/items?q=top_left', headers: v1() });
+    expect(undHit.json().items.map((i: any) => i.id)).toContain(und2.id);
+    // literal backslash: 'C:\tools' only matches itself, not 'C' alone.
+    const bs = await mk('C:\\tools notes', {});
+    const bsHit = await app.inject({ method: 'GET', url: `/api/v1/items?q=${encodeURIComponent('C:\\tools')}`, headers: v1() });
+    expect(bsHit.json().items.map((i: any) => i.id)).toContain(bs.id);
 
-    // combined filters: q + status (gone items are hidden_at -> excluded anyway)
+    // combined filters: q + status + area_id
     const gone = await app.inject({
       method: 'GET', url: '/api/v1/items?q=hammer&status=home', headers: v1(),
     });
     expect(gone.json().items.map((i: any) => i.id)).toContain(hammer.id);
+    const inArea = await app.inject({
+      method: 'GET', url: `/api/v1/items?q=hammer&area_id=${areaId}`, headers: v1(),
+    });
+    expect(inArea.json().items.map((i: any) => i.id)).toContain(hammer.id);
+    const wrongArea = await app.inject({
+      method: 'GET', url: '/api/v1/items?q=hammer&area_id=00000000-0000-0000-0000-000000000000', headers: v1(),
+    });
+    expect(wrongArea.json().total).toBe(0);
 
-    // pagination over the filtered set
-    const p0 = await app.inject({ method: 'GET', url: '/api/v1/items?q=&limit=1&offset=0', headers: v1() });
-    expect(p0.json().items.length).toBe(1);
-    const big = await app.inject({ method: 'GET', url: '/api/v1/items?limit=200&offset=0', headers: v1() });
-    expect(p0.json().total).toBe(big.json().total);
+    // pagination over a FILTERED set: total counts matches, pages tile them
+    const seed = ['paged-alpha-1', 'paged-alpha-2', 'paged-alpha-3'];
+    for (const n of seed) await mk(n, { tags: ['alphaset'] });
+    const fPage = await app.inject({
+      method: 'GET', url: '/api/v1/items?q=alphaset&limit=2&offset=0', headers: v1(),
+    });
+    expect(fPage.json().total).toBe(3);
+    expect(fPage.json().items.length).toBe(2);
+    const fPage2 = await app.inject({
+      method: 'GET', url: '/api/v1/items?q=alphaset&limit=2&offset=2', headers: v1(),
+    });
+    expect(fPage2.json().items.length).toBe(1);
+    expect(fPage2.json().items[0].id).not.toBe(fPage.json().items[0].id);
+    const fTotal = await app.inject({
+      method: 'GET', url: '/api/v1/items?q=alphaset&limit=200', headers: v1(),
+    });
+    expect(fTotal.json().items.length).toBe(3);
 
     // empty / malformed params behave
     expect((await app.inject({ method: 'GET', url: '/api/v1/items?limit=abc&offset=-5', headers: v1() })).statusCode).toBe(200);

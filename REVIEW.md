@@ -2,6 +2,8 @@
 
 ## 1. Confirm MCP Item Visibility Defaults
 
+> **✅ DONE** — confirmed + tested: a personal `add_item` creates `isPrivate=false` with `ownerId` = the connection owner (shared-by-default preserved). Test walks the whole lifecycle: another member sees it, session PATCH flips it private, then other members + shared conns lose access while the owner keeps it.
+
 The intended behavior is that **all items are shared with the household by default**, regardless of which MCP connection creates them.
 
 This is deliberate. Stache is a household inventory system, and the family should be able to find items for one another.
@@ -43,6 +45,8 @@ Add a test confirming that:
 6. Once private, another household member and a shared MCP connection cannot access it.
 
 ## 2. Additional SQL Search Regression Tests
+
+> **✅ DONE** — strengthened in ext.test.ts: literal `%` match, `_` negative AND positive match, literal `\`, case-insensitive partial, `q`+`status`, `q`+`area_id` (incl. wrong-area → 0), pagination over a filtered set with correct `total` + page tiling.
 
 The SQL search implementation has been updated to escape LIKE metacharacters rather than stripping them.
 

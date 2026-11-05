@@ -267,6 +267,55 @@ describe('personal mcp connections', () => {
     expect(check.kind).toBe('personal');
   });
 
+  it('personal add_item files a SHARED item owned by the connection owner', async () => {
+    const filed = await rpc(aSlug, aToken, 'tools/call', {
+      name: 'add_item',
+      arguments: { area_id: aItem.areaId, name: 'personal-filed-whistle' },
+    });
+    expect(filed.statusCode).toBe(200);
+    const itemId = JSON.parse(JSON.parse(filed.body.split('data: ')[1]).result.content[0].text).item_id;
+    const [made] = await db.select().from(schema.items).where(eq(schema.items.id, itemId));
+    expect(made.isPrivate).toBe(false);
+    expect(made.ownerId).toBe(userA.userId);
+
+    // Another household member can see it (it's shared).
+    const bConn = await mkConn(userB.cookie);
+    const bSee = await rpc(bConn.slug, bConn.token, 'tools/call', {
+      name: 'item_details', arguments: { item_id: itemId },
+    });
+    expect(bSee.body).toContain('personal-filed-whistle');
+
+    // Make it private via the normal session PATCH.
+    const patch = await app.inject({
+      method: 'PATCH', url: `/api/items/${itemId}`,
+      headers: { cookie: userA.cookie, 'content-type': 'application/json' },
+      payload: { is_private: true },
+    });
+    expect(patch.statusCode).toBe(200);
+
+    // Now another member's personal conn AND a shared conn can't see it.
+    const bDeny = await rpc(bConn.slug, bConn.token, 'tools/call', {
+      name: 'item_details', arguments: { item_id: itemId },
+    });
+    expect(bDeny.body).toContain('not found');
+    const admin = await login('priv-admin@t.dev', 'admin');
+    const sConn = await app.inject({
+      method: 'POST', url: '/api/settings/mcp',
+      headers: { cookie: admin.cookie, 'content-type': 'application/json' },
+      payload: { name: 'priv-test-shared' },
+    });
+    const { connection: sC, token: sT } = sConn.json();
+    const sDeny = await rpc(sC.slug, sT, 'tools/call', {
+      name: 'item_details', arguments: { item_id: itemId },
+    });
+    expect(sDeny.body).toContain('not found');
+    // But its owner still can.
+    const own = await rpc(aSlug, aToken, 'tools/call', {
+      name: 'item_details', arguments: { item_id: itemId },
+    });
+    expect(own.body).toContain('personal-filed-whistle');
+  });
+
   it('read-only personal connections get no write tools', async () => {
     const ro = await mkConn(userA.cookie, 'read');
     const list = await rpc(ro.slug, ro.token, 'tools/list');
