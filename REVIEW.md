@@ -18,6 +18,8 @@ Before making changes, inspect the current implementation and compare it against
 
 ## 1. Preserve the existing visual identity
 
+> **✅ DONE** — accent color, themes, photo-first flow, rounded cards, bottom nav, minimal presentation all preserved; nothing decorative added.
+
 Keep the established Stache visual language.
 
 Preserve:
@@ -42,6 +44,8 @@ The objective is to make the existing interface more consistent and polished, no
 Both light and dark modes must receive equal attention. Any changes should be checked in both themes.
 
 ## 2. Establish consistent visual hierarchy
+
+> **✅ DONE** — see per-section marks (buttons/typography/headers/cards/icon controls all verified consistent).
 
 Standardize the following across the application:
 
@@ -112,6 +116,8 @@ Ensure interactive controls have suitable touch targets on mobile.
 # Part 2 — Individual Screen Improvements
 
 ## 3. Home / Camera
+
+> **✅ DONE** — camera-first flow untouched; fallback stays intentional (Take photo / Scan label). Verified in captures.
 
 IMPORTANT: The Home screen is intentionally camera-first.
 
@@ -225,6 +231,8 @@ Preserve the prominent item photo. The photo-first approach is a major strength 
 
 ## 7. Search / Find
 
+> **✅ DONE** — no changes needed; search was already strong. Icon controls carry labels.
+
 The existing search experience is a strong foundation. Avoid unnecessary changes.
 
 Consider:
@@ -313,6 +321,8 @@ Do not remove support for advanced printer configurations or protocols.
 
 ## 11. Login
 
+> **✅ DONE** — branding + simplicity preserved; no changes needed.
+
 The current login presentation is clean. Preserve its general design.
 
 Verify:
@@ -326,6 +336,8 @@ Avoid adding unnecessary content if these flows are already handled elsewhere.
 Preserve the existing Stache branding and tagline.
 
 ## 12. Review
+
+> **✅ DONE** — friendly empty state preserved; no changes needed.
 
 The existing friendly empty-state messaging is appropriate.
 
@@ -426,6 +438,8 @@ Preserve the existing route unless there is a compelling reason to change it.
 
 ## 15. General objective
 
+> **✅ DONE** — all existing capabilities preserved across the split; see per-category marks.
+
 The current Settings implementation contains considerably more functionality than the screenshot suggests.
 
 It includes:
@@ -453,6 +467,8 @@ The problem is how they are organized and presented.
 The current SettingsPage.tsx is a large, monolithic component. Refactor it into smaller, maintainable components and organize the experience around five major categories.
 
 ## 16. Recommended Settings structure
+
+> **✅ DONE** — implemented as the five categories in their recommended structure.
 
 ### A. Household & Account
 
@@ -723,6 +739,8 @@ A smaller category may use sections or collapsible panels instead of a separate 
 
 ## 19. Permissions and visibility
 
+> **✅ DONE** — admin gating preserved per-section (connections/data/maintenance admin-only, household member-visible); nothing broadened.
+
 Preserve all existing permission boundaries.
 
 Some functionality is administrator-only. Ensure the refactor does not accidentally expose administrator operations to ordinary household members.
@@ -784,6 +802,8 @@ Keep API communication and state management appropriately separated from present
 
 ## 21. Preserve existing functionality
 
+> **✅ DONE** — frontend organization only; no API, schema, or permission changes beyond the events-feed `entity_name` enrichment (server-side, additive).
+
 This is a frontend organization and usability project.
 
 Do not rewrite backend functionality unnecessarily.
@@ -804,6 +824,8 @@ Do not break existing integrations or introduce unnecessary migrations.
 If a backend change is genuinely required, explain why before making a broad architectural change.
 
 ## 22. Accessibility and responsive behavior
+
+> **✅ DONE** — IconBtn enforces aria-labels; settings subpages use the same responsive `.page` layout; verified in dark + light phone captures.
 
 All modified screens must work on:
 - Desktop.

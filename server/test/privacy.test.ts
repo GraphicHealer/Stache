@@ -159,6 +159,24 @@ describe('item privacy - routes', () => {
     const myFeed = (await get('/api/events?limit=100', owner)).json().events;
     expect(myFeed.some((e: any) => e.entity_id === mine.id)).toBe(true);
   });
+
+  it('events feed resolves entity_name for readable activity', async () => {
+    const { recordEventTx } = await import('../src/lib/events');
+    db.transaction((tx: any) =>
+      recordEventTx(tx, 'item.filed', 'item', shared.id, { area_id: area.id }, owner.userId),
+    );
+    db.transaction((tx: any) =>
+      recordEventTx(tx, 'area.created', 'area', area.id, {}, owner.userId),
+    );
+    const feed = (await get('/api/events?limit=100', owner)).json().events;
+    const itemEv = feed.find((e: any) => e.entity_id === shared.id);
+    const areaEv = feed.find((e: any) => e.entity_id === area.id && e.type === 'area.created');
+    expect(itemEv.entity_name).toBe('shared-drill');
+    expect(areaEv.entity_name).toBe('garage');
+    // Private-item events still never surface to another member.
+    const othersFeed = (await get('/api/events?limit=100', other)).json().events;
+    expect(othersFeed.every((e: any) => e.entity_name !== 'mine-passport')).toBe(true);
+  });
 });
 
 describe('digest webhook POST', () => {
