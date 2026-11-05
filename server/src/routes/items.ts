@@ -80,7 +80,7 @@ const SplitSchema = z.object({
 }).passthrough();
 
 /** Scan an item's photos for codes; merge new finds into detected_codes. */
-async function detectAndStore(itemId: string, bufs: Buffer[]): Promise<void> {
+export async function detectAndStore(itemId: string, bufs: Buffer[]): Promise<void> {
   const found = new Map<string, DetectedCode>();
   for (const buf of bufs) {
     for (const c of await detectCodes(buf)) found.set(c.text, c);

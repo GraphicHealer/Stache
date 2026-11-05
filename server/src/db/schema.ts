@@ -228,3 +228,15 @@ export type Photo = typeof photos.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Printer = typeof printers.$inferSelect;
 export type McpToken = typeof mcpTokens.$inferSelect;
+
+/** REST API tokens - bearer-authed integrations (Home Assistant, scripts). */
+export const apiTokens = sqliteTable('api_tokens', {
+  id: text('id').primaryKey().$defaultFn(newId),
+  name: text('name').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+  lastUsedAt: ts('last_used_at'),
+  // 'read' | 'read-write' - whether the token may mutate inventory.
+  scope: text('scope').notNull().default('read-write'),
+});
+export type ApiToken = typeof apiTokens.$inferSelect;

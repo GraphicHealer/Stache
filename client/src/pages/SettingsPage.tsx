@@ -78,6 +78,7 @@ export function SettingsPage() {
     refetchInterval: (q) => (q.state.data?.ml?.state === 'downloading' ? 1500 : false),
   });
   const { data: mcp } = useQuery({ queryKey: ['settings-mcp'], queryFn: () => api.get('/api/settings/mcp') });
+  const { data: apiTokens } = useQuery({ queryKey: ['api-tokens'], queryFn: () => api.get('/api/settings/api-tokens') });
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const { data: digest } = useQuery({ queryKey: ['settings-digest'], queryFn: () => api.get('/api/settings/digest') });
   const { data: backupSched } = useQuery({ queryKey: ['settings-backup-schedule'], queryFn: () => api.get('/api/settings/backup-schedule') });
@@ -88,6 +89,9 @@ export function SettingsPage() {
   const [schedLoaded, setSchedLoaded] = useState(false);
   const [connName, setConnName] = useState('');
   const [connScope, setConnScope] = useState<'read' | 'read-write'>('read-write');
+  const [tokName, setTokName] = useState('');
+  const [tokScope, setTokScope] = useState<'read' | 'read-write'>('read-write');
+  const [newApiToken, setNewApiToken] = useState<string | null>(null);
   const [backupOpts, setBackupOpts] = useState({ encrypt: false, passphrase: '', includeKey: false });
   const [backupKey, setBackupKey] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -400,6 +404,76 @@ export function SettingsPage() {
             <code className="mcp-url">{newToken}</code>
             <IconBtn icon="copy" className="btn-small" label="Copy token" onClick={() => copy(newToken)} />
             <IconBtn icon="x" className="btn-small btn-ghost" label="Dismiss token" onClick={() => setNewToken(null)} />
+          </div>
+        </div>
+      )}
+
+      <h2>API tokens</h2>
+      <p className="muted">
+        REST bearer tokens for integrations like Home Assistant - full API access limited by
+        scope, individually revocable. Use them as <code>Authorization: Bearer &lt;token&gt;</code>
+        on <code>{`${window.location.origin}/api/v1`}</code>.
+      </p>
+      {(apiTokens?.tokens ?? []).map((t: any) => (
+        <div key={t.id} className="suggest">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <b>{t.name}</b>
+            <IconBtn
+              icon="trash"
+              className="btn-ghost"
+              label={`Revoke ${t.name}`}
+              onClick={async () => {
+                await api.del(`/api/settings/api-tokens/${t.id}`);
+                qc.invalidateQueries({ queryKey: ['api-tokens'] });
+                toast('Revoked');
+              }}
+            />
+          </div>
+          <p className="muted">
+            {t.scope === 'read' ? 'Read only' : 'Read + write'} ·{' '}
+            {t.last_used_at ? `Last used ${new Date(t.last_used_at).toLocaleString()}` : 'Never used'}
+          </p>
+        </div>
+      ))}
+      <div className="row">
+        <input
+          className="input"
+          placeholder="Name, e.g. Home Assistant"
+          value={tokName}
+          onChange={(e) => setTokName(e.target.value)}
+        />
+        <select
+          className="input"
+          style={{ maxWidth: '150px' }}
+          value={tokScope}
+          onChange={(e) => setTokScope(e.target.value as 'read' | 'read-write')}
+        >
+          <option value="read-write">Read + write</option>
+          <option value="read">Read only</option>
+        </select>
+        <button
+          className="btn"
+          onClick={async () => {
+            if (!tokName.trim()) return;
+            const r = await api.post('/api/settings/api-tokens', { name: tokName.trim(), scope: tokScope });
+            setTokName('');
+            setNewApiToken(r.secret ?? null);
+            qc.invalidateQueries({ queryKey: ['api-tokens'] });
+            toast('Token created');
+          }}
+        >
+          Add
+        </button>
+      </div>
+      {newApiToken && (
+        <div className="suggest">
+          <p>
+            <b>Token (shown once - store it now):</b>
+          </p>
+          <div className="row">
+            <code className="mcp-url">{newApiToken}</code>
+            <IconBtn icon="copy" className="btn-small" label="Copy token" onClick={() => copy(newApiToken)} />
+            <IconBtn icon="x" className="btn-small btn-ghost" label="Dismiss token" onClick={() => setNewApiToken(null)} />
           </div>
         </div>
       )}

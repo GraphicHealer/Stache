@@ -31,18 +31,27 @@ import { settingsRoutes } from './routes/settings';
 import { outRoutes } from './routes/out';
 import { reviewRoutes } from './routes/review';
 import { registerMcp } from './mcp';
+import { extRoutes } from './routes/ext';
 
 export function buildApp() {
   const app = Fastify({
     logger: {
       level: env.isProd ? 'info' : 'debug',
       serializers: {
-        // Webhook tokens travel as ?token= - keep them out of the logs.
+        // Secrets travel in ?token= and Authorization: Bearer - log just
+        // enough of the tail to tell keys apart, never the usable token.
         req: (req) => ({
           method: req.method,
-          url: (req.url ?? '').replace(/([?&]token=)[^&]+/g, '$1<redacted>'),
+          url: (req.url ?? '').replace(
+            /([?&](?:token|sig)=)[^&]+/g,
+            (m, pre) => `${pre}…${m.slice(-4)}`,
+          ),
           host: req.headers?.host,
           remoteAddress: req.ip,
+          authorization: req.headers?.authorization?.replace(
+            /^(Bearer\s+).+/,
+            (_, pre) => `${pre}…${(req.headers.authorization ?? '').slice(-4)}`,
+          ),
         }),
       },
     },
@@ -123,7 +132,8 @@ export function buildApp() {
       url === '/api/health' ||
       url === '/api/setup' ||
       url.startsWith('/api/auth') ||
-      url.startsWith('/api/webhooks/');
+      url.startsWith('/api/webhooks/') ||
+      url.startsWith('/api/v1');
     if (open) {
       req.user = await sessionUser(req).catch(() => null);
       return;
@@ -200,6 +210,7 @@ export function buildApp() {
   app.register(settingsRoutes);
   app.register(outRoutes);
   app.register(reviewRoutes);
+  app.register(extRoutes);
   registerMcp(app);
 
   app.setNotFoundHandler((req, reply) => {
