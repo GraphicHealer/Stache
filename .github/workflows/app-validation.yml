@@ -75,16 +75,19 @@ jobs:
       - name: yamllint
         run: |
           pip install yamllint
-          yamllint -d relaxed */config.yaml .github/workflows/*.yml
+          yamllint -d '{extends: relaxed, rules: {line-length: disable}}' */config.yaml .github/workflows/*.yml
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Hadolint on Dockerfiles
-        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde003 # v3.3.0
-        with:
-          dockerfile: Dockerfile
+        run: |
+          for f in $(find . -name 'Dockerfile' -not -path './node_modules/*'); do
+            echo "::group::$f"
+            docker run --rm -i hadolint/hadolint hadolint - < "$f"
+            echo "::endgroup::"
+          done
       - name: ShellCheck on shell scripts
         run: |
           mapfile -t scripts < <(find . -name '*.sh' -not -path './node_modules/*')
