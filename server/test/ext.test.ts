@@ -392,6 +392,52 @@ describe('/api/v1 writes', () => {
     expect(move.statusCode).toBe(404);
   });
 
+  it('SQL search: case-insensitive, partial, filtered, paginated', async () => {
+    // seed search-specific items
+    const mk = async (name: string, opts: Record<string, unknown> = {}) => {
+      const r = await app.inject({
+        method: 'POST', url: '/api/v1/items',
+        headers: { ...v1(), 'content-type': 'application/json' },
+        payload: { area_id: areaId, name, ...opts },
+      });
+      expect(r.statusCode).toBe(201);
+      return r.json().item;
+    };
+    const hammer = await mk('Claw Hammer', { barcode: 'HMR-001', tags: ['tools'] });
+    await mk('Hemlock boards', { description: 'pine timber' });
+
+    // case-insensitive partial match on name
+    const found = await app.inject({ method: 'GET', url: '/api/v1/items?q=hammer', headers: v1() });
+    expect(found.statusCode).toBe(200);
+    expect(found.json().items.map((i: any) => i.id)).toContain(hammer.id);
+    expect(found.json().total).toBeGreaterThanOrEqual(1);
+
+    // case-insensitive on description + barcode + tag json
+    for (const q of ['HEMLOCK', 'hmr-001', 'tools']) {
+      const r = await app.inject({ method: 'GET', url: `/api/v1/items?q=${q}`, headers: v1() });
+      expect(r.json().items.length).toBeGreaterThanOrEqual(1);
+    }
+
+    // LIKE metacharacters in the query stay literal (old includes() semantics)
+    const wild = await app.inject({ method: 'GET', url: '/api/v1/items?q=%25', headers: v1() });
+    expect(wild.json().total).toBe(0);
+
+    // combined filters: q + status (gone items are hidden_at -> excluded anyway)
+    const gone = await app.inject({
+      method: 'GET', url: '/api/v1/items?q=hammer&status=home', headers: v1(),
+    });
+    expect(gone.json().items.map((i: any) => i.id)).toContain(hammer.id);
+
+    // pagination over the filtered set
+    const p0 = await app.inject({ method: 'GET', url: '/api/v1/items?q=&limit=1&offset=0', headers: v1() });
+    expect(p0.json().items.length).toBe(1);
+    const big = await app.inject({ method: 'GET', url: '/api/v1/items?limit=200&offset=0', headers: v1() });
+    expect(p0.json().total).toBe(big.json().total);
+
+    // empty / malformed params behave
+    expect((await app.inject({ method: 'GET', url: '/api/v1/items?limit=abc&offset=-5', headers: v1() })).statusCode).toBe(200);
+  });
+
   it('rejects an unknown status', async () => {
     const res = await app.inject({
       method: 'PATCH', url: `/api/v1/items/${itemId}`,

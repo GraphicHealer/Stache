@@ -2,7 +2,7 @@
 // Home Assistant. Mirrors the session API's semantics: same event payloads so
 // undo works identically, shared items only (private items are never exposed).
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { apiTokens, areas, items, labels, photos, type ApiToken } from '../db/schema';
 import { recordEvent, recordEventTx } from '../lib/events';
@@ -167,23 +167,26 @@ export async function extRoutes(app: FastifyInstance) {
     if (query.area_id) where.push(eq(items.areaId, query.area_id));
     if (query.status && ['home', 'out', 'lent', 'unaccounted', 'gone'].includes(query.status))
       where.push(eq(items.status, query.status));
-
     if (q) {
-      // Multi-field contains search - paginate the matched set.
-      const rows = await db
-        .select()
-        .from(items)
-        .where(and(...where))
-        .orderBy(asc(items.createdAt));
-      const matched = rows.filter((i) =>
-        [i.name, i.description, i.barcode, (i.tags as string[] | null)?.join(' ')].some(
-          (f) => f && String(f).toLowerCase().includes(q),
-        ),
-      );
-      return { items: matched.slice(offset, offset + limit).map(itemJson), total: matched.length, limit, offset };
+      // Multi-field contains match in SQL - LIKE wildcards are stripped so
+      // the user's query stays literal, matching the old includes() semantics.
+      const needle = q.replace(/[%_]/g, '');
+      if (!needle) {
+        where.push(sql`1 = 0`); // a bare-wildcard query can match nothing
+      } else {
+        const pattern = `%${needle}%`;
+        where.push(
+          or(
+            sql`lower(${items.name}) LIKE ${pattern}`,
+            sql`lower(${items.description}) LIKE ${pattern}`,
+            sql`lower(${items.barcode}) LIKE ${pattern}`,
+            sql`lower(${items.tags}) LIKE ${pattern}`,
+          )!,
+        );
+      }
     }
 
-    // No search term - paginate in SQL so one page never loads the inventory.
+    // Filter + paginate entirely in SQL - one page never loads the inventory.
     const rows = await db
       .select()
       .from(items)

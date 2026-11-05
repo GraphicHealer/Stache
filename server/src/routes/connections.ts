@@ -11,6 +11,10 @@ const ConnCreateSchema = z.object({
   scope: z.enum(['read', 'read-write']).optional(),
 });
 
+const ConnPatchSchema = z.object({
+  name: z.string().trim().min(1, 'name is required').max(60),
+}).strict();
+
 /**
  * Personal AI connections - user-owned MCP endpoints. Each member manages
  * their own: shared integrations stay under the admin-gated
@@ -51,6 +55,25 @@ export async function connectionRoutes(app: FastifyInstance) {
       endpoint: `/mcp/${conn.slug}`,
       note: 'This token is shown once - store it like a password.',
     });
+  });
+
+  app.patch('/api/me/mcp-connections/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = parseBody(ConnPatchSchema, req.body, reply);
+    if (!body) return;
+    const [conn] = await db
+      .select()
+      .from(mcpTokens)
+      .where(and(eq(mcpTokens.id, id), eq(mcpTokens.ownerId, req.user!.id)));
+    if (!conn) return reply.notFound('connection not found');
+    const [updated] = await db
+      .update(mcpTokens)
+      // name only - kind/scope/owner/slug/token are immutable through this path
+      .set({ name: body.name.trim() })
+      .where(eq(mcpTokens.id, id))
+      .returning();
+    const { token: _t, tokenHash: _h, ...pub } = updated;
+    return { connection: pub };
   });
 
   app.delete('/api/me/mcp-connections/:id', async (req, reply) => {

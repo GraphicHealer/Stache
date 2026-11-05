@@ -92,6 +92,8 @@ export function SettingsPage() {
   const [aiName, setAiName] = useState('');
   const [aiScope, setAiScope] = useState<'read' | 'read-write'>('read-write');
   const [aiToken, setAiToken] = useState<{ token: string; endpoint: string } | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameVal, setRenameVal] = useState('');
   const { data: meConns, refetch: refetchMeConns } = useQuery({
     queryKey: ['me-mcp-connections'],
     queryFn: () => api.get('/api/me/mcp-connections'),
@@ -424,18 +426,54 @@ export function SettingsPage() {
       {(meConns?.connections ?? []).map((c: any) => (
         <div key={c.id} className="suggest">
           <div className="row" style={{ justifyContent: 'space-between' }}>
-            <b>{c.name}</b>
-            <IconBtn
-              icon="trash"
-              className="btn-ghost"
-              label={`Revoke ${c.name}`}
-              onClick={async () => {
-                if (!confirm(`Revoke "${c.name}"? The AI assistant loses access immediately.`)) return;
-                await api.del(`/api/me/mcp-connections/${c.id}`);
-                refetchMeConns();
-                toast('Revoked');
-              }}
-            />
+            {renaming === c.id ? (
+              <>
+                <input
+                  className="input"
+                  value={renameVal}
+                  onChange={(e) => setRenameVal(e.target.value)}
+                  maxLength={60}
+                  autoFocus
+                />
+                <IconBtn
+                  icon="check"
+                  className="btn-small"
+                  label="Save name"
+                  onClick={async () => {
+                    const name = renameVal.trim();
+                    if (!name) return toast('Name is required');
+                    await api.patch(`/api/me/mcp-connections/${c.id}`, { name });
+                    setRenaming(null);
+                    refetchMeConns();
+                    toast('Renamed');
+                  }}
+                />
+                <IconBtn icon="x" className="btn-small btn-ghost" label="Cancel rename" onClick={() => setRenaming(null)} />
+              </>
+            ) : (
+              <>
+                <b>{c.name}</b>
+                <div className="row" style={{ gap: '.25rem' }}>
+                  <IconBtn
+                    icon="pencil"
+                    className="btn-ghost"
+                    label={`Rename ${c.name}`}
+                    onClick={() => { setRenaming(c.id); setRenameVal(c.name); }}
+                  />
+                  <IconBtn
+                    icon="trash"
+                    className="btn-ghost"
+                    label={`Revoke ${c.name}`}
+                    onClick={async () => {
+                      if (!confirm(`Revoke "${c.name}"? The AI assistant loses access immediately.`)) return;
+                      await api.del(`/api/me/mcp-connections/${c.id}`);
+                      refetchMeConns();
+                      toast('Revoked');
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </div>
           <div className="row">
             <code className="mcp-url">{`${window.location.origin}/mcp/${c.slug}`}</code>

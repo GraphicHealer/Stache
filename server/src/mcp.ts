@@ -26,7 +26,9 @@ function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | n
   // client-supplied id - always the authenticated connection's owner.
   const vis = itemVisible(conn.ownerId);
   const owns = (i: { isPrivate: boolean; ownerId: string | null }) =>
-    !i.isPrivate || i.ownerId === conn.ownerId;
+    !i.isPrivate || (!!conn.ownerId && i.ownerId === conn.ownerId);
+  // NB: a NULL item.owner_id (owner deleted -> SET NULL) must never satisfy a
+  // NULL conn.owner_id - orphaned private items are inaccessible to everyone.
   const server = new McpServer({ name: 'stache', version: '0.1.0' });
   const actor = `mcp:${conn.slug}`;
   // Read-scope connections get the read tools only - write tools aren't

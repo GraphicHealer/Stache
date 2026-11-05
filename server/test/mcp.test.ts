@@ -206,6 +206,67 @@ describe('personal mcp connections', () => {
     expect(ok.body).toContain('changed');
   });
 
+  it('members can rename their own connection; other fields stay put', async () => {
+    const list = await app.inject({ method: 'GET', url: '/api/me/mcp-connections', headers: { cookie: userA.cookie } });
+    const conn = list.json().connections.find((c: any) => c.slug === aSlug);
+
+    const renamed = await app.inject({
+      method: 'PATCH', url: `/api/me/mcp-connections/${conn.id}`,
+      headers: { cookie: userA.cookie, 'content-type': 'application/json' },
+      payload: { name: '  Renamed Assistant  ' },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().connection.name).toBe('Renamed Assistant');
+    // security-sensitive fields untouched
+    expect(renamed.json().connection.slug).toBe(aSlug);
+    expect(renamed.json().connection.scope).toBe('read-write');
+    expect(renamed.json().connection.ownerId).toBe(userA.userId);
+    expect(renamed.json().connection.tokenHash).toBeUndefined();
+
+    // shows up in the list
+    const relist = await app.inject({ method: 'GET', url: '/api/me/mcp-connections', headers: { cookie: userA.cookie } });
+    expect(relist.json().connections.find((c: any) => c.id === conn.id).name).toBe('Renamed Assistant');
+
+    // the endpoint + token still work after rename
+    const works = await rpc(aSlug, aToken, 'tools/list');
+    expect(works.statusCode).toBe(200);
+  });
+
+  it('rename validation: ownership, name rules, no sensitive-field edits', async () => {
+    const list = await app.inject({ method: 'GET', url: '/api/me/mcp-connections', headers: { cookie: userA.cookie } });
+    const conn = list.json().connections[0];
+
+    // not another user's
+    expect((await app.inject({
+      method: 'PATCH', url: `/api/me/mcp-connections/${conn.id}`,
+      headers: { cookie: userB.cookie, 'content-type': 'application/json' },
+      payload: { name: 'stolen' },
+    })).statusCode).toBe(404);
+    // missing id
+    expect((await app.inject({
+      method: 'PATCH', url: '/api/me/mcp-connections/nope',
+      headers: { cookie: userA.cookie, 'content-type': 'application/json' },
+      payload: { name: 'x' },
+    })).statusCode).toBe(404);
+    // empty / whitespace / overlength rejected
+    for (const name of ['', '   ', 'x'.repeat(61)]) {
+      expect((await app.inject({
+        method: 'PATCH', url: `/api/me/mcp-connections/${conn.id}`,
+        headers: { cookie: userA.cookie, 'content-type': 'application/json' },
+        payload: { name },
+      })).statusCode).toBe(400);
+    }
+    // sensitive fields can't be smuggled in (strict schema)
+    expect((await app.inject({
+      method: 'PATCH', url: `/api/me/mcp-connections/${conn.id}`,
+      headers: { cookie: userA.cookie, 'content-type': 'application/json' },
+      payload: { name: 'ok', ownerId: 'other-user', kind: 'shared' },
+    })).statusCode).toBe(400);
+    const [check] = await db.select().from(schema.mcpTokens).where(eq(schema.mcpTokens.id, conn.id));
+    expect(check.ownerId).toBe(userA.userId);
+    expect(check.kind).toBe('personal');
+  });
+
   it('read-only personal connections get no write tools', async () => {
     const ro = await mkConn(userA.cookie, 'read');
     const list = await rpc(ro.slug, ro.token, 'tools/list');
@@ -225,6 +286,57 @@ describe('personal mcp connections', () => {
     expect(del.statusCode).toBe(200);
     const dead = await rpc(doomed.slug, doomed.token, 'tools/list');
     expect(dead.statusCode).toBe(404);
+  });
+
+  it('orphaned private items (owner deleted) are invisible to everyone', async () => {
+    // Simulate ON DELETE SET NULL: private item whose owner is gone.
+    const [orphan] = await db.insert(schema.items)
+      .values({ areaId: aItem.areaId, name: 'orphan-private', isPrivate: true, ownerId: null })
+      .returning();
+
+    // A shared connection must not reach it by direct ID.
+    const admin = await login('orphan-admin@t.dev', 'admin');
+    const created = await app.inject({
+      method: 'POST', url: '/api/settings/mcp',
+      headers: { cookie: admin.cookie, 'content-type': 'application/json' },
+      payload: { name: 'orphan-test-shared' },
+    });
+    const { connection: sConn, token: sTok } = created.json();
+    for (const [tool, args] of [
+      ['item_details', { item_id: orphan.id }],
+      ['update_item', { item_id: orphan.id, name: 'hijacked' }],
+      ['move_item', { item_id: orphan.id, area_id: aItem.areaId }],
+    ] as const) {
+      const r = await rpc(sConn.slug, sTok, 'tools/call', { name: tool, arguments: args });
+      expect(r.body).toContain('not found');
+    }
+    // Nor via search.
+    const sSearch = await rpc(sConn.slug, sTok, 'tools/call', {
+      name: 'search_items', arguments: { query: 'orphan-private' },
+    });
+    expect(sSearch.body).not.toContain('orphan-private');
+
+    // A different member's personal connection must not reach it either.
+    const pGet = await rpc(aSlug, aToken, 'tools/call', {
+      name: 'item_details', arguments: { item_id: orphan.id },
+    });
+    expect(pGet.body).toContain('not found');
+
+    // And it's genuinely unchanged.
+    const [check] = await db.select().from(schema.items).where(eq(schema.items.id, orphan.id));
+    expect(check.name).toBe('orphan-private');
+    expect(check.isPrivate).toBe(true);
+    expect(check.ownerId).toBeNull();
+
+    // Ordinary shared + personal access still works.
+    const sHit = await rpc(sConn.slug, sTok, 'tools/call', {
+      name: 'search_items', arguments: { query: 'den-shared-piano' },
+    });
+    expect(sHit.body).toContain('den-shared-piano');
+    const pHit = await rpc(aSlug, aToken, 'tools/call', {
+      name: 'search_items', arguments: { query: 'a-renamed' },
+    });
+    expect(pHit.body).toContain('a-renamed');
   });
 
   it('shared connections still cannot see any private items', async () => {
