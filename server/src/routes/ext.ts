@@ -11,8 +11,14 @@ import { analyzeItemPhoto } from '../lib/ml';
 import { detectAndStore } from './items';
 import { kickAi, maybeQueueItem } from '../lib/ai';
 import { parseBody } from '../lib/validate';
+import { badAiUrl, checkedLookup } from '../lib/urlcheck';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+
+// Outbound fetches (photo_url) refuse link-local/metadata targets even on
+// rebind - same checkedLookup the AI client uses.
+const extDispatcher = new Agent({ connect: { lookup: checkedLookup() } as any });
 
 const TokenCreateSchema = z.object({
   name: z.string().trim().min(1).max(60),
@@ -233,15 +239,24 @@ export async function extRoutes(app: FastifyInstance) {
       }
     }
 
-    // Optional remote photo - http(s) only, 10s cap, validated as an image.
+    // Optional remote photo - http(s) only, SSRF-checked, 10s + 25MB cap,
+    // validated as an image before it touches the pipeline.
     if (body.photo_url && files.length === 0) {
+      const bad = await badAiUrl(body.photo_url);
+      if (bad) return reply.badRequest('photo_url is not allowed');
       try {
-        const u = new URL(body.photo_url);
-        if (!['http:', 'https:'].includes(u.protocol)) throw new Error('scheme');
-        const res = await fetch(u, { signal: AbortSignal.timeout(10_000), redirect: 'follow' });
+        const res = await undiciFetch(body.photo_url, {
+          signal: AbortSignal.timeout(10_000),
+          dispatcher: extDispatcher,
+          redirect: 'error', // don't follow redirects into a blocked host
+        });
         if (!res.ok) throw new Error(`fetch ${res.status}`);
-        files.push(Buffer.from(await res.arrayBuffer()));
-        await assertImage(files[0]);
+        const len = Number(res.headers.get('content-length') ?? 0);
+        if (len > 25 * 1024 * 1024) throw new Error('too large');
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 25 * 1024 * 1024) return reply.badRequest('photo exceeds 25MB');
+        await assertImage(buf);
+        files.push(buf);
       } catch (e) {
         if (e instanceof PhotoBusyError) return reply.code(503).send('image processing busy');
         return reply.badRequest('photo_url is not a fetchable image');

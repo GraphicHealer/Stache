@@ -194,6 +194,21 @@ describe('/api/v1 writes', () => {
     expect(got.json().item.area_id).toBe(attic.id);
   });
 
+  it('rejects photo_url pointing at link-local/metadata hosts (SSRF)', async () => {
+    for (const url of [
+      'http://169.254.169.254/latest/meta-data/',
+      'http://metadata.google.internal/x',
+      'file:///etc/passwd',
+    ]) {
+      const res = await app.inject({
+        method: 'POST', url: '/api/v1/items',
+        headers: { ...v1(), 'content-type': 'application/json' },
+        payload: { area_id: areaId, name: 'ssrf', photo_url: url },
+      });
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
   it('rejects an unknown status', async () => {
     const res = await app.inject({
       method: 'PATCH', url: `/api/v1/items/${itemId}`,
