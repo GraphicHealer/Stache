@@ -8,6 +8,7 @@ const CATS: { to: string; icon: IconName; title: string; desc: string }[] = [
   { to: '/settings/integrations', icon: 'link', title: 'Connections & Integrations', desc: 'MCP, AI assistants, API tokens' },
   { to: '/settings/data', icon: 'download', title: 'Data & Backups', desc: 'Export, import, backups, restore' },
   { to: '/settings/maintenance', icon: 'wrench', title: 'Maintenance', desc: 'Photo storage checks and repair' },
+  { to: '/settings/printers', icon: 'printer', title: 'Printers', desc: 'Label printer setup and testing' },
 ];
 
 /** Settings landing page - five categories, nothing more. */

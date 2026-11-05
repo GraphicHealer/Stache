@@ -293,7 +293,7 @@ Preserve the simple Put back action and use consistent terminology across the ap
 
 ## 10. Labels
 
-> **✅ DONE** — workflow-first order: preview → default printer → generate/print → unclaimed list; all printer management collapsed into an expandable "Printers & setup" section; generated/in-use/unclaimed explained; raw origin URL no longer shown inline.
+> **✅ DONE** — workflow-first order: preview → default printer → generate/print → unclaimed list; printer management moved entirely to a dedicated `Settings → Printers` page (6th landing card, `/settings/printers`) with a link from Labels; generated/in-use/unclaimed explained; raw origin URL no longer shown inline.
 
 The Labels experience should prioritize the user's goal: printing QR labels.
 

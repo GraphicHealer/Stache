@@ -17,6 +17,7 @@ import { AISettings } from './pages/settings/AISettings';
 import { ConnectionsSettings } from './pages/settings/ConnectionsSettings';
 import { DataSettings } from './pages/settings/DataSettings';
 import { MaintenanceSettings } from './pages/settings/MaintenanceSettings';
+import { PrinterSettings } from './pages/settings/PrinterSettings';
 import { OutPage } from './pages/OutPage';
 import { TrashPage } from './pages/TrashPage';
 import { ReviewPage } from './pages/ReviewPage';
@@ -205,6 +206,7 @@ export function App() {
           <Route path="/settings/integrations" element={<ConnectionsSettings />} />
           <Route path="/settings/data" element={<DataSettings />} />
           <Route path="/settings/maintenance" element={<MaintenanceSettings />} />
+          <Route path="/settings/printers" element={<PrinterSettings />} />
           <Route
             path="*"
             element={
