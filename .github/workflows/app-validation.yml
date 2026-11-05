@@ -92,7 +92,9 @@ jobs:
         run: |
           mapfile -t scripts < <(find . -name '*.sh' -not -path './node_modules/*')
           if [ "${#scripts[@]}" -eq 0 ]; then echo 'no shell scripts'; exit 0; fi
-          shellcheck "${scripts[@]}"
+          for f in "${scripts[@]}"; do
+            docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:stable "/mnt/${f#./}"
+          done
 
   build:
     needs: discover
