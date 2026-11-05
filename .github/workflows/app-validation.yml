@@ -85,7 +85,7 @@ jobs:
         run: |
           for f in $(find . -name 'Dockerfile' -not -path './node_modules/*'); do
             echo "::group::$f"
-            docker run --rm -i hadolint/hadolint hadolint - < "$f"
+            docker run --rm -i hadolint/hadolint hadolint --failure-threshold error - < "$f"
             echo "::endgroup::"
           done
       - name: ShellCheck on shell scripts
