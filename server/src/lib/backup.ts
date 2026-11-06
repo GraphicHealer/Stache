@@ -80,7 +80,9 @@ export interface BuildOptions {
 
 export async function buildBackup(opts: BuildOptions): Promise<{ buf: Buffer; key: string | null }> {
   const { buf: payload, counts } = await payloadZip();
-  const appVersion = process.env.npm_package_version ?? 'dev';
+  // env.appVersion comes from the APP_VERSION build arg - the release tag
+  // on GHCR builds ('dev' locally). npm_package_version is unset in Docker.
+  const appVersion = env.appVersion;
 
   const manifest: Manifest = {
     format: 'stache-backup',
