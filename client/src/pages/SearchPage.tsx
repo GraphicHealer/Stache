@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useApp } from '../context';
 import { downscale } from '../image';
 import { CaptureInput, Icon, IconBtn, ItemGrid, areaPaths, type AreaRow } from '../components/Bits';
+import { ALL_FORMATS, Scanner } from '../components/Scanner';
 
 const path = (crumb: { name: string | null }[]) =>
   (crumb ?? []).map((c) => c.name ?? '?').join(' › ');
@@ -24,6 +25,7 @@ export function SearchPage() {
   const [photoResults, setPhotoResults] = useState<any[] | null>(null);
   const [photoSearching, setPhotoSearching] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const activeFilters = [status, areaId, priv, tag].filter(Boolean).length;
 
   const { data: areaList } = useQuery({
@@ -115,6 +117,11 @@ export function SearchPage() {
           <Icon name="camera" />
         </CaptureInput>
         <IconBtn
+          icon="barcode"
+          label="Scan a barcode"
+          onClick={() => setScanning(true)}
+        />
+        <IconBtn
           icon="filter"
           badge={activeFilters || undefined}
           className={activeFilters ? 'filter-active' : ''}
@@ -126,6 +133,17 @@ export function SearchPage() {
           <IconBtn icon="x" label="Clear all filters" onClick={() => setParams(query ? { q: query } : {})} />
         )}
       </form>
+      {scanning && (
+        <Scanner
+          formats={ALL_FORMATS.filter((f) => f !== 'qr_code')}
+          hint="Scan a product barcode"
+          onResult={(text) => {
+            setScanning(false);
+            setParams({ barcode: text });
+          }}
+          onClose={() => setScanning(false)}
+        />
+      )}
       {filtersOpen && (
         <div className="filter-tray">
           <select
