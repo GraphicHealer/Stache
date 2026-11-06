@@ -13,6 +13,9 @@ export function HouseholdSettings() {
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const [member, setMember] = useState({ name: '', email: '', password: '' });
   const [pw, setPw] = useState({ current: '', next: '' });
+  const [confirmCapture, setConfirmCapture] = useState(
+    () => localStorage.getItem('stache:confirm-capture') !== 'off',
+  );
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -89,6 +92,22 @@ export function HouseholdSettings() {
           </div>
         </>
       )}
+
+      <h2>Capture</h2>
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={confirmCapture}
+          onChange={(e) => {
+            setConfirmCapture(e.target.checked);
+            localStorage.setItem('stache:confirm-capture', e.target.checked ? 'on' : 'off');
+          }}
+        />
+        <span>Confirm each photo before filing</span>
+      </label>
+      <p className="muted">
+        Freeze the shot with a check/retake step. This device only.
+      </p>
 
       <h2>Your password</h2>
       <input
