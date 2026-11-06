@@ -135,7 +135,6 @@ export function OutPage() {
 
   return (
     <div className="page">
-      <h1>Out</h1>
       {!data && <Loader />}
       {data && total === 0 && <p className="muted">Everything's where it belongs.</p>}
       {!!total && (

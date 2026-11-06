@@ -321,29 +321,25 @@ export function LabelsPage() {
             <Icon name="printer" /> Print {printCodes.length}
           </button>
         )}
-        {claimed > 0 && (
-          <button
-            className="btn btn-ghost"
-            onClick={() => render(labels.filter((l: any) => l.area_id).map((l: any) => l.code))}
-          >
-            Claimed labels
-          </button>
-        )}
       </div>
       {progress && <p className="muted">{progress}</p>}
 
-      <div className="tabs">
+      <div className="tabs" role="tablist">
         <button
           type="button"
           className={`tab${tab === 'unclaimed' ? ' on' : ''}`}
-          onClick={() => setTab('unclaimed')}
+          role="tab"
+          aria-selected={tab === 'unclaimed'}
+          onClick={() => { setTab('unclaimed'); setSelClaimed(new Set()); }}
         >
           Unclaimed{unclaimed.length ? ` (${unclaimed.length})` : ''}
         </button>
         <button
           type="button"
           className={`tab${tab === 'claimed' ? ' on' : ''}`}
-          onClick={() => setTab('claimed')}
+          role="tab"
+          aria-selected={tab === 'claimed'}
+          onClick={() => { setTab('claimed'); setSel(new Set()); }}
         >
           Claimed{claimed ? ` (${claimed})` : ''}
         </button>
@@ -366,14 +362,13 @@ export function LabelsPage() {
                 all
               </label>
             )}
-            {selClaimed.size > 0 && (
-              <button
-                className="btn btn-small"
-                onClick={() => setPrintDlg(true)}
-              >
-                Print {selClaimed.size}
-              </button>
-            )}
+            <button
+              className="btn btn-small"
+              disabled={selClaimed.size === 0}
+              onClick={() => setPrintDlg(true)}
+            >
+              Print{selClaimed.size ? ` ${selClaimed.size}` : ''}
+            </button>
           </div>
           <div className="label-list">
             {claimedList.map((l: any) => (

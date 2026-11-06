@@ -82,12 +82,14 @@ export function InboxPage() {
 
   return (
     <div className="page">
-      <div className="tabs">
+      <div className="tabs" role="tablist">
         {(['inbox', 'out', 'review'] as const).map((t) => (
           <button
             key={t}
             type="button"
             className={`tab${tab === t ? ' on' : ''}`}
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setParams(t === 'inbox' ? {} : { tab: t })}
           >
             {t === 'inbox' ? 'Inbox' : t === 'out' ? 'Out' : 'Review'}
@@ -98,9 +100,6 @@ export function InboxPage() {
       {tab === 'review' && <ReviewPage />}
       {tab === 'inbox' && (
       <>
-      <div className="row spread">
-        <h1>Inbox</h1>
-      </div>
       {isLoading && <Loader />}
       {!isLoading && !current && <p className="muted">All clear. Nothing needs naming.</p>}
 

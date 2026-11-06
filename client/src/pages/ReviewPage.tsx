@@ -49,7 +49,6 @@ export function ReviewPage() {
 
   return (
     <div className="page">
-      <h1>Review</h1>
       {empty && <p className="muted">Nothing needs a look. Nice.</p>}
 
       {duplicates.length > 0 && (

@@ -107,6 +107,7 @@ export function ConnectionsSettings() {
           onChange={(e) => setAiName(e.target.value)}
         />
         <select
+          aria-label="Access"
           className="input"
           style={{ maxWidth: '150px' }}
           value={aiScope}
@@ -217,6 +218,7 @@ export function ConnectionsSettings() {
               onChange={(e) => setConnName(e.target.value)}
             />
             <select
+              aria-label="Access"
               className="input"
               style={{ maxWidth: '150px' }}
               value={connScope}
@@ -287,6 +289,7 @@ export function ConnectionsSettings() {
               onChange={(e) => setTokName(e.target.value)}
             />
             <select
+              aria-label="Access"
               className="input"
               style={{ maxWidth: '150px' }}
               value={tokScope}
