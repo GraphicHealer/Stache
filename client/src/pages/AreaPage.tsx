@@ -254,7 +254,6 @@ export function AreaPage() {
       <div className="row">
         <button className="btn btn-primary" onClick={() => {
           setCurrentArea({ id, name: area.name, thumb: area.cover_thumb });
-          toast(`Filing into ${area.name ?? 'area'}`);
           nav('/');
         }}>
           Add items to {area.name ?? 'this area'}
