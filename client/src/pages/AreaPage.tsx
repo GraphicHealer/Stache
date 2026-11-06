@@ -195,7 +195,10 @@ export function AreaPage() {
           {area.cover_thumb ? (
             <img className="area-cover" src={area.cover_url} alt="" />
           ) : (
-            <img className="area-cover ph-logo" src="/icon.svg" alt="" />
+            <>
+              <img className="area-cover ph-logo" src="/icon.svg" alt="" />
+              <span className="cover-cam"><Icon name="camera" size={22} /></span>
+            </>
           )}
           <span className="photo-replace"><Icon name="camera" size={14} /></span>
           <input
