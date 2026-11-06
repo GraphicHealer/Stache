@@ -32,6 +32,11 @@ docker compose up -d --build   # builds server+client, runs migrations, starts a
 curl localhost:8080/api/health
 ```
 
+**After every batch of changes (review fixes, features, anything committed):**
+rebuild the LOCAL demo container so `localhost:8080` stays current -
+`docker compose build` then `STACHE_TRUSTED_ORIGINS=http://localhost:8080 docker compose up -d`.
+This is the local test instance, not a deploy; always rebuild it when you finish a batch.
+
 - Migrations live in `server/migrations/NNNN_name.sql` and auto-apply at boot.
   Add new ones as the next sequential file; never edit applied migrations.
 - Server build: `npm run build -w server` (esbuild bundle + tsc typecheck).
