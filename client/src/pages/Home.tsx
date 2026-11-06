@@ -196,11 +196,8 @@ export function Home() {
         </CameraView>
       )}
 
-      <div className="home-actions">
-        <button className="btn btn-big" onClick={() => { setHint('Scan an area label'); setScanning(true); }}>
-          Scan label
-        </button>
-      </div>
+      {/* The scanner still opens on its own for a pending photo or an
+          unclaimed-code claim - the ambient QR loop covers area labels. */}
 
       {scanning && <Scanner formats={ALL_FORMATS} onResult={onScan} onClose={() => setScanning(false)} hint={hint} onPickBin={onPickBin} />}
 
