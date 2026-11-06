@@ -713,3 +713,6 @@ button, input, select, textarea { font-family: inherit; }
   padding: 10px 14px; cursor: pointer; min-height: 44px;
 }
 .tab.on { color: inherit; border-bottom-color: var(--accent); }
+
+/* Tabbed pages embed full pages (Out/Review under Inbox). */
+.page .page { padding: 0; }

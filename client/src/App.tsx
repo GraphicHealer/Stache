@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { parseScan } from './scan';
 import { useApp } from './context';
 import { ModelBanner, Loader } from './components/Bits';
@@ -100,14 +100,6 @@ const NAV = [
 // Secondary destinations behind "More" - useful but not everyday taps.
 const MORE = [
   {
-    to: '/out', label: 'Out',
-    icon: <svg {...ICON_PROPS}><path d="M12 3v10" /><path d="m8.5 6.5 3.5-3.5 3.5 3.5" /><path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" /></svg>,
-  },
-  {
-    to: '/review', label: 'Review',
-    icon: <svg {...ICON_PROPS}><path d="m9 11 3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>,
-  },
-  {
     to: '/labels', label: 'Labels',
     icon: <svg {...ICON_PROPS}><path d="M20.59 13.41 13.41 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.83z" /><circle cx="7" cy="7" r="1.5" /></svg>,
   },
@@ -191,8 +183,8 @@ export function App() {
           <Route path="/browse" element={<BrowsePage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/review" element={<ReviewPage />} />
-          <Route path="/out" element={<OutPage />} />
+          <Route path="/review" element={<Navigate to="/inbox?tab=review" replace />} />
+          <Route path="/out" element={<Navigate to="/inbox?tab=out" replace />} />
           <Route path="/labels" element={<LabelsPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/settings" element={<SettingsPage />} />

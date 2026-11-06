@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { OutPage } from './OutPage';
+import { ReviewPage } from './ReviewPage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
@@ -75,11 +77,29 @@ export function InboxPage() {
     finish(item.id, 'done');
   };
 
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') ?? 'inbox';
+
   return (
     <div className="page">
+      <div className="tabs">
+        {(['inbox', 'out', 'review'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={`tab${tab === t ? ' on' : ''}`}
+            onClick={() => setParams(t === 'inbox' ? {} : { tab: t })}
+          >
+            {t === 'inbox' ? 'Inbox' : t === 'out' ? 'Out' : 'Review'}
+          </button>
+        ))}
+      </div>
+      {tab === 'out' && <OutPage />}
+      {tab === 'review' && <ReviewPage />}
+      {tab === 'inbox' && (
+      <>
       <div className="row spread">
         <h1>Inbox</h1>
-        <Link to="/review" className="btn btn-ghost">Review</Link>
       </div>
       {isLoading && <Loader />}
       {!isLoading && !current && <p className="muted">All clear. Nothing needs naming.</p>}
@@ -165,34 +185,7 @@ export function InboxPage() {
           ))}
         </>
       )}
-
-      {(data?.lent_out ?? []).length > 0 && (
-        <>
-          <h2>Out</h2>
-          {(data?.lent_out ?? []).map((i: any) => (
-            <div key={i.id} className="inbox-card">
-              {i.thumb ? <img src={i.thumb} alt="" /> : <div className="thumb-placeholder" />}
-              <div className="inbox-body">
-                <div>{i.name ?? 'unnamed'}</div>
-                <div className="grid-sub">
-                  {i.status === 'lent' ? `lent to ${i.lent_to ?? '?'}` : 'out'}
-                  {i.out_since ? ` · since ${new Date(i.out_since).toLocaleDateString()}` : ''}
-                  {i.area_path ? ` · ${i.area_path}` : ''}
-                </div>
-                <button
-                  className="btn btn-small"
-                  onClick={() =>
-                    api.patch(`/api/items/${i.id}`, { status: 'home' }).then(() =>
-                      qc.invalidateQueries({ queryKey: ['inbox'] }),
-                    )
-                  }
-                >
-                  Put back
-                </button>
-              </div>
-            </div>
-          ))}
-        </>
+      </>
       )}
     </div>
   );

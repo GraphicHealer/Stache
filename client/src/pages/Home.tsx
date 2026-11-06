@@ -162,7 +162,7 @@ export function Home() {
               </button>
             ))}
             {outSum.total > 6 && (
-              <Link className="still-out-more" to="/out">+{outSum.total - 6} more</Link>
+              <Link className="still-out-more" to="/inbox?tab=out">+{outSum.total - 6} more</Link>
             )}
           </div>
           <span className="muted">Still out · tap to put back</span>

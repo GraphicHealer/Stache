@@ -246,7 +246,7 @@ export function AreaPage() {
           <p className="muted" style={{ margin: 0, flex: 1 }}>
             {outItems.length} thing{outItems.length === 1 ? ' belongs' : 's belong'} here but {outItems.length === 1 ? 'is' : 'are'} out.
           </p>
-          <button className="btn btn-small" onClick={() => nav(`/out?area=${encodeURIComponent(areaPath)}`)}>Check</button>
+          <button className="btn btn-small" onClick={() => nav(`/inbox?tab=out&area=${encodeURIComponent(areaPath)}`)}>Check</button>
           <button className="btn btn-small btn-ghost" onClick={() => { localStorage.setItem(dismissKey, outSig); setDismissedSig(outSig); }}>Dismiss</button>
         </div>
       )}
