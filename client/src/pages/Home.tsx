@@ -22,7 +22,6 @@ export function Home() {
   const [scanning, setScanning] = useState(false);
   const [hint, setHint] = useState('Scan an area label');
   const [codePrompt, setCodePrompt] = useState<{ itemId: string; text: string; product: string | null } | null>(null);
-  const [backPrompt, setBackPrompt] = useState<{ items: { id: string; name: string | null }[] } | null>(null);
   const [outSum, setOutSum] = useState<{ total: number; items: { id: string; name: string | null; thumb: string | null }[] } | null>(null);
   const qc = useQueryClient();
   const nav = useNavigate();
@@ -33,7 +32,6 @@ export function Home() {
   const putBack = async (ids: string[]) => {
     const r = await api.post('/api/items/put-back', { ids }).catch(() => null);
     if (r?.put_back) toast(`Put back ${r.put_back}`, r.event_ids?.[0]);
-    setBackPrompt(null);
     refreshOut();
   };
 
@@ -100,9 +98,6 @@ export function Home() {
       setCurrentArea({ id: areaId, name, thumb: null });
       toast(`Filing into ${name ?? 'area'}`);
     }
-    api.get(`/api/areas/${areaId}/out`)
-      .then((o) => { if (o.items?.length) setBackPrompt({ items: o.items }); })
-      .catch(() => {});
   };
 
   const onScan = async (text: string) => {
@@ -205,17 +200,6 @@ export function Home() {
 
       {scanning && <Scanner formats={ALL_FORMATS} onResult={onScan} onClose={() => setScanning(false)} hint={hint} onPickBin={onPickBin} />}
 
-      {backPrompt && (
-        <div className="code-prompt card">
-          <div>
-            <b>{backPrompt.items.length} thing{backPrompt.items.length === 1 ? ' belongs' : 's belong'} back here</b>
-          </div>
-          <div className="code-prompt-actions">
-            <button className="btn" onClick={() => putBack(backPrompt.items.map((i) => i.id))}>Mark returned</button>
-            <button className="btn btn-ghost" onClick={() => setBackPrompt(null)}>No</button>
-          </div>
-        </div>
-      )}
 
       {codePrompt && (
         <div className="code-prompt card">

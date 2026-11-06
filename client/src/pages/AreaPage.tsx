@@ -53,6 +53,21 @@ export function AreaPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['area', id] });
   const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
   const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
+  // Things that belong here but are out - the area page is the right place
+  // to nudge put-backs, not the camera.
+  const { data: outHere } = useQuery({
+    queryKey: ['area-out', id],
+    queryFn: () => api.get(`/api/areas/${id}/out`),
+  });
+  const outItems = (outHere?.items ?? []) as { id: string; name: string | null }[];
+  const putBack = async () => {
+    const r = await api.post('/api/items/put-back', { ids: outItems.map((i) => i.id) }).catch(() => null);
+    if (r?.put_back) {
+      toast(`Put back ${r.put_back}`, r.event_ids?.[0]);
+      refresh();
+      qc.invalidateQueries({ queryKey: ['area-out', id] });
+    }
+  };
 
   if (isLoading) return <div className="page"><Loader /></div>;
   if (error || !data) return <div className="page"><p className="muted">Area not found.</p></div>;
@@ -230,6 +245,15 @@ export function AreaPage() {
           {data.archived && <span className="badge warn">hidden</span>}
         </div>
       </div>
+
+      {outItems.length > 0 && (
+        <div className="suggest">
+          <p className="muted" style={{ margin: 0 }}>
+            {outItems.length} thing{outItems.length === 1 ? ' belongs' : 's belong'} here but {outItems.length === 1 ? 'is' : 'are'} out.
+            <button className="btn btn-small" style={{ marginLeft: 8 }} onClick={putBack}>Put back</button>
+          </p>
+        </div>
+      )}
 
       <div className="row">
         <button className="btn btn-primary" onClick={() => {
