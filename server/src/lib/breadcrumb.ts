@@ -42,6 +42,26 @@ export async function descendantAreaIds(areaId: string): Promise<string[]> {
 }
 
 /** Visible-item counts for a batch of areas, each counting its whole subtree. */
+/** Direct item count per area (no sub-areas) - pairs with subtreeItemCounts. */
+export async function directItemCounts(
+  areaIds: string[],
+  userId: string | null,
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!areaIds.length) return map;
+  const ph = areaIds.map(() => '?').join(',');
+  const rows = query<{ area_id: string; n: number }>(
+    `SELECT area_id, COUNT(*) AS n FROM items
+      WHERE area_id IN (${ph}) AND hidden_at IS NULL
+        AND (is_private = 0 OR owner_id = ?)
+      GROUP BY area_id`,
+    ...areaIds,
+    userId,
+  );
+  for (const r of rows) map.set(r.area_id, r.n);
+  return map;
+}
+
 export async function subtreeItemCounts(
   areaIds: string[],
   userId: string | null,

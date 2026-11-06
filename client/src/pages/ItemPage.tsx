@@ -410,12 +410,16 @@ export function ItemPage() {
           ) : item.name ? (
             // Named item: the AI suggestion stays a one-liner - it doesn't
             // compete with confirmed info.
-            <p className="muted">
-              AI suggests{item.ai_name ? <>: <b>{item.ai_name}</b></> : ''}
-              {(item.ai_tags ?? []).map((t: string) => (
-                <span key={t} className="badge">{t}</span>
-              ))}
-            </p>
+            <div>
+              <p className="muted" style={{ margin: 0 }}>
+                AI suggests{item.ai_name ? <>: <b>{item.ai_name}</b></> : ''}
+              </p>
+              <div>
+                {[...new Map(((item.ai_tags ?? []) as string[]).map((t) => [t.toLowerCase(), t])).values()].map((t) => (
+                  <span key={t} className="badge">{t}</span>
+                ))}
+              </div>
+            </div>
           ) : (
             <>
               <p className="muted">AI suggests</p>
@@ -429,7 +433,7 @@ export function ItemPage() {
           {item.ai_status === 'done' && !!(item.ai_name || item.ai_description || (item.ai_tags ?? []).length) && (
             <div className="row">
               <button
-                className="btn"
+                className="btn btn-primary"
                 onClick={() =>
                   patch(
                     {

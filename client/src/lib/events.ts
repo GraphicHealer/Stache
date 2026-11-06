@@ -4,7 +4,9 @@
  */
 export function describeEvent(e: { type: string; entity_name?: string | null; payload?: any }): string {
   const p = e.payload ?? {};
-  const n = e.entity_name;
+  // entity_name resolves from live rows; payloads keep a copy so the name
+  // survives a purge (item.hidden already records one).
+  const n = e.entity_name ?? p.name ?? null;
   const thing = n ? `"${n}"` : '';
   switch (e.type) {
     case 'item.filed': return `filed ${thing}`.trim();
@@ -31,6 +33,19 @@ export function describeEvent(e: { type: string; entity_name?: string | null; pa
     case 'stocktake': return 'stocktake';
     default: return e.type;
   }
+}
+
+/** "just now" / "12 min ago" / "3 h ago" / "2 d ago" / "Mar 5" for activity rows. */
+export function relTime(iso: string | Date): string {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h} h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 14) return `${d} d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 function statusLabel(s: string | undefined): string {

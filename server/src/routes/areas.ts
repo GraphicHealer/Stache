@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { areas, labels, photos } from '../db/schema';
-import { breadcrumb, descendantAreaIds, subtreeItemCounts } from '../lib/breadcrumb';
+import { breadcrumb, descendantAreaIds, directItemCounts, subtreeItemCounts } from '../lib/breadcrumb';
 import { recordEventTx } from '../lib/events';
 import {
   assertImage,
@@ -46,6 +46,7 @@ function areaJson(
   a: typeof areas.$inferSelect,
   cover?: { thumbUrl: string; url: string } | null,
   itemCount?: number,
+  ownCount?: number,
 ) {
   return {
     id: a.id,
@@ -61,6 +62,7 @@ function areaJson(
     tags: a.tags ?? [],
     category: a.category,
     ...(itemCount !== undefined ? { item_count: itemCount } : {}),
+    ...(ownCount !== undefined ? { own_count: ownCount } : {}),
   };
 }
 
@@ -78,10 +80,11 @@ export async function areaRoutes(app: FastifyInstance) {
       roots.map((a) => a.id),
       req.user?.id ?? null,
     );
+    const ownCounts = await directItemCounts(roots.map((a) => a.id), req.user?.id ?? null);
     return {
       areas: roots.map((a) => {
         const c = covers.get(a.id);
-        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, counts.get(a.id) ?? 0);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, counts.get(a.id) ?? 0, ownCounts.get(a.id) ?? 0);
       }),
     };
   });
@@ -168,6 +171,7 @@ export async function areaRoutes(app: FastifyInstance) {
 
     const covers = await coverThumbsForAreas(subs);
     const subCounts = await subtreeItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
+    const ownCounts = await directItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
     const thumbs = await thumbsForItems(contents.map((i) => i.id));
     const cover = areaPhotos.find((p) => p.id === area.coverPhotoId) ?? areaPhotos[0];
     const areaNames = new Map(subs.map((a) => [a.id, a.name]));
@@ -195,7 +199,7 @@ export async function areaRoutes(app: FastifyInstance) {
       deep,
       subareas: subs.map((a) => {
         const c = covers.get(a.id);
-        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, subCounts.get(a.id) ?? 0);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, subCounts.get(a.id) ?? 0, ownCounts.get(a.id) ?? 0);
       }),
       items: await Promise.all(contents.map(async (i) => {
         const t = thumbs.get(i.id);
@@ -204,6 +208,7 @@ export async function areaRoutes(app: FastifyInstance) {
           area_id: i.areaId,
           area_name: deep ? await itemAreaName(i.areaId) : undefined,
           name: i.name,
+          ai_name: i.aiName ?? null,
           description: i.description,
           quantity: i.quantity,
           status: i.status,

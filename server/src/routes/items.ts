@@ -190,7 +190,7 @@ export async function itemRoutes(app: FastifyInstance) {
           })
           .returning()
           .all();
-        const e = recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId }, req.user?.id);
+        const e = recordEventTx(tx, 'item.filed', 'item', i.id, { area_id: areaId, name: i.name }, req.user?.id);
         return { item: i, ev: e };
       }));
     } catch (err) {
@@ -652,6 +652,7 @@ export async function itemRoutes(app: FastifyInstance) {
           .all();
         const e = recordEventTx(tx, 'item.filed', 'item', c.id, {
           area_id: item.areaId,
+          name: c.name,
           via: 'split',
           source_item_id: id,
         }, req.user?.id);

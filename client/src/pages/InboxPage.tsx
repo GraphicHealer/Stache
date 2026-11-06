@@ -115,7 +115,7 @@ export function InboxPage() {
             </div>
           ) : (
             <div className="triage-actions">
-              <button className="btn has-icon" onClick={() => accept(current)}><Icon name="check" /> Right</button>
+              <button className="btn btn-primary has-icon" onClick={() => accept(current)}><Icon name="check" /> Right</button>
               <button
                 className="btn has-icon"
                 onClick={() => { setEditing(true); setDraft(current.ai_name ?? ''); }}

@@ -227,7 +227,7 @@ export function AreaPage() {
       </div>
 
       <div className="row">
-        <button className="btn" onClick={() => {
+        <button className="btn btn-primary" onClick={() => {
           setCurrentArea({ id, name: area.name, thumb: area.cover_thumb });
           toast(`Filing into ${area.name ?? 'area'}`);
           nav('/');
@@ -324,7 +324,11 @@ export function AreaPage() {
               id: a.id,
               name: a.name,
               thumb: a.cover_thumb,
-              sub: a.item_count ? `${a.item_count} item${a.item_count === 1 ? '' : 's'}` : undefined,
+              sub: a.item_count
+              ? a.own_count != null && a.own_count !== a.item_count
+                ? `${a.own_count} here · ${a.item_count} total`
+                : `${a.item_count} item${a.item_count === 1 ? '' : 's'}`
+              : undefined,
             }))}
             linkTo={(aid) => `/areas/${aid}`}
             placeholderLogo

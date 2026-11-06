@@ -204,6 +204,14 @@ export function PrinterSettings() {
   const { data: labelData } = useQuery({ queryKey: ['labels'], queryFn: () => api.get('/api/labels') });
   const presets: SheetPreset[] = templatesData?.templates ?? [];
   const printers: Printer[] = printerData?.printers ?? [];
+  // Sample ZPL disclosure - developer detail, lazy-fetched on first open.
+  const [zplRaw, setZplRaw] = useState<string | null>(null);
+  const defP = printers.find((p) => p.id === printerData?.default_id) ?? printers[0];
+  const zplDef = defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy') ? defP : null;
+  const loadZpl = async () => {
+    const r = await api.get('/api/labels/preview').catch(() => null);
+    setZplRaw(r?.zpl ?? 'No ZPL available.');
+  };
   const labels = labelData?.labels ?? [];
   const pc = printers.find((p) => p.id === 'pc');
   const pcSpec = pc?.media_type === 'sheet' ? resolveSheet(pc.sheet, presets) : null;
@@ -669,6 +677,22 @@ export function PrinterSettings() {
         <button className="btn" onClick={() => setAdding(true)}>+ Add printer</button>
       )}
       {progress && <p className="muted">{progress}</p>}
+      {zplDef && (
+        <details
+          onToggle={(e) => {
+            if ((e.target as HTMLDetailsElement).open && !zplRaw) loadZpl();
+          }}
+        >
+          <summary className="muted" style={{ cursor: 'pointer' }}>Show generated ZPL</summary>
+          <textarea
+            readOnly
+            className="input"
+            value={zplRaw ?? 'Loading…'}
+            onFocus={(e) => e.target.select()}
+            style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: '0.75rem', marginTop: 6 }}
+          />
+        </details>
+      )}
       {confirmUi}
     </SettingsShell>
   );

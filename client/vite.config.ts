@@ -24,6 +24,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Activate the new worker immediately - one stale load after a deploy
+        // otherwise keeps serving the previous bundle.
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/photos/],

@@ -96,6 +96,7 @@ export function Breadcrumb({ trail }: { trail: Crumb[] }) {
 export interface GridItem {
   id: string;
   name: string | null;
+  ai_name?: string | null;
   thumb: string | null;
   sub?: string;
   badge?: string;
@@ -202,7 +203,7 @@ export function ItemGrid({
             )}
             <div className="grid-caption">
               {i.badge && <span className="badge">{i.badge}</span>}
-              {i.name ?? 'unnamed'}
+              {i.name ?? (i.ai_name ? <em className="muted">{i.ai_name}</em> : 'unnamed')}
               {i.sub && <div className="grid-sub">{i.sub}</div>}
             </div>
           </>

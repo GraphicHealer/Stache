@@ -108,7 +108,6 @@ export function LabelsPage() {
   // falls back to the DOM approximation below if it can't render.
   const [zplPng, setZplPng] = useState<string | null>(null);
   const [zplFailed, setZplFailed] = useState(false);
-  const [zplRaw, setZplRaw] = useState<string | null>(null);
   const zplDef = defP && (defP.type === 'zpl' || defP.type === 'zpl-legacy') ? defP : null;
   const dymoDef = defP?.type === 'dymo' ? defP : null;
   const [dymoPng, setDymoPng] = useState<string | null>(null);
@@ -128,7 +127,6 @@ export function LabelsPage() {
       dymoDef?.right_offset_mm, dymoDef?.bottom_offset_mm, firstCode]);
   useEffect(() => {
     setZplPng(null);
-    setZplRaw(null);
     setZplFailed(false);
     if (!zplDef || !firstCode) return;
     let dead = false;
@@ -137,7 +135,6 @@ export function LabelsPage() {
         .get(`/api/labels/${firstCode}/zpl?printer_id=${zplDef.id}`)
         .catch(() => null);
       if (!r || dead) { if (!dead) setZplFailed(true); return; }
-      setZplRaw(r.zpl);
       const b64 = await renderZplPng(r.zpl, r.w_mm, r.h_mm, r.dpi).catch(() => null);
       if (dead) return;
       if (b64) setZplPng(b64); else setZplFailed(true);
@@ -169,9 +166,7 @@ export function LabelsPage() {
     <div className="page">
       <h1>Labels</h1>
       <p className="muted">
-        {labels.length} labels generated - {claimed} in use on areas, {unclaimed.length}{' '}
-        unclaimed. Print from the address you'll actually scan against:
-        QR codes open this Stache on whatever host you're printing from.
+        {labels.length} labels · {claimed} in use · {unclaimed.length} unclaimed
       </p>
       {sheet.length > 0 && (
         <>
@@ -282,14 +277,6 @@ export function LabelsPage() {
               );
             })}
           </div>
-          {zplRaw && (
-            <details style={{ marginTop: 8 }}>
-              <summary className="muted" style={{ cursor: 'pointer' }}>Show generated ZPL</summary>
-              <textarea readOnly className="input" value={zplRaw}
-                onFocus={(e) => e.target.select()}
-                style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: '0.75rem', marginTop: 6 }} />
-            </details>
-          )}
         </>
       )}
 

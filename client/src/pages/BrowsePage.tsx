@@ -103,7 +103,11 @@ export function BrowsePage() {
           id: a.id,
           name: a.name,
           thumb: a.cover_thumb,
-          sub: a.item_count ? `${a.item_count} item${a.item_count === 1 ? '' : 's'}` : undefined,
+          sub: a.item_count
+              ? a.own_count != null && a.own_count !== a.item_count
+                ? `${a.own_count} here · ${a.item_count} total`
+                : `${a.item_count} item${a.item_count === 1 ? '' : 's'}`
+              : undefined,
         }))}
         linkTo={(id) => `/areas/${id}`}
         placeholderLogo

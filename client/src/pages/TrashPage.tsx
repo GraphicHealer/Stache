@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../context';
 import { IconBtn, useConfirm } from '../components/Bits';
-import { describeEvent } from '../lib/events';
+import { describeEvent, relTime } from '../lib/events';
 
 /**
  * Trash + activity: hidden items and archived areas (restorable, or purgeable
@@ -93,7 +93,7 @@ export function TrashPage() {
           <div className="out-info">
             <span>{describeEvent(e)}{e.undone ? ' (undone)' : ''}</span>
             <span className="muted">
-              {e.user_name ?? 'system'} · {new Date(e.created_at).toLocaleString()}
+              {e.user_name ?? 'system'} · {relTime(e.created_at)}
             </span>
           </div>
           {!e.undone && (

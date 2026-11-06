@@ -133,7 +133,7 @@ export function LabelPage() {
           </select>
         </>
       )}
-      <button className="btn btn-big" disabled={busy} onClick={claim}>
+      <button className="btn btn-big btn-primary" disabled={busy} onClick={claim}>
         {busy ? 'Claiming…' : 'Done'}
       </button>
       {parentOptions.length > 0 && (

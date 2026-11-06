@@ -593,3 +593,13 @@ input[type='checkbox'] { width: 18px; height: 18px; }
 
 /* 44px hit cell around a small checkbox - label clicks toggle it. */
 .check-hit { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; margin: -8px 0; cursor: pointer; }
+
+/* Form controls inherit the app font. */
+button, input, select, textarea { font-family: inherit; }
+
+/* One accent-filled primary action per screen. */
+.btn-primary { background: var(--accent); color: #111318; border-color: transparent; }
+.btn-primary:hover { background: var(--accent); }
+
+/* Area cover placeholders: lighter tint, smaller mark. */
+.ph-logo { padding: 14%; opacity: 0.5; filter: grayscale(30%); }

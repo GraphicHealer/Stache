@@ -53,7 +53,7 @@ export function Home() {
         const d = await api.get(`/api/items/${r.item.id}`).catch(() => null);
         if (d?.item?.duplicate_of) {
           const dup = await api.get(`/api/items/${d.item.duplicate_of}`).catch(() => null);
-          toast(`Looks like "${dup?.item?.name ?? 'an existing item'}" - filed anyway`);
+          toast(`Looks like "${dup?.item?.name ?? 'an existing item'}" · filed anyway`);
         }
       }, 9000);
       // Filing stays fast - ask about a barcode found in the photo after the fact.
@@ -71,7 +71,7 @@ export function Home() {
       }
       await outboxAdd({ kind: 'file-item', fields, blobs: [photo], createdAt: Date.now() });
       await refreshPending();
-      toast('Offline - queued for sync');
+      toast('Offline · queued for sync');
     }
   };
 
@@ -144,7 +144,7 @@ export function Home() {
               <Link className="still-out-more" to="/out">+{outSum.total - 6} more</Link>
             )}
           </div>
-          <span className="muted">Still out - tap to put back</span>
+          <span className="muted">Still out · tap to put back</span>
         </div>
       )}
 
