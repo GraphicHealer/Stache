@@ -98,6 +98,7 @@ export interface GridItem {
   name: string | null;
   ai_name?: string | null;
   thumb: string | null;
+  grid?: string[];
   sub?: string;
   badge?: string;
 }
@@ -194,7 +195,13 @@ export function ItemGrid({
       {items.map((i) => {
         const body = (
           <>
-            {i.thumb ? (
+            {i.grid?.length ? (
+              <div className="cover-grid">
+                {i.grid.slice(0, 4).map((u) => (
+                  <img key={u} src={u} alt="" loading="lazy" />
+                ))}
+              </div>
+            ) : i.thumb ? (
               <img src={i.thumb} alt="" loading="lazy" />
             ) : placeholderLogo ? (
               <img className="thumb-placeholder ph-logo" src="/icon.svg" alt="" />

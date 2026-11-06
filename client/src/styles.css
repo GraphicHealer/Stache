@@ -603,3 +603,7 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Area cover placeholders: lighter tint, smaller mark. */
 .ph-logo { padding: 14%; opacity: 0.5; filter: grayscale(30%); }
+
+/* Album-style cover: up to 4 recent item photos in a 2x2 tile. */
+.cover-grid { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; aspect-ratio: 1; overflow: hidden; background: var(--card); }
+.cover-grid img { width: 100%; height: 100%; object-fit: cover; }

@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { asc, eq, inArray } from 'drizzle-orm';
-import { db, queryOne } from '../db';
+import { db, query } from '../db';
 import { photos, type Photo } from '../db/schema';
 import { descendantAreaIds } from './breadcrumb';
 import { env } from '../env';
@@ -176,22 +176,30 @@ export async function coverThumbsForAreas(
     const cover = byId.get(areaId)?.coverPhotoId;
     map.set(areaId, list.find((p) => p.id === cover) ?? list[0]);
   }
-  // Automatic cover: an area with no cover shot of its own shows the newest
-  // item photo in its subtree instead of the logo placeholder.
-  for (const a of areaList) {
-    if (map.get(a.id)) continue;
-    const tree = await descendantAreaIds(a.id);
+  return map;
+}
+
+/**
+ * Album-style cover grid: up to 4 newest item photos across the area's
+ * subtree, for cards when the area has no cover shot of its own.
+ */
+export async function coverGridForAreas(areaIds: string[]): Promise<Map<string, Photo[]>> {
+  const map = new Map<string, Photo[]>();
+  for (const id of areaIds) {
+    const tree = await descendantAreaIds(id);
     const ph = tree.map(() => '?').join(',');
-    const row = queryOne<{ id: string }>(
+    const rows = query<{ id: string }>(
       `SELECT p.id FROM items i
         JOIN photos p ON p.item_id = i.id
         WHERE i.area_id IN (${ph}) AND i.hidden_at IS NULL
-        ORDER BY p.created_at DESC LIMIT 1`,
+        ORDER BY p.created_at DESC LIMIT 4`,
       ...tree,
     );
-    if (!row) continue;
-    const [photo] = await db.select().from(photos).where(eq(photos.id, row.id)).limit(1);
-    if (photo) map.set(a.id, photo);
+    if (!rows.length) continue;
+    const list = await db.select().from(photos).where(inArray(photos.id, rows.map((r) => r.id)));
+    const order = new Map(rows.map((r, i) => [r.id, i]));
+    list.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    map.set(id, list);
   }
   return map;
 }

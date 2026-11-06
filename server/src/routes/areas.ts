@@ -6,6 +6,7 @@ import { breadcrumb, descendantAreaIds, directItemCounts, subtreeItemCounts } fr
 import { recordEventTx } from '../lib/events';
 import {
   assertImage,
+  coverGridForAreas,
   coverThumbsForAreas,
   PhotoBusyError,
   photoUrl,
@@ -47,6 +48,7 @@ function areaJson(
   cover?: { thumbUrl: string; url: string } | null,
   itemCount?: number,
   ownCount?: number,
+  coverGrid?: string[],
 ) {
   return {
     id: a.id,
@@ -63,6 +65,7 @@ function areaJson(
     category: a.category,
     ...(itemCount !== undefined ? { item_count: itemCount } : {}),
     ...(ownCount !== undefined ? { own_count: ownCount } : {}),
+    ...(coverGrid?.length ? { cover_grid: coverGrid } : {}),
   };
 }
 
@@ -81,10 +84,11 @@ export async function areaRoutes(app: FastifyInstance) {
       req.user?.id ?? null,
     );
     const ownCounts = await directItemCounts(roots.map((a) => a.id), req.user?.id ?? null);
+    const grids = await coverGridForAreas(roots.filter((a) => !covers.get(a.id)).map((a) => a.id));
     return {
       areas: roots.map((a) => {
         const c = covers.get(a.id);
-        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, counts.get(a.id) ?? 0, ownCounts.get(a.id) ?? 0);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, counts.get(a.id) ?? 0, ownCounts.get(a.id) ?? 0, grids.get(a.id)?.map((p) => thumbUrl(p)));
       }),
     };
   });
@@ -172,11 +176,11 @@ export async function areaRoutes(app: FastifyInstance) {
     const covers = await coverThumbsForAreas(subs);
     const subCounts = await subtreeItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
     const ownCounts = await directItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
+    const subGrids = await coverGridForAreas(subs.filter((a) => !covers.get(a.id)).map((a) => a.id));
     const thumbs = await thumbsForItems(contents.map((i) => i.id));
-    // Same auto-cover as the Browse cards: explicit cover > newest area photo
-    // > newest item photo in the subtree (the helper handles the fallback).
-    const coverMap = await coverThumbsForAreas([{ id: area.id, coverPhotoId: area.coverPhotoId }]);
-    const cover = coverMap.get(area.id) ?? null;
+    // The page header only shows a real cover shot - a placeholder signals
+    // "no cover, you can add one" (the album grid is for cards, not here).
+    const cover = areaPhotos.find((p) => p.id === area.coverPhotoId) ?? areaPhotos[0] ?? null;
     const areaNames = new Map(subs.map((a) => [a.id, a.name]));
     const itemAreaName = async (areaId: string) => {
       if (areaId === id) return null;
@@ -202,7 +206,7 @@ export async function areaRoutes(app: FastifyInstance) {
       deep,
       subareas: subs.map((a) => {
         const c = covers.get(a.id);
-        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, subCounts.get(a.id) ?? 0, ownCounts.get(a.id) ?? 0);
+        return areaJson(a, c ? { thumbUrl: thumbUrl(c), url: photoUrl(c) } : null, subCounts.get(a.id) ?? 0, ownCounts.get(a.id) ?? 0, subGrids.get(a.id)?.map((p) => thumbUrl(p)));
       }),
       items: await Promise.all(contents.map(async (i) => {
         const t = thumbs.get(i.id);
