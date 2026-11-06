@@ -81,7 +81,7 @@ export function LabelsPage() {
     setBusy(true);
     try {
       const r = await api.post('/api/labels/batch', { count });
-      setSel(new Set(r.labels.map((l: any) => l.code)));
+      setSel(new Set(r.labels));
       setTab('unclaimed');
       await render(r.labels);
       qc.invalidateQueries({ queryKey: ['labels'] });
