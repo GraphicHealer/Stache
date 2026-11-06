@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import loadingWhite from '../assets/loading-white.svg';
 import { AreaPicker } from './Bits';
 
 interface Props {
@@ -125,6 +126,7 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPick
       {formats.includes('qr_code') && (
         <div className="scan-reticle" aria-hidden>
           <div className="scan-window">
+            <img className="scan-logo" src={loadingWhite} alt="" />
             <span className="scan-corner tl" /><span className="scan-corner tr" />
             <span className="scan-corner bl" /><span className="scan-corner br" />
             <span className="scan-sweep" />

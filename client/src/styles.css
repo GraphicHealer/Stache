@@ -685,3 +685,9 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Animated logo loader - centers inside its container. */
 .loader { display: flex; align-items: center; justify-content: center; padding: 24px 0; }
+
+/* Small translucent logo pulsing in the center of the QR scan window. */
+.scan-logo {
+  position: absolute; inset: 0; margin: auto;
+  width: 38%; height: 38%; opacity: .35;
+}
