@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu, PrintDialog, usePrompt } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu, PrintDialog, usePrompt, Loader } from '../components/Bits';
 
 export function AreaPage() {
   const { id = '' } = useParams();
@@ -54,7 +54,7 @@ export function AreaPage() {
   const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
   const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
 
-  if (isLoading) return <div className="page"><p className="muted">Loading…</p></div>;
+  if (isLoading) return <div className="page"><Loader /></div>;
   if (error || !data) return <div className="page"><p className="muted">Area not found.</p></div>;
 
   const { area, breadcrumb, subareas, items, photos } = data;

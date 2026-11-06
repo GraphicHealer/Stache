@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
-import { Icon, ItemGrid, PrintDialog, usePrompt } from '../components/Bits';
+import { Icon, ItemGrid, PrintDialog, usePrompt, Loader } from '../components/Bits';
 
 export function BrowsePage() {
   const qc = useQueryClient();
@@ -97,7 +97,7 @@ export function BrowsePage() {
           <button className="btn btn-ghost" onClick={() => setSelecting(new Set())}>Done</button>
         </div>
       )}
-      {isLoading && <p className="muted">Loading…</p>}
+      {isLoading && <Loader />}
       <ItemGrid
         items={areas.map((a: any) => ({
           id: a.id,

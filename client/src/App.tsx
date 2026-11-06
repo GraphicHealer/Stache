@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { parseScan } from './scan';
 import { useApp } from './context';
-import { ModelBanner } from './components/Bits';
+import { ModelBanner, Loader } from './components/Bits';
 import { Home } from './pages/Home';
 import { LabelPage } from './pages/LabelPage';
 import { AreaPage } from './pages/AreaPage';
@@ -167,7 +167,7 @@ export function App() {
   useWedgeScan();
   const { pending, user, currentArea, setCurrentArea, stagedPhoto } = useApp();
   const { pathname } = useLocation();
-  if (user === undefined) return <div className="page"><p className="muted">…</p></div>;
+  if (user === undefined) return <div className="page"><Loader tone="amber" /></div>;
   if (user === null) return <LoginPage />;
   // Print views render bare - no shell, nav, or page chrome to leak into output.
   if (pathname.startsWith('/print/')) return <PrintLabels />;

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
+import { Loader } from '../components/Bits';
 
 /**
  * The "clean-up pass" - AI-flagged duplicates, unnamed photos, and items
@@ -16,7 +17,7 @@ export function ReviewPage() {
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['review-queue'] });
 
-  if (isLoading) return <div className="page"><p className="muted">Loading…</p></div>;
+  if (isLoading) return <div className="page"><Loader /></div>;
   const { duplicates = [], incomplete = [], failed_ai = [] } = data ?? {};
   const empty = !duplicates.length && !incomplete.length && !failed_ai.length;
 

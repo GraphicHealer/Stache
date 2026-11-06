@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
-import { Icon } from '../components/Bits';
+import { Icon, Loader } from '../components/Bits';
 
 interface InboxItem {
   id: string;
@@ -81,7 +81,7 @@ export function InboxPage() {
         <h1>Inbox</h1>
         <Link to="/review" className="btn btn-ghost">Review</Link>
       </div>
-      {isLoading && <p className="muted">Loading…</p>}
+      {isLoading && <Loader />}
       {!isLoading && !current && <p className="muted">All clear. Nothing needs naming.</p>}
 
       {current && (

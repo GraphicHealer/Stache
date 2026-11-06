@@ -1,5 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
+import loadingAmber from '../assets/loading-amber.svg';
+import loadingBlack from '../assets/loading-black.svg';
+import loadingWhite from '../assets/loading-white.svg';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
@@ -659,6 +662,31 @@ export function TagEditor({
         }}
         onBlur={() => add(draft)}
       />
+    </div>
+  );
+}
+
+/** Animated logo loader - theme-aware (white on dark, black on light);
+ *  tone="amber" for brand moments like app boot. */
+export function Loader({
+  tone = 'auto',
+  size = 48,
+  label = 'Loading',
+}: {
+  tone?: 'auto' | 'amber';
+  size?: number;
+  label?: string;
+}) {
+  return (
+    <div className="loader" role="status" aria-label={label}>
+      {tone === 'amber' ? (
+        <img src={loadingAmber} width={size} height={size} alt="" />
+      ) : (
+        <picture>
+          <source srcSet={loadingBlack} media="(prefers-color-scheme: light)" />
+          <img src={loadingWhite} width={size} height={size} alt="" />
+        </picture>
+      )}
     </div>
   );
 }

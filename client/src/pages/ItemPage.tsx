@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu, TagEditor, usePrompt } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu, TagEditor, usePrompt, Loader } from '../components/Bits';
 
 import { describeEvent } from '../lib/events';
 
@@ -72,7 +72,7 @@ export function ItemPage() {
     }
   }, [data]);
 
-  if (isLoading) return <div className="page"><p className="muted">Loading…</p></div>;
+  if (isLoading) return <div className="page"><Loader /></div>;
   if (error || !data) return <div className="page"><p className="muted">Item not found.</p></div>;
 
   const { item, breadcrumb, photos } = data;

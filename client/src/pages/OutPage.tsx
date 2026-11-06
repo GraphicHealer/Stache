@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
-import { KebabMenu, usePrompt } from '../components/Bits';
+import { KebabMenu, usePrompt, Loader } from '../components/Bits';
 
 interface OutItem {
   id: string;
@@ -124,7 +124,7 @@ export function OutPage() {
   return (
     <div className="page">
       <h1>Out</h1>
-      {!data && <p className="muted">Loading…</p>}
+      {!data && <Loader />}
       {data && total === 0 && <p className="muted">Everything's where it belongs.</p>}
       {!!total && (
         <div className="row">

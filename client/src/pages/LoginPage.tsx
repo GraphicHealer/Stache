@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useApp } from '../context';
+import { Loader } from '../components/Bits';
 
 /**
  * Sign in, or create the first household account when no users exist yet
@@ -43,7 +44,7 @@ export function LoginPage() {
     }
   };
 
-  if (setup === null) return <div className="page"><p className="muted">…</p></div>;
+  if (setup === null) return <div className="page"><Loader tone="amber" /></div>;
 
   return (
     <div className="page login">
