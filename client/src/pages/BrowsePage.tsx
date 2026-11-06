@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
-import { Icon, ItemGrid, PrintDialog } from '../components/Bits';
+import { Icon, ItemGrid, PrintDialog, usePrompt } from '../components/Bits';
 
 export function BrowsePage() {
   const qc = useQueryClient();
   const { toast } = useApp();
+  const [askPrompt, promptUi] = usePrompt();
   const { data, isLoading } = useQuery({ queryKey: ['areas'], queryFn: () => api.get('/api/areas') });
   const { data: printerData } = useQuery({ queryKey: ['printers'], queryFn: () => api.get('/api/printers') });
   const { data: templatesData } = useQuery({ queryKey: ['sheet-templates'], queryFn: () => api.get('/api/sheet-templates') });
@@ -27,7 +28,7 @@ export function BrowsePage() {
   const labelByCode = new Map((labelsData?.labels ?? []).map((l: any) => [l.code, l]));
 
   const addArea = async () => {
-    const name = window.prompt('New area name? (optional)') ?? null;
+    const name = await askPrompt('New area name');
     if (name === null) return;
     const r = await api.post('/api/areas', { name: name || null }).catch((e) => (toast(e.message), null));
     if (r?.area) qc.invalidateQueries({ queryKey: ['areas'] });
@@ -45,7 +46,7 @@ export function BrowsePage() {
     ? areas.filter((a: any) => selecting.has(a.id) && a.label_code).map((a: any) => a.label_code)
     : [];
 
-  // Bins without a code get one minted + assigned, like the bin page does.
+  // Areas without a code get one minted + assigned, like the area page does.
   const [minting, setMinting] = useState(false);
   const openPrint = async () => {
     setMinting(true);
@@ -111,12 +112,12 @@ export function BrowsePage() {
         onToggle={toggle}
       />
       {!active && (
-        <p className="muted">Long-press a bin to select, or add an area / scan an unclaimed QR label.</p>
+        <p className="muted">Long-press an area to select, or add an area / scan an unclaimed QR label.</p>
       )}
       {moveDlg && (
         <div className="dlg-overlay" onClick={() => setMoveDlg(false)}>
           <div className="dlg" role="dialog" aria-label="Move areas" onClick={(e) => e.stopPropagation()}>
-            <h2>Move {selecting.size} bin{selecting.size === 1 ? '' : 's'} into…</h2>
+            <h2>Move {selecting.size} area{selecting.size === 1 ? '' : 's'} into…</h2>
             <select
               className="input"
               value={moveTarget}
@@ -164,6 +165,7 @@ export function BrowsePage() {
           return { code, name: l?.area_name ?? a?.name ?? null, path: l?.area_path ?? null, category: l?.area_category ?? a?.category ?? null };
         })}
       />
+      {promptUi}
     </div>
   );
 }

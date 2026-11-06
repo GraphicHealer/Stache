@@ -49,4 +49,8 @@ export function queryOne<T>(text: string, ...params: unknown[]): T | undefined {
   return sqlite.prepare(text).get(...(params as never[])) as T | undefined;
 }
 
+export function run(text: string, ...params: unknown[]) {
+  return sqlite.prepare(text).run(...(params as never[]));
+}
+
 export const placeholders = (n: number) => Array.from({ length: n }, () => '?').join(',');

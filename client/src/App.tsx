@@ -100,7 +100,7 @@ const NAV = [
 // Secondary destinations behind "More" - useful but not everyday taps.
 const MORE = [
   {
-    to: '/out', label: 'Out & missing',
+    to: '/out', label: 'Out',
     icon: <svg {...ICON_PROPS}><path d="M12 3v10" /><path d="m8.5 6.5 3.5-3.5 3.5 3.5" /><path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" /></svg>,
   },
   {
@@ -112,7 +112,7 @@ const MORE = [
     icon: <svg {...ICON_PROPS}><path d="M20.59 13.41 13.41 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.83z" /><circle cx="7" cy="7" r="1.5" /></svg>,
   },
   {
-    to: '/trash', label: 'Trash',
+    to: '/trash', label: 'Recently deleted',
     icon: <svg {...ICON_PROPS}><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>,
   },
   {
@@ -180,7 +180,7 @@ export function App() {
               <button className="btn btn-small btn-ghost" onClick={() => setCurrentArea(null)}>Clear</button>
             </>
           ) : pathname === '/' ? (
-            <span className="muted">
+            <span className="muted header-hint">
               {stagedPhoto ? 'Photo staged - scan where it went' : 'Scan an area label to start filing'}
             </span>
           ) : null}

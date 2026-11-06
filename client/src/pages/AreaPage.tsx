@@ -6,13 +6,14 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu, PrintDialog } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu, PrintDialog, usePrompt } from '../components/Bits';
 
 export function AreaPage() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
   const { setCurrentArea, toast } = useApp();
+  const [askPrompt, promptUi] = usePrompt();
   const [selecting, setSelecting] = useState<Set<string>>(new Set());
   // Stocktake mode: set of item ids confirmed physically present. Persisted
   // to localStorage so a distracted walk-away doesn't lose the ticks.
@@ -151,14 +152,14 @@ export function AreaPage() {
   };
 
   const archive = async () => {
-    if (!window.confirm('Hide this area? Its label will still resolve. Undoable.')) return;
     const r = await api.del(`/api/areas/${id}`);
-    toast('Area hidden', r.event_id);
+    toast('Area deleted', r.event_id);
     nav(-1);
   };
 
   const addSubarea = async () => {
-    const name = window.prompt('Sub-area name (optional)') ?? '';
+    const name = await askPrompt('Sub-area name');
+    if (name === null) return;
     await api.post('/api/areas', { parent_id: id, name: name || null }).then(() => refresh());
   };
 
@@ -260,7 +261,7 @@ export function AreaPage() {
               ? [{ label: 'Stocktake', onSelect: startStocktake }]
               : []),
             'sep',
-            { label: 'Hide', icon: 'trash', danger: true, onSelect: archive },
+            { label: 'Delete', icon: 'trash', danger: true, onSelect: archive },
           ]}
         />
       </div>
@@ -298,11 +299,11 @@ export function AreaPage() {
                 onClick={async () => {
                   const r = await api.get(`/api/areas/${id}/suggest-tags`).catch(() => null);
                   const sug: string[] = r?.suggestions ?? [];
-                  if (!sug.length) return toast('No suggestions from this bin\'s items');
+                  if (!sug.length) return toast("No suggestions from this area's items");
                   const cur = editForm.tags.split(',').map((t) => t.trim()).filter(Boolean);
                   setEditForm({ ...editForm, tags: [...new Set([...cur, ...sug])].join(', ') });
                 }}
-                title="Suggest tags from items in this bin"
+                title="Suggest tags from items in this area"
               >
                 Suggest
               </button>
@@ -371,7 +372,6 @@ export function AreaPage() {
           <button
             className="btn danger"
             onClick={async () => {
-              if (!window.confirm(`Hide ${selecting.size} item(s)? Undoable.`)) return;
               const ids = [...selecting];
               let failed = 0;
               let lastEvent: string | undefined;
@@ -456,10 +456,11 @@ export function AreaPage() {
         <Scanner
           onResult={onScan}
           onClose={() => setScanFor(null)}
-          hint={scanFor === 'merge' ? 'Scan (or pick) the bin to merge into' : scanFor === 'move-area' ? 'Scan the new parent area' : 'Scan destination area'}
+          hint={scanFor === 'merge' ? 'Scan (or pick) the area to merge into' : scanFor === 'move-area' ? 'Scan the new parent area' : 'Scan destination area'}
           onPickBin={onPickBin}
         />
       )}
+      {promptUi}
     </div>
   );
 }

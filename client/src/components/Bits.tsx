@@ -234,14 +234,14 @@ export function ItemGrid({
   );
 }
 
-interface AreaRow {
+export interface AreaRow {
   id: string;
   name: string | null;
   parent_id: string | null;
 }
 
 /** "Hall closet / Top shelf" paths for every live area, sorted for scanning. */
-function areaPaths(list: AreaRow[]) {
+export function areaPaths(list: AreaRow[]) {
   const byId = new Map(list.map((a) => [a.id, a]));
   const path = (a: AreaRow): string => {
     const parts = [a.name ?? 'Unnamed area'];
@@ -282,6 +282,12 @@ export function KebabMenu({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [open]);
   return (
     <div className={`kebab${className ? ` ${className}` : ''}`}>
       <IconBtn
@@ -320,7 +326,7 @@ export function KebabMenu({
 }
 
 /**
- * Manual alternative to scanning a label: pick a bin from the location
+ * Manual alternative to scanning a label: pick an area from the location
  * tree (or create a new top-level one - no QR required).
  */
 export function AreaPicker({
@@ -332,6 +338,7 @@ export function AreaPicker({
 }) {
   const qc = useQueryClient();
   const { toast } = useApp();
+  const [askPrompt, promptUi] = usePrompt();
   const { data } = useQuery({
     queryKey: ['areas', 'all'],
     queryFn: () => api.get('/api/areas?all=1'),
@@ -339,7 +346,7 @@ export function AreaPicker({
   const options = areaPaths((data?.areas ?? []) as AreaRow[]);
 
   const createArea = async () => {
-    const name = window.prompt('New bin name? (optional)') ?? null;
+    const name = await askPrompt('New area name');
     if (name === null) return;
     const r = await api.post('/api/areas', { name: name || null }).catch((e) => (toast(e.message), null));
     if (!r?.area) return;
@@ -349,10 +356,10 @@ export function AreaPicker({
 
   return (
     <div className="more-overlay" onClick={onClose}>
-      <div className="picker-menu" role="dialog" aria-label="Pick a bin" onClick={(e) => e.stopPropagation()}>
+      <div className="picker-menu" role="dialog" aria-label="Pick an area" onClick={(e) => e.stopPropagation()}>
         <button className="more-link" onClick={createArea}>
           <Icon name="plus" />
-          <span>New bin…</span>
+          <span>New area…</span>
         </button>
         {options.map((o) => (
           <button key={o.id} className="more-link" onClick={() => onPick(o.id)}>
@@ -361,7 +368,8 @@ export function AreaPicker({
           </button>
         ))}
         {!data && <p className="muted picker-empty">Loading…</p>}
-        {data && !options.length && <p className="muted picker-empty">No bins yet - make one above.</p>}
+        {data && !options.length && <p className="muted picker-empty">No areas yet - make one above.</p>}
+        {promptUi}
       </div>
     </div>
   );
@@ -501,4 +509,94 @@ export function ModelBanner() {
       </div>
     </Link>
   );
+}
+
+/** In-app confirm sheet - replaces window.confirm for non-undoable actions.
+ *  const [askConfirm, confirmUi] = useConfirm();  ... render {confirmUi} once. */
+export function useConfirm(): [
+  ask: (msg: string, okLabel?: string) => Promise<boolean>,
+  ui: React.ReactNode,
+] {
+  const [req, setReq] = useState<{ msg: string; ok: string; resolve: (v: boolean) => void } | null>(null);
+  const ask = (msg: string, okLabel = 'Confirm') =>
+    new Promise<boolean>((resolve) => setReq({ msg, ok: okLabel, resolve }));
+  const done = (v: boolean) => {
+    req?.resolve(v);
+    setReq(null);
+  };
+  const ui = req && (
+    <div className="dlg-overlay" onClick={() => done(false)}>
+      <div
+        className="dlg"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={req.msg}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.key === 'Escape' && done(false)}
+      >
+        <p>{req.msg}</p>
+        <div className="row">
+          <button className="btn" onClick={() => done(true)} autoFocus>{req.ok}</button>
+          <button className="btn" onClick={() => done(false)}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+  return [ask, ui];
+}
+
+/** In-app input sheet - replaces window.prompt for collecting short text.
+ *  const [askPrompt, promptUi] = usePrompt();  ... render {promptUi} once. */
+export function usePrompt(): [
+  ask: (title: string, opts?: { placeholder?: string; defaultValue?: string; allowEmpty?: boolean }) => Promise<string | null>,
+  ui: React.ReactNode,
+] {
+  const [req, setReq] = useState<
+    { title: string; placeholder?: string; allowEmpty?: boolean; resolve: (v: string | null) => void } | null
+  >(null);
+  const [val, setVal] = useState('');
+  const ask = (
+    title: string,
+    opts: { placeholder?: string; defaultValue?: string; allowEmpty?: boolean } = {},
+  ) => {
+    setVal(opts.defaultValue ?? '');
+    return new Promise<string | null>((resolve) => setReq({ title, ...opts, resolve }));
+  };
+  const done = (v: string | null) => {
+    req?.resolve(v);
+    setReq(null);
+  };
+  const ui = req && (
+    <div className="dlg-overlay" onClick={() => done(null)}>
+      <div
+        className="dlg"
+        role="dialog"
+        aria-modal="true"
+        aria-label={req.title}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.key === 'Escape' && done(null)}
+      >
+        <label className="muted">{req.title}</label>
+        <input
+          className="input"
+          autoFocus
+          value={val}
+          placeholder={req.placeholder}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') done(val.trim());
+            if (e.key === 'Escape') done(null);
+          }}
+        />
+        <div className="row">
+          <button className="btn" onClick={() => done(val.trim())} disabled={!req.allowEmpty && !val.trim()}>
+            OK
+          </button>
+          <button className="btn" onClick={() => done(null)}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+  return [ask, ui];
 }

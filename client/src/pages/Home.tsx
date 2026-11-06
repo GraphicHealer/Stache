@@ -131,6 +131,7 @@ export function Home() {
 
   return (
     <div className="home">
+      <h1 className="sr-only">Scan</h1>
       {outSum && outSum.total > 0 && (
         <div className="still-out">
           <div className="still-out-row">

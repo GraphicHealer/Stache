@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
 import { downscale } from '../image';
-import { CaptureInput, Icon, IconBtn, ItemGrid } from '../components/Bits';
+import { CaptureInput, Icon, IconBtn, ItemGrid, areaPaths, type AreaRow } from '../components/Bits';
 
 const path = (crumb: { name: string | null }[]) =>
   (crumb ?? []).map((c) => c.name ?? '?').join(' › ');
@@ -27,9 +27,21 @@ export function SearchPage() {
   const activeFilters = [status, areaId, priv, tag].filter(Boolean).length;
 
   const { data: areaList } = useQuery({
-    queryKey: ['areas'],
-    queryFn: () => api.get('/api/areas'),
+    queryKey: ['areas', 'all'],
+    queryFn: () => api.get('/api/areas?all=1'),
   });
+  const areaOptions = areaPaths((areaList?.areas ?? []) as AreaRow[]);
+
+  // Search-as-you-type: apply ?q= 250ms after typing stops (filters kept).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (q.trim() === query) return;
+      const next = new URLSearchParams(params);
+      q.trim() ? next.set('q', q.trim()) : next.delete('q');
+      setParams(next, { replace: true });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
 
   const filterParams = () => {
     const p = new URLSearchParams();
@@ -89,6 +101,7 @@ export function SearchPage() {
 
   return (
     <div className="page">
+      <h1 className="sr-only">Find</h1>
       <form onSubmit={submit} className="row">
         <input
           className="input"
@@ -130,8 +143,8 @@ export function SearchPage() {
             onChange={(e) => setFilter('area_id', e.target.value)}
           >
             <option value="">Any area</option>
-            {(areaList?.areas ?? []).map((a: any) => (
-              <option key={a.id} value={a.id}>{a.name ?? 'unnamed'}</option>
+            {areaOptions.map((o) => (
+              <option key={o.id} value={o.id}>{o.label}</option>
             ))}
           </select>
           <select
@@ -167,6 +180,9 @@ export function SearchPage() {
         </p>
       )}
       {isFetching && <p className="muted">Searching…</p>}
+      {data && !data.items?.length && !data.areas?.length && query && !isFetching && (
+        <p className="muted">No matches for "{query}"</p>
+      )}
       {data?.areas?.length > 0 && (
         <>
           <h2>Areas</h2>

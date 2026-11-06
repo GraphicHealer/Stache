@@ -8,7 +8,7 @@ interface Props {
   /** Symbologies to detect. Defaults to QR only. */
   formats?: string[];
   /**
-   * Optional manual escape hatch: shows a "pick a bin" button that opens the
+   * Optional manual escape hatch: shows a "pick an area" button that opens the
    * area tree instead of scanning a label. The callback gets the area id.
    */
   onPickBin?: (areaId: string) => void;
@@ -86,9 +86,11 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPick
       } else if (qrOnly) {
         try {
           const { BrowserQRCodeReader } = await import('@zxing/browser');
-          controls = (await new BrowserQRCodeReader().decodeFromVideoDevice(
+          controls = (await new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 200 }).decodeFromVideoDevice(
             undefined,
             video,
+            // Second arg is the per-frame error - NotFound on frames with no
+            // code, ignored quietly (keeps the console and battery calm).
             (res) => res && fire(res.getText()),
           )) as ScannerControls;
         } catch {
@@ -97,7 +99,7 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPick
       } else {
         try {
           const { BrowserMultiFormatReader } = await import('@zxing/browser');
-          controls = (await new BrowserMultiFormatReader().decodeFromVideoDevice(
+          controls = (await new BrowserMultiFormatReader(undefined, { delayBetweenScanAttempts: 200 }).decodeFromVideoDevice(
             undefined,
             video,
             (res) => res && fire(res.getText()),
@@ -124,7 +126,7 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPick
       <div className="scanner-actions">
         {onPickBin && (
           <button className="btn" onClick={() => setPicking(true)}>
-            Pick a bin
+            Pick an area
           </button>
         )}
         <button className="btn" onClick={onClose}>

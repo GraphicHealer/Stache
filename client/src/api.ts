@@ -17,6 +17,8 @@ async function req(path: string, init?: RequestInit) {
     } catch {
       /* non-json error */
     }
+    // 5xx responses can carry internals (sqlite errors etc.) - never show raw.
+    if (res.status >= 500) msg = 'Something went wrong on the server';
     throw new ApiError(res.status, msg);
   }
   return res.json();

@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import { useApp } from '../../context';
-import { IconBtn } from '../../components/Bits';
+import { IconBtn, useConfirm } from '../../components/Bits';
 import { SettingsShell, copy } from './SettingsShell';
 
 /** Connections & Integrations: shared MCP, personal AI connections, API tokens. */
 export function ConnectionsSettings() {
   const { toast, user } = useApp();
+  const [askConfirm, confirmUi] = useConfirm();
   const qc = useQueryClient();
   const { data: mcp } = useQuery({ queryKey: ['settings-mcp'], queryFn: () => api.get('/api/settings/mcp').catch(() => null) });
   const { data: apiTokens } = useQuery({ queryKey: ['api-tokens'], queryFn: () => api.get('/api/settings/api-tokens').catch(() => null) });
@@ -78,7 +79,7 @@ export function ConnectionsSettings() {
                     className="btn-ghost"
                     label={`Revoke ${c.name}`}
                     onClick={async () => {
-                      if (!confirm(`Revoke "${c.name}"? The AI assistant loses access immediately.`)) return;
+                      if (!(await askConfirm(`Revoke "${c.name}"? The AI assistant loses access immediately.`, 'Revoke'))) return;
                       await api.del(`/api/me/mcp-connections/${c.id}`);
                       refetchMeConns();
                       toast('Revoked');
@@ -190,7 +191,7 @@ export function ConnectionsSettings() {
                   className="btn-ghost"
                   label={`Revoke ${c.name}`}
                   onClick={async () => {
-                    if (!confirm(`Revoke "${c.name}"? This connection may be used by other household members or integrations - they all lose access immediately.`)) return;
+                    if (!(await askConfirm(`Revoke "${c.name}"? This connection may be used by other household members or integrations - they all lose access immediately.`, 'Revoke'))) return;
                     const r = await api.del(`/api/settings/mcp/${c.id}`).catch((e) => (toast(e.message), null));
                     if (!r) return;
                     qc.invalidateQueries({ queryKey: ['settings-mcp'] });
@@ -322,6 +323,7 @@ export function ConnectionsSettings() {
           )}
         </>
       )}
+      {confirmUi}
     </SettingsShell>
   );
 }

@@ -5,3 +5,6 @@ data/
 .env
 .DS_Store
 dev-dist/
+
+# local audit evidence - never commit
+review/

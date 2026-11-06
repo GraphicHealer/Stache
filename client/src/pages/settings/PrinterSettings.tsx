@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import { useApp } from '../../context';
 import { dymoPrintLabels, dymoProbe } from '../../dymo';
-import { IconBtn } from '../../components/Bits';
+import { IconBtn, useConfirm } from '../../components/Bits';
 import { PAGE_SIZES, resolveSheet, type SheetChoice, type SheetPreset, type SheetSpec } from '../../lib/sheets';
 import { SettingsShell } from './SettingsShell';
 
@@ -179,6 +179,7 @@ const sheetChoice = (f: SheetForm): SheetChoice =>
 export function PrinterSettings() {
   const qc = useQueryClient();
   const { toast } = useApp();
+  const [askConfirm, confirmUi] = useConfirm();
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -429,7 +430,7 @@ export function PrinterSettings() {
                     className="btn-small btn-ghost"
                     label={`Remove ${p.name}`}
                     onClick={async () => {
-                      if (!window.confirm(`Delete printer "${p.name}"?`)) return;
+                      if (!(await askConfirm(`Delete printer "${p.name}"?`, 'Delete'))) return;
                       const r = await api.del(`/api/printers/${p.id}`).catch((e) => (toast(e.message), null));
                       if (!r) return;
                       refetchPrinters();
@@ -668,6 +669,7 @@ export function PrinterSettings() {
         <button className="btn" onClick={() => setAdding(true)}>+ Add printer</button>
       )}
       {progress && <p className="muted">{progress}</p>}
+      {confirmUi}
     </SettingsShell>
   );
 }

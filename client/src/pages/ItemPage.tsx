@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu, usePrompt } from '../components/Bits';
 
 import { describeEvent } from '../lib/events';
 
@@ -15,6 +15,7 @@ export function ItemPage() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const { toast, user } = useApp();
+  const [askPrompt, promptUi] = usePrompt();
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -82,6 +83,11 @@ export function ItemPage() {
   const patch = async (body: Record<string, unknown>, message?: string) => {
     try {
       const r = await api.patch(`/api/items/${id}`, body);
+      // Apply the patch to cached data immediately - the title shouldn't
+      // lag behind the "Saved" toast while the refetch lands.
+      qc.setQueryData(['item', id], (old: any) =>
+        old?.item ? { ...old, item: { ...old.item, ...body } } : old,
+      );
       toast(message ?? 'Saved', r.event_ids?.[0]);
       refresh();
     } catch (e) {
@@ -148,9 +154,8 @@ export function ItemPage() {
   };
 
   const hide = async () => {
-    if (!window.confirm('Hide this item? Undoable.')) return;
     const r = await api.del(`/api/items/${id}`);
-    toast('Hidden', r.event_id);
+    toast('Deleted', r.event_id);
     nav(-1);
   };
 
@@ -266,7 +271,7 @@ export function ItemPage() {
       </div>
 
       <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-        <h1 style={{ margin: 0 }}>{item.name ?? 'unnamed item'}</h1>
+        <h1 style={{ margin: 0 }}>{item.name ?? 'unnamed'}</h1>
         <IconBtn
           icon="pencil"
           label="Edit item"
@@ -394,6 +399,15 @@ export function ItemPage() {
         <div className="suggest">
           {item.ai_status === 'pending' ? (
             <p className="muted">AI is looking at the photo…</p>
+          ) : item.name ? (
+            // Named item: the AI suggestion stays a one-liner - it doesn't
+            // compete with confirmed info.
+            <p className="muted">
+              AI suggests{item.ai_name ? <>: <b>{item.ai_name}</b></> : ''}
+              {(item.ai_tags ?? []).map((t: string) => (
+                <span key={t} className="badge">{t}</span>
+              ))}
+            </p>
           ) : (
             <>
               <p className="muted">AI suggests</p>
@@ -402,37 +416,41 @@ export function ItemPage() {
               {(item.ai_tags ?? []).map((t: string) => (
                 <span key={t} className="badge">{t}</span>
               ))}
-              <div className="row">
-                <button
-                  className="btn"
-                  onClick={() =>
-                    patch(
-                      {
-                        // Applies the suggestion into ordinary fields (name only
-                        // when the item is unnamed - yours always wins), then
-                        // clears the suggestion so it stops being "AI".
-                        ...(item.name ? {} : { name: item.ai_name }),
-                        tags: [...new Set([...(item.tags ?? []), ...(item.ai_tags ?? [])])],
-                        ai_name: null,
-                        ai_description: null,
-                        ai_tags: [],
-                      },
-                      'Applied',
-                    )
-                  }
-                >
-                  Apply
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() =>
-                    patch({ ai_name: null, ai_description: null, ai_tags: [] }, 'Dismissed')
-                  }
-                >
-                  Dismiss
-                </button>
-              </div>
             </>
+          )}
+          {item.ai_status === 'done' && !!(item.ai_name || item.ai_description || (item.ai_tags ?? []).length) && (
+            <div className="row">
+              <button
+                className="btn"
+                onClick={() =>
+                  patch(
+                    {
+                      // Applies the suggestion into ordinary fields (name only
+                      // when the item is unnamed - yours always wins), then
+                      // clears the suggestion so it stops being "AI".
+                      ...(item.name ? {} : { name: item.ai_name }),
+                      tags: [...new Map(
+                        [...(item.tags ?? []), ...(item.ai_tags ?? [])].map((t: string) => [t.toLowerCase(), t]),
+                      ).values()],
+                      ai_name: null,
+                      ai_description: null,
+                      ai_tags: [],
+                    },
+                    'Applied',
+                  )
+                }
+              >
+                Apply
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() =>
+                  patch({ ai_name: null, ai_description: null, ai_tags: [] }, 'Dismissed')
+                }
+              >
+                Dismiss
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -476,9 +494,9 @@ export function ItemPage() {
             <button className="btn" onClick={() => patch({ status: 'out' }, 'Marked out')}>Out</button>
             <button
               className="btn"
-              onClick={() => {
-                const to = window.prompt('Lent to whom?');
-                if (to !== null) patch({ status: 'lent', lent_to: to || null }, `Lent to ${to || '?'}`);
+              onClick={async () => {
+                const to = await askPrompt('Lent to whom?');
+                if (to !== null) patch({ status: 'lent', lent_to: to }, `Lent to ${to}`);
               }}
             >
               Lend…
@@ -489,10 +507,15 @@ export function ItemPage() {
         {item.status === 'out' && <span className="badge warn">out</span>}
       </div>
 
-      {(areaHint?.suggestions ?? []).length > 0 && item.status === 'home' && (
+      {/* Skip suggestions the item already lives inside (its area or an ancestor). */}
+      {(areaHint?.suggestions ?? []).filter(
+        (s: any) => !(breadcrumb ?? []).some((c: any) => c.id === s.area_id),
+      ).length > 0 && item.status === 'home' && (
         <div className="suggest">
           <p className="muted">Similar things live in:</p>
-          {areaHint.suggestions.map((s: any) => (
+          {areaHint.suggestions.filter(
+            (s: any) => !(breadcrumb ?? []).some((c: any) => c.id === s.area_id),
+          ).map((s: any) => (
             <button
               key={s.area_id}
               className="btn"
@@ -683,7 +706,7 @@ export function ItemPage() {
               onSelect: startSplit,
             },
             'sep',
-            { label: 'Hide', icon: 'trash', danger: true, onSelect: hide },
+            { label: 'Delete', icon: 'trash', danger: true, onSelect: hide },
           ]}
         />
       </div>
@@ -757,6 +780,7 @@ export function ItemPage() {
       {scanning && (
         <Scanner onResult={onScan} onClose={() => setScanning(false)} hint="Scan destination area" onPickBin={onPickBin} />
       )}
+      {promptUi}
     </div>
   );
 }

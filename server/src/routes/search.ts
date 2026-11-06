@@ -120,7 +120,7 @@ export async function searchRoutes(app: FastifyInstance) {
     if (mlHealthy()) {
       try {
         const vec = await embedText(q2);
-        const similar = (await nearestByVector(vec, 12, uid)).filter((n) => 1 - n.dist > 0.22);
+        const similar = (await nearestByVector(vec, 12, uid)).filter((n) => 1 - n.dist > 0.3);
         const seen = new Set(itemIds);
         itemIds = itemIds.concat(similar.filter((n) => !seen.has(n.id)).map((n) => n.id));
       } catch {

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
-import { db, query, placeholders } from '../db';
+import { db, query, placeholders, run } from '../db';
 import { env } from '../env';
 import { areas, items, itemLinks, itemReceipts, photos, user } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
@@ -716,7 +716,7 @@ export async function itemRoutes(app: FastifyInstance) {
         fs.rm(path.join(env.dataDir, 'photos', f!), { force: true }).catch(() => {});
       }
     }
-    query('DELETE FROM photo_embeddings WHERE item_id = ?', id);
+    run('DELETE FROM photo_embeddings WHERE item_id = ?', id);
     return { ok: true };
   });
 

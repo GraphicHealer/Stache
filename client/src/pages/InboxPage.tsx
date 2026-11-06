@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
@@ -26,7 +26,21 @@ export function InboxPage() {
   const [done, setDone] = useState<Set<string>>(new Set());
   const [later, setLater] = useState<Set<string>>(new Set());
 
-  const { data, isLoading } = useQuery({ queryKey: ['inbox'], queryFn: () => api.get('/api/inbox') });
+  // AI recognition lands a few seconds after filing - poll while an item is
+  // still waiting for a verdict (bounded: ~2 min, so AI-off never polls forever).
+  const pollsLeft = useRef(40);
+  const { data, isLoading } = useQuery({
+    queryKey: ['inbox'],
+    queryFn: () => api.get('/api/inbox'),
+    refetchInterval: (q) => {
+      const pending = q.state.data?.items?.some((i: InboxItem) => !i.ai_name);
+      if (!pending) {
+        pollsLeft.current = 40;
+        return false;
+      }
+      return pollsLeft.current-- > 0 ? 3000 : false;
+    },
+  });
 
   const items: InboxItem[] = (data?.items ?? []).filter(
     (i: InboxItem) => !done.has(i.id) && !later.has(i.id),
@@ -65,14 +79,14 @@ export function InboxPage() {
     <div className="page">
       <div className="row spread">
         <h1>Inbox</h1>
-        <Link to="/review" className="btn btn-ghost">Review queue</Link>
+        <Link to="/review" className="btn btn-ghost">Review</Link>
       </div>
       {isLoading && <p className="muted">Loading…</p>}
       {!isLoading && !current && <p className="muted">All clear. Nothing needs naming.</p>}
 
       {current && (
         <div className="triage">
-          <h2 className="triage-heading">Needs attention</h2>
+          <h2 className="triage-heading">Needs naming</h2>
           <p className="muted">
             {later.size > 0 ? `${items.length} to go · ` : ''}{idx + 1} / {items.length}
           </p>
@@ -89,10 +103,15 @@ export function InboxPage() {
                 autoFocus
                 placeholder={current.ai_name ?? 'Name it'}
                 value={draft}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveFix(current)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveFix(current);
+                  if (e.key === 'Escape') setEditing(false);
+                }}
               />
               <button className="btn" onClick={() => saveFix(current)}>Save</button>
+              <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
             </div>
           ) : (
             <div className="triage-actions">
@@ -145,7 +164,7 @@ export function InboxPage() {
 
       {(data?.lent_out ?? []).length > 0 && (
         <>
-          <h2>Items away</h2>
+          <h2>Out</h2>
           {(data?.lent_out ?? []).map((i: any) => (
             <div key={i.id} className="inbox-card">
               {i.thumb ? <img src={i.thumb} alt="" /> : <div className="thumb-placeholder" />}

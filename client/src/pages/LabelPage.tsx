@@ -115,12 +115,6 @@ export function LabelPage() {
         value={category}
         onChange={(e) => setCategory(e.target.value)}
       />
-      <input
-        className="input"
-        placeholder="Category? (prints on the label)"
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-      />
       {parentOptions.length > 0 && (
         <>
           <label className="muted" htmlFor="parent-pick">
@@ -145,12 +139,12 @@ export function LabelPage() {
       {parentOptions.length > 0 && (
         <>
           <p className="muted" style={{ textAlign: 'center', marginTop: 20 }}>
-            or this code belongs to a bin you already have
+            or this code belongs to an area you already have
           </p>
           <div className="row">
             <select className="input" style={{ flex: 1 }} value={existingId}
-              onChange={(e) => setExistingId(e.target.value)} aria-label="Existing bin">
-              <option value="">Pick a bin…</option>
+              onChange={(e) => setExistingId(e.target.value)} aria-label="Existing area">
+              <option value="">Pick an area…</option>
               {parentOptions.map((o) => (
                 <option key={o.id} value={o.id}>{o.label}</option>
               ))}
@@ -171,7 +165,7 @@ export function LabelPage() {
                 }
               }}
             >
-              Add to existing bin
+              Add to existing area
             </button>
           </div>
         </>

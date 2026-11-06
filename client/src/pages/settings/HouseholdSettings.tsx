@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import { useApp } from '../../context';
-import { IconBtn } from '../../components/Bits';
+import { IconBtn, useConfirm } from '../../components/Bits';
 import { SettingsShell } from './SettingsShell';
 
 /** Household & Account: members, invitations, password, sign out. */
 export function HouseholdSettings() {
   const { toast, user, signOut } = useApp();
+  const [askConfirm, confirmUi] = useConfirm();
   const qc = useQueryClient();
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const [member, setMember] = useState({ name: '', email: '', password: '' });
@@ -21,8 +22,8 @@ export function HouseholdSettings() {
         Items are shared with the household unless marked private on the item.
       </p>
       {(users?.users ?? []).map((u: any) => (
-        <div key={u.id} className="row">
-          <span>
+        <div key={u.id} className="row member-row">
+          <span className="member-name">
             {u.name} <span className="muted">{u.email}</span>
             {u.role === 'admin' && <span className="badge warn">admin</span>}
           </span>
@@ -32,7 +33,7 @@ export function HouseholdSettings() {
               className="btn-small btn-ghost"
               label={`Remove ${u.name}`}
               onClick={async () => {
-                if (!window.confirm(`Remove ${u.name}? Their private items become invisible to everyone.`)) return;
+                if (!(await askConfirm(`Remove ${u.name}? Their private items become invisible to everyone.`, 'Remove'))) return;
                 const r = await api.del(`/api/users/${u.id}`).catch((e) => (toast(e.message), null));
                 if (!r) return;
                 qc.invalidateQueries({ queryKey: ['users'] });
@@ -120,6 +121,7 @@ export function HouseholdSettings() {
         </button>
         <button className="btn btn-ghost" onClick={signOut}>Sign out</button>
       </div>
+      {confirmUi}
     </SettingsShell>
   );
 }

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../context';
-import { IconBtn } from '../components/Bits';
+import { IconBtn, useConfirm } from '../components/Bits';
 import { describeEvent } from '../lib/events';
 
 /**
@@ -11,6 +11,7 @@ import { describeEvent } from '../lib/events';
  */
 export function TrashPage() {
   const { toast } = useApp();
+  const [askConfirm, confirmUi] = useConfirm();
   const qc = useQueryClient();
   const { data: trash } = useQuery({ queryKey: ['trash'], queryFn: () => api.get('/api/trash') });
   const { data: ev } = useQuery({ queryKey: ['events-feed'], queryFn: () => api.get('/api/events?limit=50') });
@@ -27,7 +28,7 @@ export function TrashPage() {
   };
 
   const purgeItem = async (id: string) => {
-    if (!window.confirm('Delete permanently? This removes photos too - NOT undoable.')) return;
+    if (!(await askConfirm('Delete permanently? This removes photos too - NOT undoable.', 'Delete'))) return;
     const r = await api.del(`/api/items/${id}/purge`).catch((e) => (toast(e.message), null));
     if (!r) return;
     toast('Purged');
@@ -49,13 +50,13 @@ export function TrashPage() {
 
   return (
     <div className="page">
-      <h1>Trash & activity</h1>
+      <h1>Recently deleted & activity</h1>
 
       <h2>Hidden items</h2>
       {empty && <p className="muted">Nothing in the trash.</p>}
       {(trash?.items ?? []).map((i: any) => (
         <div key={i.id} className="out-row">
-          <Link to={`/items/${i.id}`} className="out-thumb">
+          <Link to={`/items/${i.id}`} className="out-thumb" aria-label={i.name ?? 'unnamed'}>
             {i.thumb ? <img src={i.thumb} alt="" /> : <span>?</span>}
           </Link>
           <div className="out-info">
@@ -103,6 +104,7 @@ export function TrashPage() {
         </div>
       ))}
       {ev && !ev.events?.length && <p className="muted">Nothing yet.</p>}
+      {confirmUi}
     </div>
   );
 }

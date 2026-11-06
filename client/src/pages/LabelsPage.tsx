@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { api } from '../api';
 import { useApp } from '../context';
 import { dymoRenderLabel } from '../dymo';
-import { Icon, IconBtn, PrintDialog } from '../components/Bits';
+import { Icon, IconBtn, PrintDialog, useConfirm } from '../components/Bits';
 import { resolveSheet, type SheetChoice, type SheetPreset, type SheetSpec } from '../lib/sheets';
 import { labelMetrics } from '../lib/labelmetrics';
 import { renderZplPng } from '../lib/zplrender';
@@ -38,6 +38,7 @@ interface Printer {
 export function LabelsPage() {
   const qc = useQueryClient();
   const { toast } = useApp();
+  const [askConfirm, confirmUi] = useConfirm();
   const [sheet, setSheet] = useState<SheetLabel[]>([]);
   const [busy, setBusy] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -168,7 +169,7 @@ export function LabelsPage() {
     <div className="page">
       <h1>Labels</h1>
       <p className="muted">
-        {labels.length} labels generated - {claimed} in use on areas,{unclaimed.length}{' '}
+        {labels.length} labels generated - {claimed} in use on areas, {unclaimed.length}{' '}
         unclaimed. Print from the address you'll actually scan against:
         QR codes open this Stache on whatever host you're printing from.
       </p>
@@ -360,7 +361,7 @@ export function LabelsPage() {
           <button
             className="btn btn-small danger"
             onClick={async () => {
-              if (!window.confirm(`Delete ${sel.size} unclaimed label code(s)?`)) return;
+              if (!(await askConfirm(`Delete ${sel.size} unclaimed label code(s)? This can't be undone.`, 'Delete'))) return;
               const r = await api.post('/api/labels/delete', { codes: [...sel] }).catch((e) => (toast(e.message), null));
               if (r) {
                 toast(`Deleted ${r.deleted}${r.skipped ? `, ${r.skipped} claimed skipped` : ''}`);
@@ -417,6 +418,7 @@ export function LabelsPage() {
           category: categoryFor(code),
         }))}
       />
+      {confirmUi}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
-import { KebabMenu } from '../components/Bits';
+import { KebabMenu, usePrompt } from '../components/Bits';
 
 interface OutItem {
   id: string;
@@ -29,6 +29,7 @@ const outText = (i: OutItem) =>
 /** Everything removed from its space. "Out" and "unaccounted" stay separate. */
 export function OutPage() {
   const { toast } = useApp();
+  const [askPrompt, promptUi] = usePrompt();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['out'], queryFn: () => api.get('/api/out') });
   const { data: shop } = useQuery({ queryKey: ['shopping-list'], queryFn: () => api.get('/api/shopping-list') });
@@ -53,7 +54,7 @@ export function OutPage() {
 
   const snooze = async (i: OutItem) => {
     if (i.snoozed) return patch(i.id, { remind_snoozed_until: null }, 'Reminders on');
-    const days = window.prompt('Snooze reminders for how many days?', '30');
+    const days = await askPrompt('Snooze reminders for how many days?', { defaultValue: '30' });
     if (!days) return;
     const until = new Date(Date.now() + (parseInt(days, 10) || 30) * 86400_000).toISOString();
     patch(i.id, { remind_snoozed_until: until }, 'Snoozed');
@@ -85,7 +86,7 @@ export function OutPage() {
                     }}
                   />
                 )}
-                <Link to={`/items/${i.id}`} className="out-thumb">
+                <Link to={`/items/${i.id}`} className="out-thumb" aria-label={i.name ?? 'unnamed'}>
                   {i.thumb ? <img src={i.thumb} alt="" /> : <span>?</span>}
                 </Link>
                 <div className="out-info">
@@ -122,7 +123,7 @@ export function OutPage() {
 
   return (
     <div className="page">
-      <h1>Out of place</h1>
+      <h1>Out</h1>
       {!data && <p className="muted">Loading…</p>}
       {data && total === 0 && <p className="muted">Everything's where it belongs.</p>}
       {!!total && (
@@ -151,7 +152,7 @@ export function OutPage() {
           <p className="muted">At or under their restock threshold - put on the list.</p>
           {shop.items.map((i: any) => (
             <div key={i.id} className="out-row">
-              <Link to={`/items/${i.id}`} className="out-thumb">
+              <Link to={`/items/${i.id}`} className="out-thumb" aria-label={i.name ?? 'unnamed'}>
                 {i.thumb ? <img src={i.thumb} alt="" /> : <span>?</span>}
               </Link>
               <div className="out-info">
@@ -162,6 +163,7 @@ export function OutPage() {
           ))}
         </section>
       )}
+      {promptUi}
     </div>
   );
 }

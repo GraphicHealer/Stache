@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import { useApp } from '../../context';
-import { IconBtn } from '../../components/Bits';
+import { IconBtn, useConfirm, usePrompt } from '../../components/Bits';
 import { SettingsShell, copy } from './SettingsShell';
 import { parseImportFile } from './import';
 
 /** Data & Backups: export, import, backups, restore. */
 export function DataSettings() {
   const { toast, user } = useApp();
+  const [askConfirm, confirmUi] = useConfirm();
+  const [askPrompt, promptUi] = usePrompt();
   const qc = useQueryClient();
   const { data: backupSched } = useQuery({ queryKey: ['settings-backup-schedule'], queryFn: () => api.get('/api/settings/backup-schedule').catch(() => null) });
   const [sched, setSched] = useState({ enabled: false, interval_days: 1, keep: 7 });
@@ -288,8 +290,9 @@ export function DataSettings() {
                   const f = e.target.files?.[0];
                   e.target.value = '';
                   if (!f) return;
-                  if (!window.confirm(`Replace the entire inventory with "${f.name}"?`)) return;
-                  const key = window.prompt('Decryption key or passphrase (leave blank if unencrypted)') ?? '';
+                  if (!(await askConfirm(`Replace the entire inventory with "${f.name}"?`, 'Replace'))) return;
+                  const key = await askPrompt('Decryption key or passphrase', { placeholder: 'Leave blank if unencrypted', allowEmpty: true });
+                  if (key === null) return;
                   const form = new FormData();
                   form.append('file', f, f.name);
                   if (key.trim()) form.append('key', key.trim());
@@ -321,6 +324,8 @@ export function DataSettings() {
           )}
         </>
       )}
+      {confirmUi}
+      {promptUi}
     </SettingsShell>
   );
 }

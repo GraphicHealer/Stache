@@ -7,14 +7,16 @@ import { SettingsShell, copy } from './SettingsShell';
 
 /** AI & Automation: suggestions provider, local model, reminders, reprocess. */
 export function AISettings() {
-  const { toast } = useApp();
+  const { toast, user } = useApp();
   const qc = useQueryClient();
+  const isAdmin = user?.role === 'admin';
   const { data } = useQuery({
     queryKey: ['settings-ai'],
     queryFn: () => api.get('/api/settings/ai'),
     refetchInterval: (q) => (q.state.data?.ml?.state === 'downloading' ? 1500 : false),
+    enabled: isAdmin,
   });
-  const { data: digest } = useQuery({ queryKey: ['settings-digest'], queryFn: () => api.get('/api/settings/digest') });
+  const { data: digest } = useQuery({ queryKey: ['settings-digest'], queryFn: () => api.get('/api/settings/digest'), enabled: isAdmin });
   const [form, setForm] = useState({ provider: 'off', base_url: '', model: '', api_key: '' });
   const [dg, setDg] = useState({ enabled: false, webhook_url: '', time: '09:00', base_url: '' });
   const [dgLoaded, setDgLoaded] = useState(false);
@@ -57,6 +59,14 @@ export function AISettings() {
       toast(`Failed: ${(e as Error).message}`);
     }
   };
+
+  if (!isAdmin) {
+    return (
+      <SettingsShell title="AI & Automation">
+        <p className="muted">Managed by your household admin.</p>
+      </SettingsShell>
+    );
+  }
 
   return (
     <SettingsShell title="AI & Automation">
