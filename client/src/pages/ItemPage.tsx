@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu, usePrompt } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu, TagEditor, usePrompt } from '../components/Bits';
 
 import { describeEvent } from '../lib/events';
 
@@ -23,7 +23,6 @@ export function ItemPage() {
   const [split, setSplit] = useState<{ photo_url: string; suggestions: { label: string; box: number[] }[] } | null>(null);
   const [splitBusy, setSplitBusy] = useState(false);
   const [picks, setPicks] = useState<{ on: boolean; name: string }[]>([]);
-  const [tagDraft, setTagDraft] = useState('');
   const [linkQ, setLinkQ] = useState<string | null>(null);
   const [linkResults, setLinkResults] = useState<{ id: string; name: string | null; thumb: string | null }[]>([]);
   const [listening, setListening] = useState(false);
@@ -191,14 +190,6 @@ export function ItemPage() {
     rec.start();
     recRef.current = rec;
     setListening(true);
-  };
-
-  const saveTags = () => {
-    const tags = tagDraft
-      .split(',')
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
-    patch({ tags }, 'Tags saved');
   };
 
   const searchLinks = async (q: string) => {
@@ -620,13 +611,10 @@ export function ItemPage() {
         </label>
         <label className="row">
           <span className="muted">Tags</span>
-          <input
-            className="input"
+          <TagEditor
+            tags={(item.tags ?? []) as string[]}
+            onChange={(tags) => patch({ tags }, 'Tags saved')}
             placeholder="comma, separated, words"
-            defaultValue={(item.tags ?? []).join(', ')}
-            onChange={(e) => setTagDraft(e.target.value)}
-            onFocus={(e) => setTagDraft(e.target.value)}
-            onBlur={saveTags}
           />
         </label>
         <p className="muted">Tags are searchable - a couple of words beats a filing system.</p>

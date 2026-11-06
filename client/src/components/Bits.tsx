@@ -608,3 +608,57 @@ export function usePrompt(): [
   );
   return [ask, ui];
 }
+
+/** Standard tag editor: chips with x, comma/Enter adds, backspace removes last. */
+export function TagEditor({
+  tags,
+  onChange,
+  placeholder = 'Add a tag',
+}: {
+  tags: string[];
+  onChange: (tags: string[]) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = (raw: string) => {
+    const t = raw.trim().replace(/,+$/, '').toLowerCase();
+    if (!t) return;
+    if (!tags.map((x) => x.toLowerCase()).includes(t)) onChange([...tags, t]);
+    setDraft('');
+  };
+  return (
+    <div className="tag-editor">
+      {tags.map((t) => (
+        <span key={t} className="badge tag-chip">
+          {t}
+          <button
+            type="button"
+            aria-label={`Remove tag ${t}`}
+            onClick={() => onChange(tags.filter((x) => x !== t))}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        className="input"
+        value={draft}
+        placeholder={placeholder}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v.endsWith(',')) add(v);
+          else setDraft(v);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            add(draft);
+          } else if (e.key === 'Backspace' && !draft && tags.length) {
+            onChange(tags.slice(0, -1));
+          }
+        }}
+        onBlur={() => add(draft)}
+      />
+    </div>
+  );
+}
