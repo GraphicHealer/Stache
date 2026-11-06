@@ -54,10 +54,11 @@ export async function miscRoutes(app: FastifyInstance) {
     for (const e of visible) if (e.entityType === 'label' && e.entityId) ent.set(`label:${e.entityId}`, e.entityId);
     if (itemIds.length)
       for (const r of await db
-        .select({ id: items.id, name: items.name })
+        .select({ id: items.id, name: items.name, aiName: items.aiName })
         .from(items)
         .where(inArray(items.id, itemIds)))
-        ent.set(`item:${r.id}`, r.name);
+        // Unnamed items still get labelled by their AI guess.
+        ent.set(`item:${r.id}`, r.name ?? r.aiName);
     if (areaIds.length)
       for (const r of await db
         .select({ id: areas.id, name: areas.name })

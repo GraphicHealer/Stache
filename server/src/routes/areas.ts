@@ -173,7 +173,10 @@ export async function areaRoutes(app: FastifyInstance) {
     const subCounts = await subtreeItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
     const ownCounts = await directItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
     const thumbs = await thumbsForItems(contents.map((i) => i.id));
-    const cover = areaPhotos.find((p) => p.id === area.coverPhotoId) ?? areaPhotos[0];
+    // Same auto-cover as the Browse cards: explicit cover > newest area photo
+    // > newest item photo in the subtree (the helper handles the fallback).
+    const coverMap = await coverThumbsForAreas([{ id: area.id, coverPhotoId: area.coverPhotoId }]);
+    const cover = coverMap.get(area.id) ?? null;
     const areaNames = new Map(subs.map((a) => [a.id, a.name]));
     const itemAreaName = async (areaId: string) => {
       if (areaId === id) return null;
