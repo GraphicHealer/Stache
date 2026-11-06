@@ -78,6 +78,7 @@ export function AISettings() {
       </p>
       <select
         className="input"
+        aria-label="AI provider"
         value={form.provider}
         onChange={(e) => setForm({ ...form, provider: e.target.value })}
       >
@@ -91,6 +92,7 @@ export function AISettings() {
             <span className="muted">Model</span>
             <select
               className="input"
+              aria-label="Local AI model"
               style={{ width: 'auto', flex: 1 }}
               value={String(data?.ml_level ?? 2)}
               onChange={async (e) => {
@@ -168,6 +170,7 @@ export function AISettings() {
         <input
           className="input"
           type="time"
+          aria-label="Daily digest time"
           style={{ maxWidth: '140px' }}
           value={dg.time}
           onChange={(e) => setDg({ ...dg, time: e.target.value })}

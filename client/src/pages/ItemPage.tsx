@@ -159,6 +159,12 @@ export function ItemPage() {
     nav(-1);
   };
 
+  const restore = async () => {
+    const r = await api.post(`/api/items/${id}/restore`, {});
+    toast('Restored', r.event_id);
+    refresh();
+  };
+
   // Voice notes: browser-native speech-to-text appended to Notes. No model,
   // no server - it's just a faster keyboard. Unsupported browsers hide it.
   const toggleVoice = () => {
@@ -247,6 +253,14 @@ export function ItemPage() {
   return (
     <div className="page">
       <Breadcrumb trail={breadcrumb} />
+
+      {item.hidden && (
+        <div className="suggest">
+          <p className="muted" style={{ margin: 0 }}>
+            In Recently deleted. <button className="btn" style={{ marginLeft: 8 }} onClick={restore}>Restore</button>
+          </p>
+        </div>
+      )}
 
       <div className="photo-strip">
         {photos.map((p: any) => (
@@ -718,7 +732,9 @@ export function ItemPage() {
               onSelect: startSplit,
             },
             'sep',
-            { label: 'Delete', icon: 'trash', danger: true, onSelect: hide },
+            item.hidden
+              ? { label: 'Restore', icon: 'undo', onSelect: restore }
+              : { label: 'Delete', icon: 'trash', danger: true, onSelect: hide },
           ]}
         />
       </div>
