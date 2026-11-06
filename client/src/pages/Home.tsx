@@ -184,12 +184,16 @@ export function Home() {
           fight over the camera on some devices. */}
       {!scanning && (
         <CameraView onCapture={onCapture} label="Take photo" onQr={onQrDetected}>
-          {currentArea && (
-            <div className={`area-chip ${scannedIn ? 'scanned' : ''}`}>
-              <span>{scannedIn ? `Scanned into ${currentArea.name ?? 'area'}` : `Filing into ${currentArea.name ?? 'area'}`}</span>
-              {scannedIn && <IconBtn icon="undo" label="Revert to previous area" onClick={unscan} />}
-            </div>
-          )}
+          <div className={`area-chip ${scannedIn ? 'scanned' : ''}`}>
+            <span>
+              {scannedIn
+                ? `Scanned into ${currentArea?.name ?? 'area'}`
+                : currentArea
+                  ? `Filing into ${currentArea.name ?? 'area'}`
+                  : 'Taking a photo · point at a label to pick a bin'}
+            </span>
+            {scannedIn && <IconBtn icon="undo" label="Revert to previous area" onClick={unscan} />}
+          </div>
         </CameraView>
       )}
 
