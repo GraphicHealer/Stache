@@ -256,7 +256,7 @@ export function AreaPage() {
           setCurrentArea({ id, name: area.name, thumb: area.cover_thumb });
           nav('/');
         }}>
-          Add items to {area.name ?? 'this area'}
+          <Icon name="camera" /> File items here
         </button>
         <KebabMenu
           className="page-menu"

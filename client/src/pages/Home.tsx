@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
-import { useApp, type AreaRef } from '../context';
+import { useApp } from '../context';
 import { outboxAdd } from '../outbox';
 import { downscale } from '../image';
 import { detectBarcodeInPhoto, parseScan } from '../scan';
@@ -87,15 +87,17 @@ export function Home() {
     }
   };
 
-  // Shared by scan + manual pick: an area id either becomes the filing
-  // destination or receives the staged photo.
-  const useArea = async (areaId: string, name: string | null) => {
+  // A Stache label means "open this area" - except with a photo waiting,
+  // where it files the photo. Scanning never sets the filing area.
+  const [scannedLabel, setScannedLabel] = useState<{ id: string; name: string | null } | null>(null);
+
+  const actOnArea = async (area: { id: string; name: string | null }) => {
     if (stagedPhoto) {
       const b = stagedPhoto;
       setStagedPhoto(null);
-      await filePhoto(b, areaId);
+      await filePhoto(b, area.id);
     } else {
-      setCurrentArea({ id: areaId, name, thumb: null });
+      nav(`/areas/${area.id}`);
     }
   };
 
@@ -114,7 +116,7 @@ export function Home() {
         return;
       }
       if (r.status === 'area' && r.area) {
-        await useArea(r.area.id, r.area.name);
+        await actOnArea(r.area);
       }
     } catch (e) {
       toast(`Scan failed: ${(e as Error).message}`);
@@ -124,14 +126,11 @@ export function Home() {
   const onPickBin = async (areaId: string) => {
     setScanning(false);
     const r = await api.get(`/api/areas/${areaId}`).catch(() => null);
-    await useArea(areaId, r?.area?.name ?? null);
+    if (r?.area) await actOnArea(r.area);
   };
 
-  // A Stache label in the live viewfinder picks the area - the reversed
-  // order: bin first, photo second. prevArea restores on an accidental scan.
-  const [scannedIn, setScannedIn] = useState(false);
-  const prevArea = useRef<AreaRef | null>(null);
-
+  // A label dwelling in the live viewfinder offers "Open" - never a nav,
+  // never a filing change. A pending photo files into it instead.
   const onQrDetected = async (text: string) => {
     const scan = parseScan(text);
     if (!scan || scan.kind !== 'label') return;
@@ -140,19 +139,15 @@ export function Home() {
       nav(`/l/${scan.code}`);
       return;
     }
-    if (r?.status === 'area' && r.area && r.area.id !== currentArea?.id) {
-      if (!scannedIn) prevArea.current = currentArea;
-      setScannedIn(true);
-      await useArea(r.area.id, r.area.name);
+    if (r?.status === 'area' && r.area) {
+      if (stagedPhoto) {
+        const b = stagedPhoto;
+        setStagedPhoto(null);
+        await filePhoto(b, r.area.id);
+      } else {
+        setScannedLabel({ id: r.area.id, name: r.area.name });
+      }
     }
-  };
-
-  const unscan = () => {
-    setScannedIn(false);
-    const prev = prevArea.current;
-    prevArea.current = null;
-    setCurrentArea(prev);
-    toast(prev ? `Back to ${prev.name ?? 'previous area'}` : 'Area cleared');
   };
 
   return (
@@ -177,18 +172,27 @@ export function Home() {
       {/* Unmounted while the scanner runs - two getUserMedia streams would
           fight over the camera on some devices. */}
       {!scanning && (
-        <CameraView onCapture={onCapture} label="Take photo" onQr={onQrDetected}>
-          <div className={`area-chip ${scannedIn ? 'scanned' : ''}`}>
-            <span>
-              {scannedIn
-                ? `Scanned into ${currentArea?.name ?? 'area'}`
-                : currentArea
+        <CameraView onCapture={(b) => { setScannedLabel(null); onCapture(b); }} label="Take photo" onQr={onQrDetected} onQrGone={() => setScannedLabel(null)}>
+          {scannedLabel ? (
+            <button
+              type="button"
+              className="area-chip open"
+              onClick={() => nav(`/areas/${scannedLabel.id}`)}
+            >
+              {scannedLabel.name ?? 'Area'} · Open
+            </button>
+          ) : (
+            <div className="area-chip">
+              <span>
+                {currentArea
                   ? `Filing into ${currentArea.name ?? 'area'}`
-                  : 'Point at a label to pick a bin'}
-            </span>
-            {scannedIn && <IconBtn icon="undo" label="Revert to previous area" onClick={unscan} />}
-            {currentArea && !scannedIn && <IconBtn icon="x" label="Clear filing area" onClick={() => setCurrentArea(null)} />}
-          </div>
+                  : stagedPhoto
+                    ? 'Point at a label to file this'
+                    : 'Point at a label to open it'}
+              </span>
+              {currentArea && <IconBtn icon="x" label="Clear filing area" onClick={() => setCurrentArea(null)} />}
+            </div>
+          )}
         </CameraView>
       )}
 

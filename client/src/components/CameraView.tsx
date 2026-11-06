@@ -4,8 +4,10 @@ import { IconBtn } from './Bits';
 interface Props {
   onCapture: (blob: Blob) => void;
   label?: string;
-  /** Called when a QR enters the frame - the same stream decodes while live. */
+  /** Fires once a code has been continuously in frame for ~500ms. */
   onQr?: (text: string) => void;
+  /** Fires when the code leaves the frame for ~2s. */
+  onQrGone?: () => void;
   children?: React.ReactNode;
 }
 
@@ -15,7 +17,7 @@ interface Props {
  * The shutter freezes the frame for a confirm/retake step - nothing uploads
  * until the user taps check.
  */
-export function CameraView({ onCapture, label = 'Capture', onQr, children }: Props) {
+export function CameraView({ onCapture, label = 'Capture', onQr, onQrGone, children }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
   const [shot, setShot] = useState<{ blob: Blob; url: string } | null>(null);
@@ -24,12 +26,17 @@ export function CameraView({ onCapture, label = 'Capture', onQr, children }: Pro
   shotRef.current = shot;
   const onQrRef = useRef(onQr);
   onQrRef.current = onQr;
-  const lastQr = useRef({ text: '', at: 0 });
+  const onQrGoneRef = useRef(onQrGone);
+  onQrGoneRef.current = onQrGone;
+  // Dwell tracking: seen = last decode, since = when this text first appeared.
+  const lastSeen = useRef({ text: null as string | null, since: 0, at: 0 });
+  const emitted = useRef<string | null>(null);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
     let mounted = true;
     let qrControls: { stop: () => void } | null = null;
+    let tick: ReturnType<typeof setInterval> | null = null;
     navigator.mediaDevices
       ?.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
       .then((s) => {
@@ -43,29 +50,50 @@ export function CameraView({ onCapture, label = 'Capture', onQr, children }: Pro
           v.srcObject = s;
           v.play().catch(() => {});
           // Continuous QR decode on the same stream - a Stache label in frame
-          // selects the area without a separate scan mode.
+          // for ~500ms offers "Open", ~2s out of frame clears it.
           import('@zxing/browser').then(({ BrowserQRCodeReader }) => {
-            new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 300 })
+            new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 250 })
               .decodeFromVideoElement(v, (result, _err, controls) => {
                 if (!result || shotRef.current) return;
                 const text = result.getText();
                 const now = Date.now();
-                if (text === lastQr.current.text && now - lastQr.current.at < 4000) return;
-                lastQr.current = { text, at: now };
                 qrControls = controls;
-                onQrRef.current?.(text);
+                lastSeen.current = {
+                  text,
+                  since: text === lastSeen.current.text ? lastSeen.current.since : now,
+                  at: now,
+                };
               })
               .then((c) => {
                 if (!mounted) c.stop();
                 else qrControls = c;
               })
               .catch(() => {});
+            // Dwell + absence tick.
+            tick = setInterval(() => {
+              const now = Date.now();
+              const { text, since, at } = lastSeen.current;
+              if (shotRef.current) {
+                if (emitted.current !== null) { emitted.current = null; onQrGoneRef.current?.(); }
+                return;
+              }
+              if (text && now - since >= 500 && now - at <= 400 && emitted.current !== text) {
+                emitted.current = text;
+                onQrRef.current?.(text);
+              }
+              if (emitted.current !== null && now - at > 2000) {
+                emitted.current = null;
+                lastSeen.current = { text: null, since: 0, at: 0 };
+                onQrGoneRef.current?.();
+              }
+            }, 150);
           }).catch(() => {});
         }
       })
       .catch(() => setFailed(true));
     return () => {
       mounted = false;
+      if (tick) clearInterval(tick);
       qrControls?.stop();
       stream?.getTracks().forEach((t) => t.stop());
     };
