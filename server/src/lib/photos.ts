@@ -193,8 +193,8 @@ export async function coverGridForAreas(areaIds: string[]): Promise<Map<string, 
         JOIN photos p ON p.item_id = i.id
         WHERE i.area_id IN (${ph}) AND i.hidden_at IS NULL
         ORDER BY (i.area_id = ?) DESC, p.created_at DESC LIMIT 4`,
-      id,
       ...tree,
+      id,
     );
     if (!rows.length) continue;
     const list = await db.select().from(photos).where(inArray(photos.id, rows.map((r) => r.id)));
