@@ -209,10 +209,9 @@ export function Home() {
         <div className="code-prompt card">
           <div>
             <b>{backPrompt.items.length} thing{backPrompt.items.length === 1 ? ' belongs' : 's belong'} back here</b>
-            <div className="muted">Mark them returned?</div>
           </div>
           <div className="code-prompt-actions">
-            <button className="btn" onClick={() => putBack(backPrompt.items.map((i) => i.id))}>Yes</button>
+            <button className="btn" onClick={() => putBack(backPrompt.items.map((i) => i.id))}>Mark returned</button>
             <button className="btn btn-ghost" onClick={() => setBackPrompt(null)}>No</button>
           </div>
         </div>

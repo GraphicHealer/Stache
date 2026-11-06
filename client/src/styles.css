@@ -241,7 +241,7 @@ textarea.input { resize: vertical; }
   position: fixed;
   left: 16px;
   right: 16px;
-  top: calc(112px + env(safe-area-inset-top));
+  top: calc(232px + env(safe-area-inset-top));
   bottom: auto;
   z-index: 30;
   display: flex;
