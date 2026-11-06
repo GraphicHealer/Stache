@@ -92,7 +92,7 @@ export function CameraView({ onCapture, label = 'Capture', onQr, children }: Pro
     canvas.height = video.videoHeight;
     canvas.getContext('2d')!.drawImage(video, 0, 0);
     // Per-device preference - default on. 'off' files the photo immediately.
-    const confirmFirst = localStorage.getItem('stache:confirm-capture') !== 'off';
+    const confirmFirst = localStorage.getItem('stache:confirm-capture') === 'on';
     canvas.toBlob((b) => {
       if (!b) return;
       if (confirmFirst) setShot({ blob: b, url: URL.createObjectURL(b) });

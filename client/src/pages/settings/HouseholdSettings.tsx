@@ -14,7 +14,7 @@ export function HouseholdSettings() {
   const [member, setMember] = useState({ name: '', email: '', password: '' });
   const [pw, setPw] = useState({ current: '', next: '' });
   const [confirmCapture, setConfirmCapture] = useState(
-    () => localStorage.getItem('stache:confirm-capture') !== 'off',
+    () => localStorage.getItem('stache:confirm-capture') === 'on',
   );
   const isAdmin = user?.role === 'admin';
 

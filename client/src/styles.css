@@ -241,7 +241,7 @@ textarea.input { resize: vertical; }
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(72px + env(safe-area-inset-bottom));
+  bottom: calc(150px + env(safe-area-inset-bottom));
   z-index: 30;
   display: flex;
   justify-content: space-between;
@@ -490,6 +490,7 @@ button.nav-link { background: none; border: 0; font-family: inherit; cursor: poi
 .header-context {
   margin-left: auto; min-width: 0;
   display: flex; align-items: center; gap: 8px; font-size: 0.9rem;
+  padding-right: 46px; /* keeps Clear clear of the fixed page kebab */
 }
 .header-context .muted, .header-context b {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -633,9 +634,11 @@ button, input, select, textarea { font-family: inherit; }
 .tag-editor .input { flex: 1; min-width: 120px; }
 .tag-chip { display: inline-flex; align-items: center; gap: 4px; }
 .tag-chip button {
+  position: relative;
   background: none; border: 0; color: inherit; cursor: pointer;
   font-size: 1rem; line-height: 1; padding: 0 2px;
 }
+.tag-chip button::before { content: ''; position: absolute; inset: -14px; }
 
 /* Area chip over the live viewfinder - plain = current area, accent = QR-scanned. */
 .area-chip {
@@ -645,7 +648,7 @@ button, input, select, textarea { font-family: inherit; }
   background: rgba(0, 0, 0, .55); color: #fff;
 }
 .area-chip.scanned { background: var(--accent); color: var(--accent-ink, #111318); }
-.area-chip .icon-btn { padding: 4px; min-height: 32px; min-width: 32px; }
+.area-chip .icon-btn { padding: 4px; min-height: 44px; min-width: 44px; }
 .area-chip.scanned .icon-btn { color: inherit; }
 
 /* QR reticle - dimmed edges, transparent window, corner brackets, sweep + dots. */
