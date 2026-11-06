@@ -171,7 +171,7 @@ export function LabelsPage() {
       {sheet.length > 0 && (
         <>
           <h2>Label preview</h2>
-          <p className="muted">First label at true size - the print includes all {sheet.length}.</p>
+          <p className="muted">First label at true size · the print includes all {sheet.length}.</p>
           <div className="label-sheet avery">
             {sheet.slice(0, 1).map((l) => {
               // Mirrors zplForLabel's coordinates (server/src/lib/print.ts) so the

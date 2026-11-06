@@ -2,9 +2,10 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
-import { asc, inArray } from 'drizzle-orm';
-import { db } from '../db';
+import { asc, eq, inArray } from 'drizzle-orm';
+import { db, queryOne } from '../db';
 import { photos, type Photo } from '../db/schema';
+import { descendantAreaIds } from './breadcrumb';
 import { env } from '../env';
 
 const PHOTO_DIR = () => path.join(env.dataDir, 'photos');
@@ -174,6 +175,23 @@ export async function coverThumbsForAreas(
   for (const [areaId, list] of all) {
     const cover = byId.get(areaId)?.coverPhotoId;
     map.set(areaId, list.find((p) => p.id === cover) ?? list[0]);
+  }
+  // Automatic cover: an area with no cover shot of its own shows the newest
+  // item photo in its subtree instead of the logo placeholder.
+  for (const a of areaList) {
+    if (map.get(a.id)) continue;
+    const tree = await descendantAreaIds(a.id);
+    const ph = tree.map(() => '?').join(',');
+    const row = queryOne<{ id: string }>(
+      `SELECT p.id FROM items i
+        JOIN photos p ON p.item_id = i.id
+        WHERE i.area_id IN (${ph}) AND i.hidden_at IS NULL
+        ORDER BY p.created_at DESC LIMIT 1`,
+      ...tree,
+    );
+    if (!row) continue;
+    const [photo] = await db.select().from(photos).where(eq(photos.id, row.id)).limit(1);
+    if (photo) map.set(a.id, photo);
   }
   return map;
 }

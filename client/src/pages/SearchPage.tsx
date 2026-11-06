@@ -199,6 +199,7 @@ export function SearchPage() {
             items={(displayItems ?? []).map((i: any) => ({
               id: i.id,
               name: i.name,
+              ai_name: i.ai_name,
               thumb: i.thumb,
               sub: path(i.breadcrumb),
               badge: i.not_here_count > 0 ? 'unsure' : undefined,

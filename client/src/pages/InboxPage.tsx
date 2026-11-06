@@ -90,7 +90,11 @@ export function InboxPage() {
           <p className="muted">
             {later.size > 0 ? `${items.length} to go · ` : ''}{idx + 1} / {items.length}
           </p>
-          <Link to={`/items/${current.id}`} className="triage-photo">
+          <Link
+            to={`/items/${current.id}`}
+            className="triage-photo"
+            aria-label={`Open ${current.ai_name ?? 'unnamed'}`}
+          >
             {current.thumb ? <img src={current.thumb} alt="" /> : <span>no photo</span>}
           </Link>
           <p className="grid-sub">{current.area_path}</p>
