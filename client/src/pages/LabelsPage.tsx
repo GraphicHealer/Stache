@@ -64,8 +64,7 @@ export function LabelsPage() {
   const claimed = labels.filter((l: any) => l.area_id).length;
   const unclaimed = labels.filter((l: any) => !l.area_id);
   const claimedList = labels.filter((l: any) => l.area_id);
-  const sheetCodes = sheet.map((l) => l.code);
-  const printCodes = sel.size || selClaimed.size ? [...sel, ...selClaimed] : sheetCodes;
+  const printCodes = [...sel, ...selClaimed];
 
   const render = async (codes: string[]) => {
     const origin = window.location.origin;
@@ -82,6 +81,8 @@ export function LabelsPage() {
     setBusy(true);
     try {
       const r = await api.post('/api/labels/batch', { count });
+      setSel(new Set(r.labels.map((l: any) => l.code)));
+      setTab('unclaimed');
       await render(r.labels);
       qc.invalidateQueries({ queryKey: ['labels'] });
       toast(`Batch ${r.batch}: ${r.labels.length} labels`);
@@ -174,7 +175,7 @@ export function LabelsPage() {
       {sheet.length > 0 && (
         <>
           <h2>Label preview</h2>
-          <p className="muted">First label at true size · the print includes {sel.size || selClaimed.size ? `${printCodes.length} selected` : `all ${printCodes.length}`}.</p>
+          <p className="muted">First label at true size · the print includes {sel.size || selClaimed.size ? `${printCodes.length} selected` : 'nothing - select labels to print'}.</p>
           <div className="label-sheet avery">
             {sheet.slice(0, 1).map((l) => {
               // Mirrors zplForLabel's coordinates (server/src/lib/print.ts) so the
