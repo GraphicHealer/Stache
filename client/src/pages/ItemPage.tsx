@@ -613,7 +613,7 @@ export function ItemPage() {
           <span className="muted">Tags</span>
           <TagEditor
             tags={(item.tags ?? []) as string[]}
-            onChange={(tags) => patch({ tags })}
+            onChange={(tags) => patch({ tags }, 'Tags saved')}
             placeholder="comma, separated, words"
           />
         </label>

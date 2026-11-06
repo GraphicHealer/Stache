@@ -100,7 +100,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((message: string, eventId?: string) => {
     const id = ++toastId.current;
-    setToasts((t) => [...t, { id, message, eventId }]);
+    // Same message replaces rather than stacks - rapid repeats stay one toast.
+    setToasts((t) => [...t.filter((x) => x.message !== message), { id, message, eventId }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 6000);
   }, []);
 
