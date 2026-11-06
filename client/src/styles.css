@@ -461,7 +461,7 @@ button.nav-link { background: none; border: 0; font-family: inherit; cursor: poi
 
 .pill { font-size: 0.68rem; border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; color: var(--muted); }
 
-.model-banner { position: fixed; left: 16px; bottom: 76px; z-index: 60; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; width: 240px; color: var(--text); text-decoration: none; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+.model-banner { position: fixed; left: 16px; bottom: 76px; z-index: 60; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: row; align-items: stretch; gap: 10px; width: 260px; color: var(--text); text-decoration: none; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
 .model-banner-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
 .model-banner-bar > div { height: 100%; background: var(--accent, #d9a441); transition: width 0.5s; min-width: 6px; }
 @media (min-width: 720px) { .model-banner { bottom: 20px; } }
@@ -717,4 +717,5 @@ button, input, select, textarea { font-family: inherit; }
 /* Tabbed pages embed full pages (Out/Review under Inbox). */
 .page .page { padding: 0; }
 
-.model-banner-logo { vertical-align: -3px; margin-right: 7px; }
+.model-banner-logo { height: 100%; width: auto; align-self: center; }
+.model-banner-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }

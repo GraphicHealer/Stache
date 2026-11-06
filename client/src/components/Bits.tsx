@@ -522,13 +522,15 @@ export function ModelBanner() {
   if (ml?.state !== 'downloading') return null;
   return (
     <Link to="/settings" className="model-banner">
-      <span className="muted">
-        <img src={loadingAmber} width="16" height="16" alt="" className="model-banner-logo" />
-        Downloading AI model{ml.percent != null ? ` - ${ml.percent}%` : '...'}
+      <img src={loadingAmber} alt="" className="model-banner-logo" />
+      <span className="model-banner-body">
+        <span className="muted">
+          Downloading AI model{ml.percent != null ? ` - ${ml.percent}%` : '...'}
+        </span>
+        <div className="model-banner-bar">
+          <div style={{ width: `${ml.percent ?? 2}%` }} />
+        </div>
       </span>
-      <div className="model-banner-bar">
-        <div style={{ width: `${ml.percent ?? 2}%` }} />
-      </div>
     </Link>
   );
 }
