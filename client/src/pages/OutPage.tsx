@@ -34,6 +34,11 @@ export function OutPage() {
   const { data } = useQuery({ queryKey: ['out'], queryFn: () => api.get('/api/out') });
   const { data: shop } = useQuery({ queryKey: ['shopping-list'], queryFn: () => api.get('/api/shopping-list') });
   const [sel, setSel] = useState<Set<string> | null>(null);
+  const [areaFilter, setAreaFilter] = useState('');
+  const allItems = [...(data?.out ?? []), ...(data?.unaccounted ?? [])];
+  const paths = [...new Set(allItems.map((i) => i.area_path || 'somewhere'))].sort();
+  const inArea = (list: OutItem[]) =>
+    areaFilter ? list.filter((i) => (i.area_path || 'somewhere') === areaFilter) : list;
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['out'] });
 
@@ -142,10 +147,22 @@ export function OutPage() {
           ) : (
             <button className="btn btn-ghost" onClick={() => setSel(new Set())}>Select</button>
           )}
+          {paths.length > 1 && (
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              value={areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              aria-label="Filter by area"
+            >
+              <option value="">All areas</option>
+              {paths.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
         </div>
       )}
-      {section('Items away', data?.out ?? [])}
-      {section('Unaccounted for', data?.unaccounted ?? [])}
+      {section('Items away', inArea(data?.out ?? []))}
+      {section('Unaccounted for', inArea(data?.unaccounted ?? []))}
       {shop?.items?.length > 0 && (
         <section>
           <h2>Running low</h2>
