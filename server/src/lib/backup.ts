@@ -19,7 +19,7 @@ export interface Manifest {
   format_version: 1;
   app_version: string;
   created_at: string;
-  counts: { areas: number; items: number; photos: number };
+  counts: { areas: number; items: number; photos: number; trash?: number };
   encrypted: boolean;
   cipher?: 'aes-256-gcm';
   kdf?: 'scrypt' | 'raw';
@@ -53,9 +53,10 @@ async function payloadZip(): Promise<{ buf: Buffer; counts: Manifest['counts'] }
     }
     const [{ c: nAreas }] = query<{ c: number }>(`SELECT COUNT(*) c FROM areas`);
     const [{ c: nItems }] = query<{ c: number }>(`SELECT COUNT(*) c FROM items WHERE hidden_at IS NULL`);
+    const [{ c: nTrash }] = query<{ c: number }>(`SELECT COUNT(*) c FROM items WHERE hidden_at IS NOT NULL`);
     return {
       buf: zip.toBuffer(),
-      counts: { areas: nAreas, items: nItems, photos: nPhotos },
+      counts: { areas: nAreas, items: nItems, trash: nTrash, photos: nPhotos },
     };
   } finally {
     await fs.rm(tmp, { force: true }).catch(() => {});

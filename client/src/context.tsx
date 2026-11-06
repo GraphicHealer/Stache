@@ -70,7 +70,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Session check on boot; any 401 elsewhere bounces back to login.
   useEffect(() => {
     api.get('/api/me')
-      .then((r) => setUser(r.user))
+      .then((r) => {
+        setUser(r.user);
+        // A backup restore just applied - report it once, wherever the user lands.
+        if (r.user) {
+          api.get('/api/backup/restore-report').then((rep) => {
+            const c = rep?.report?.counts;
+            if (!c) return;
+            const total = (c.items ?? 0) + (c.trash ?? 0);
+            toast(`Restored backup · ${total} items, ${c.photos ?? 0} photos`);
+          }).catch(() => {});
+        }
+      })
       .catch(() => setUser(null));
     const unauth = () => setUser(null);
     window.addEventListener('stache:unauth', unauth);

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
-import { db, sqlite } from '../db';
+import { db, queryOne, run, sqlite } from '../db';
 import { env } from '../env';
 import { areas, events, items, user } from '../db/schema';
 import { undoEvent } from '../lib/events';
@@ -326,6 +326,21 @@ export async function miscRoutes(app: FastifyInstance) {
   // Restore: upload a bundle, we stage it, then the process exits - the
   // next boot applies it before the database opens. Docker's restart policy
   // brings it right back; dev mode needs a manual `npm run dev` restart.
+  // One-shot restore report: written when a staged backup is applied, read
+  // once by the next client load (the toast), then cleared.
+  app.get('/api/backup/restore-report', async () => {
+    const row = queryOne<{ value: string }>(
+      "SELECT value FROM settings WHERE key = 'restore_report'",
+    );
+    if (!row) return { report: null };
+    run("DELETE FROM settings WHERE key = 'restore_report'");
+    try {
+      return { report: JSON.parse(row.value) };
+    } catch {
+      return { report: null };
+    }
+  });
+
   app.post('/api/backup/restore', {
     preHandler: requireAdmin,
     config: { rateLimit: { max: 6, timeWindow: '1 minute' } },

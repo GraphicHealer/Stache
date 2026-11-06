@@ -291,13 +291,24 @@ export function DataSettings() {
                   e.target.value = '';
                   if (!f) return;
                   if (!(await askConfirm(`Replace the entire inventory with "${f.name}"?`, 'Replace'))) return;
-                  const key = await askPrompt('Decryption key or passphrase', { placeholder: 'Leave blank if unencrypted', allowEmpty: true });
-                  if (key === null) return;
-                  const form = new FormData();
-                  form.append('file', f, f.name);
-                  if (key.trim()) form.append('key', key.trim());
+                  // Upload first; the server reads the manifest and only asks
+                  // for a key when the bundle is actually encrypted.
+                  const upload = (key?: string) => {
+                    const form = new FormData();
+                    form.append('file', f, f.name);
+                    if (key) form.append('key', key);
+                    return api.upload('/api/backup/restore', form);
+                  };
                   try {
-                    const r = await api.upload('/api/backup/restore', form);
+                    let r;
+                    try {
+                      r = await upload();
+                    } catch (e) {
+                      if (!/key required/i.test((e as Error).message)) throw e;
+                      const key = await askPrompt('Backup passphrase or key');
+                      if (key === null) return;
+                      r = await upload(key.trim());
+                    }
                     setRestoring(true);
                     if (!r.auto_restart) {
                       toast('Staged - restart the server to apply');
