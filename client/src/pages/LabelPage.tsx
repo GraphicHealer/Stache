@@ -126,7 +126,7 @@ export function LabelPage() {
             value={parentId}
             onChange={(e) => setParentId(e.target.value)}
           >
-            <option value="">On its own — not inside anything</option>
+            <option value="">On its own - not inside anything</option>
             {parentOptions.map((o) => (
               <option key={o.id} value={o.id}>{o.label}</option>
             ))}

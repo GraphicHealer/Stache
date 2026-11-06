@@ -98,21 +98,21 @@ export function AISettings() {
                 qc.invalidateQueries({ queryKey: ['settings-ai'] });
               }}
             >
-              <option value="1">Lightweight / fastest — Florence-2 (~400MB)</option>
-              <option value="2">Balanced — LFM2.5-VL 450M, uses your names as context (~700MB)</option>
-              <option value="3">Best recognition quality — Moondream2 (~2GB)</option>
+              <option value="1">Lightweight / fastest - Florence-2 (~400MB)</option>
+              <option value="2">Balanced - LFM2.5-VL 450M, uses your names as context (~700MB)</option>
+              <option value="3">Best recognition quality - Moondream2 (~2GB)</option>
             </select>
           </label>
           {data?.ml?.state === 'downloading' && (
             <p className="muted">
               Downloading model
-              {data.ml.percent != null ? ` — ${data.ml.percent}%` : '…'}
+              {data.ml.percent != null ? ` - ${data.ml.percent}%` : '…'}
               {data.ml.file ? ` (${data.ml.file.split('/').pop()})` : ''}
             </p>
           )}
           {data?.ml?.state === 'ready' && <p className="muted">Model downloaded and ready.</p>}
           {data?.ml?.state === 'failed' && (
-            <p className="muted">Model download failed — it retries on the next request.</p>
+            <p className="muted">Model download failed - it retries on the next request.</p>
           )}
           <p className="muted">
             Switching models deletes the old one a few minutes after the new one is ready.
