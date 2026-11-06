@@ -192,7 +192,8 @@ export async function coverGridForAreas(areaIds: string[]): Promise<Map<string, 
       `SELECT p.id FROM items i
         JOIN photos p ON p.item_id = i.id
         WHERE i.area_id IN (${ph}) AND i.hidden_at IS NULL
-        ORDER BY p.created_at DESC LIMIT 4`,
+        ORDER BY (i.area_id = ?) DESC, p.created_at DESC LIMIT 4`,
+      id,
       ...tree,
     );
     if (!rows.length) continue;

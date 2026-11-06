@@ -83,7 +83,18 @@ export function buildApp() {
   // Built PWA, served at / with SPA fallback.
   const clientReady = existsSync(env.clientDist);
   if (clientReady) {
-    app.register(fastifyStatic, { root: env.clientDist, index: ['index.html'] });
+    // Vite's /assets are content-hashed (immutable); sw.js + index.html +
+    // manifest must revalidate or a deploy takes hours to reach clients.
+    app.register(fastifyStatic, {
+      root: env.clientDist,
+      index: ['index.html'],
+      cacheControl: false,
+      setHeaders: (res, p) => {
+        // `path` is the filesystem path - the hashed bundle lives under assets/.
+        const hashed = /[/\\]assets[/\\]/.test(p);
+        res.header('Cache-Control', hashed ? 'private, max-age=31536000, immutable' : 'no-cache');
+      },
+    });
   }
 
   // Photo storage (separate mount so it can't clash with the SPA wildcard).

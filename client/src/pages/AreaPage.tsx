@@ -193,14 +193,16 @@ export function AreaPage() {
       <div className="area-head">
         <label className="area-cover-wrap" title="Change photo" aria-label="Change photo">
           {area.cover_thumb ? (
-            <img className="area-cover" src={area.cover_url} alt="" />
+            <>
+              <img className="area-cover" src={area.cover_url} alt="" />
+              <span className="photo-replace"><Icon name="camera" size={14} /></span>
+            </>
           ) : (
             <>
               <img className="area-cover ph-logo" src="/icon.svg" alt="" />
               <span className="cover-cam"><Icon name="camera" size={22} /></span>
             </>
           )}
-          <span className="photo-replace"><Icon name="camera" size={14} /></span>
           <input
             type="file"
             accept="image/*"
@@ -431,6 +433,7 @@ export function AreaPage() {
         items={items.map((i: any) => ({
           id: i.id,
           name: i.name,
+          ai_name: i.ai_name,
           thumb: i.thumb,
           badge: i.status !== 'home' ? (i.status === 'lent' ? `→ ${i.lent_to ?? '?'}` : 'out') : undefined,
           sub: [i.area_name, i.quantity > 1 ? `×${i.quantity}` : null].filter(Boolean).join(' · ') || undefined,

@@ -196,7 +196,7 @@ export function ItemGrid({
         const body = (
           <>
             {i.grid?.length ? (
-              <div className="cover-grid">
+              <div className="cover-grid" data-count={Math.min(4, i.grid.length)}>
                 {i.grid.slice(0, 4).map((u) => (
                   <img key={u} src={u} alt="" loading="lazy" />
                 ))}

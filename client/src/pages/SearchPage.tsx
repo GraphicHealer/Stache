@@ -215,6 +215,7 @@ export function SearchPage() {
             items={recent.items.map((i: any) => ({
               id: i.id,
               name: i.name,
+              ai_name: i.ai_name,
               thumb: i.thumb,
               sub: path(i.breadcrumb),
             }))}
