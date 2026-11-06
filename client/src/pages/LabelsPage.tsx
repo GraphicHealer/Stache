@@ -174,7 +174,7 @@ export function LabelsPage() {
       {sheet.length > 0 && (
         <>
           <h2>Label preview</h2>
-          <p className="muted">First label at true size · the print includes all {sheet.length}.</p>
+          <p className="muted">First label at true size · the print includes {printCodes.length} selected.</p>
           <div className="label-sheet avery">
             {sheet.slice(0, 1).map((l) => {
               // Mirrors zplForLabel's coordinates (server/src/lib/print.ts) so the
@@ -362,13 +362,6 @@ export function LabelsPage() {
                 all
               </label>
             )}
-            <button
-              className="btn btn-small"
-              disabled={selClaimed.size === 0}
-              onClick={() => setPrintDlg(true)}
-            >
-              Print{selClaimed.size ? ` ${selClaimed.size}` : ''}
-            </button>
           </div>
           <div className="label-list">
             {claimedList.map((l: any) => (
