@@ -85,7 +85,7 @@ export function LabelsPage() {
       setTab('unclaimed');
       await render(r.labels);
       qc.invalidateQueries({ queryKey: ['labels'] });
-      toast(`Batch ${r.batch}: ${r.labels.length} labels`);
+      toast(`Batch ${r.batch}: ${r.labels.length} label${r.labels.length === 1 ? '' : 's'}`);
     } catch (e) {
       toast(`Failed: ${(e as Error).message}`);
     } finally {
