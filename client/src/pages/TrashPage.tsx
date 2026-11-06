@@ -35,6 +35,15 @@ export function TrashPage() {
     refresh();
   };
 
+  const purgeArea = async (id: string) => {
+    if (!(await askConfirm('Purge this area permanently? This can\'t be undone.', 'Purge'))) return;
+    const r = await api.del(`/api/areas/${id}/purge`).catch((e) => (toast(e.message), null));
+    if (!r) return;
+    toast('Purged');
+    refresh();
+    qc.invalidateQueries({ queryKey: ['areas'] });
+  };
+
   const restoreArea = async (id: string) => {
     const r = await api.post(`/api/areas/${id}/restore`).catch((e) => (toast(e.message), null));
     if (r) { toast('Area restored', r.event_id); refresh(); }
@@ -81,6 +90,7 @@ export function TrashPage() {
               </div>
               <div className="out-actions">
                 <IconBtn icon="undo" className="btn-small" label="Restore area" onClick={() => restoreArea(a.id)} />
+                <IconBtn icon="trash" className="btn-small btn-ghost" label="Purge permanently" onClick={() => purgeArea(a.id)} />
               </div>
             </div>
           ))}

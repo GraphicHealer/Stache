@@ -93,7 +93,7 @@ export async function buildBackup(opts: BuildOptions): Promise<{ buf: Buffer; ke
     encrypted: !!opts.encrypt,
     restore: {
       steps: [
-        'Upload this file on the Settings > Backup page of a Stache instance.',
+        'Upload this file on the Settings > Data & Backups page of a Stache instance.',
         'The server validates the manifest, stages the database and photos,',
         'then restarts; the entrypoint swaps the staged data in before boot.',
       ],

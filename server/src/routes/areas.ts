@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
+import { env } from '../env';
 import { areas, labels, photos } from '../db/schema';
 import { breadcrumb, descendantAreaIds, directItemCounts, subtreeItemCounts } from '../lib/breadcrumb';
 import { recordEventTx } from '../lib/events';
@@ -370,6 +373,30 @@ export async function areaRoutes(app: FastifyInstance) {
       return recordEventTx(tx, 'area.restored', 'area', id, { name: area.name }, req.user?.id);
     });
     return { ok: true, event_id: ev.id };
+  });
+
+  // Permanent delete from Trash: archived only, and only when empty -
+  // items and sub-areas must be moved or handled first.
+  app.delete('/api/areas/:id/purge', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    if (!area.archivedAt) return reply.badRequest('only archived areas can be purged');
+    const [item] = await db.select().from(items).where(eq(items.areaId, id)).limit(1);
+    if (item) return reply.badRequest('area still has items - move or purge them first');
+    const [child] = await db.select().from(areas).where(eq(areas.parentId, id)).limit(1);
+    if (child) return reply.badRequest('area still has sub-areas - move them first');
+    const pics = await db.select().from(photos).where(eq(photos.areaId, id));
+    db.transaction((tx) => {
+      tx.delete(photos).where(eq(photos.areaId, id)).run();
+      tx.delete(areas).where(eq(areas.id, id)).run();
+    });
+    for (const p of pics) {
+      for (const f of [p.path, p.thumbPath].filter(Boolean)) {
+        fs.rm(path.join(env.dataDir, 'photos', f!), { force: true }).catch(() => {});
+      }
+    }
+    return { ok: true };
   });
 
   // Stocktake: tick what's actually here - ticked items go home, the rest are
