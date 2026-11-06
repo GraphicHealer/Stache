@@ -523,6 +523,7 @@ export function ModelBanner() {
   return (
     <Link to="/settings" className="model-banner">
       <span className="muted">
+        <img src={loadingAmber} width="16" height="16" alt="" className="model-banner-logo" />
         Downloading AI model{ml.percent != null ? ` - ${ml.percent}%` : '...'}
       </span>
       <div className="model-banner-bar">

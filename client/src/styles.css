@@ -716,3 +716,5 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Tabbed pages embed full pages (Out/Review under Inbox). */
 .page .page { padding: 0; }
+
+.model-banner-logo { vertical-align: -3px; margin-right: 7px; }
