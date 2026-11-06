@@ -60,14 +60,10 @@ export function AreaPage() {
     queryFn: () => api.get(`/api/areas/${id}/out`),
   });
   const outItems = (outHere?.items ?? []) as { id: string; name: string | null }[];
-  const putBack = async () => {
-    const r = await api.post('/api/items/put-back', { ids: outItems.map((i) => i.id) }).catch(() => null);
-    if (r?.put_back) {
-      toast(`Put back ${r.put_back}`, r.event_ids?.[0]);
-      refresh();
-      qc.invalidateQueries({ queryKey: ['area-out', id] });
-    }
-  };
+  const outSig = outItems.map((i) => i.id).sort().join(',');
+  const dismissKey = `stache:out-dismissed:${id}`;
+  const [dismissedSig, setDismissedSig] = useState<string | null>(() => localStorage.getItem(dismissKey));
+  const areaPath = (data?.breadcrumb ?? []).map((c: any) => c.name ?? '?').join(' › ');
 
   if (isLoading) return <div className="page"><Loader /></div>;
   if (error || !data) return <div className="page"><p className="muted">Area not found.</p></div>;
@@ -246,12 +242,13 @@ export function AreaPage() {
         </div>
       </div>
 
-      {outItems.length > 0 && (
+      {outItems.length > 0 && dismissedSig !== outSig && (
         <div className="suggest">
-          <p className="muted" style={{ margin: 0 }}>
+          <p className="muted" style={{ margin: 0, flex: 1 }}>
             {outItems.length} thing{outItems.length === 1 ? ' belongs' : 's belong'} here but {outItems.length === 1 ? 'is' : 'are'} out.
-            <button className="btn btn-small" style={{ marginLeft: 8 }} onClick={putBack}>Put back</button>
           </p>
+          <button className="btn btn-small" onClick={() => nav(`/out?area=${encodeURIComponent(areaPath)}`)}>Check</button>
+          <button className="btn btn-small btn-ghost" onClick={() => { localStorage.setItem(dismissKey, outSig); setDismissedSig(outSig); }}>Dismiss</button>
         </div>
       )}
 

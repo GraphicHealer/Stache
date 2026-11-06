@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
@@ -34,8 +34,14 @@ export function OutPage() {
   const { data } = useQuery({ queryKey: ['out'], queryFn: () => api.get('/api/out') });
   const { data: shop } = useQuery({ queryKey: ['shopping-list'], queryFn: () => api.get('/api/shopping-list') });
   const [sel, setSel] = useState<Set<string> | null>(null);
-  const [areaFilter, setAreaFilter] = useState('');
+  const [searchParams] = useSearchParams();
+  const [areaFilter, setAreaFilter] = useState(searchParams.get('area') ?? '');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // ?area= links in from area pages - honor (and re-honor on param change).
+  useEffect(() => {
+    const a = searchParams.get('area');
+    if (a !== null) setAreaFilter(a);
+  }, [searchParams]);
   const allItems = [...(data?.out ?? []), ...(data?.unaccounted ?? [])];
   const paths = [...new Set(allItems.map((i) => i.area_path || 'somewhere'))].sort();
   const inArea = (list: OutItem[]) =>
