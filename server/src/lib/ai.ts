@@ -197,16 +197,36 @@ async function suggestOne(itemId: string): Promise<void> {
   }
 
   // Suggest, never overwrite - user-entered fields always win.
+  const tags = Array.isArray(parsed.tags) ? cleanTags(parsed.tags) : null;
+  // An empty result isn't a verdict - mark it failed so it reads "Needs
+  // naming" in the Inbox and a later run can retry it.
+  const useful = !!(parsed.name ?? parsed.description ?? (tags?.length ? tags : null) ?? parsed.ocr_text);
   await db
     .update(items)
     .set({
       aiName: item.name ? null : parsed.name ?? null,
       aiDescription: item.description ? null : parsed.description ?? null,
-      aiTags: Array.isArray(parsed.tags) ? parsed.tags : null,
+      aiTags: tags,
       ocrText: item.ocrText ?? parsed.ocr_text ?? null,
-      aiStatus: 'done',
+      aiStatus: useful ? 'done' : 'failed',
     })
     .where(eq(items.id, itemId));
+}
+
+/** Drop filler words and case-duplicates from AI tags - the name carries the specifics. */
+function cleanTags(tags: unknown[]): string[] | null {
+  const FILLER = new Set(['brand', 'model', 'color', 'colour', 'condition', 'size']);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tags) {
+    if (typeof t !== 'string') continue;
+    const tag = t.trim();
+    const key = tag.toLowerCase();
+    if (!key || FILLER.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+  }
+  return out.length ? out : null;
 }
 
 export interface DetectedObject {
