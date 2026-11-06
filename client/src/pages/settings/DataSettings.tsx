@@ -19,6 +19,7 @@ export function DataSettings() {
   const [backupKey, setBackupKey] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [importRows, setImportRows] = useState<Record<string, unknown>[] | null>(null);
   const [importPreview, setImportPreview] = useState<any>(null);
   const isAdmin = user?.role === 'admin';
@@ -277,6 +278,7 @@ export function DataSettings() {
             Replaces the whole inventory with a backup bundle - the app restarts
             itself to apply it. This can't be undone.
           </p>
+          {checking && <p className="muted">Checking backup…</p>}
           {restoring ? (
             <p className="muted">Restoring - the server is restarting, this takes a moment…</p>
           ) : (
@@ -301,6 +303,7 @@ export function DataSettings() {
                   };
                   try {
                     let r;
+                    setChecking(true);
                     try {
                       r = await upload();
                     } catch (e) {
@@ -308,6 +311,8 @@ export function DataSettings() {
                       const key = await askPrompt('Backup passphrase or key');
                       if (key === null) return;
                       r = await upload(key.trim());
+                    } finally {
+                      setChecking(false);
                     }
                     setRestoring(true);
                     if (!r.auto_restart) {
