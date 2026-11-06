@@ -691,3 +691,13 @@ button, input, select, textarea { font-family: inherit; }
   position: absolute; inset: 0; margin: auto;
   width: 38%; height: 38%; opacity: .35;
 }
+
+/* Filter-count badge on icon buttons (Search, Out, any filtered list). */
+.icon-btn { position: relative; }
+.filter-count {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--accent); color: var(--accent-ink, #111318);
+  font-size: .68rem; font-weight: 800; line-height: 16px; text-align: center;
+  pointer-events: none;
+}

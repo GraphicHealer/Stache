@@ -53,11 +53,14 @@ export function IconBtn({
   label,
   className = '',
   size = 20,
+  badge,
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   icon: IconName;
   label: string;
   size?: number;
+  /** Count shown as a small badge - used for applied-filter counts. */
+  badge?: number;
 }) {
   return (
     <button
@@ -68,6 +71,7 @@ export function IconBtn({
       {...rest}
     >
       <Icon name={icon} size={size} />
+      {badge ? <span className="filter-count">{badge}</span> : null}
     </button>
   );
 }

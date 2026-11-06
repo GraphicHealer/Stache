@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
-import { KebabMenu, usePrompt, Loader } from '../components/Bits';
+import { IconBtn, KebabMenu, usePrompt, Loader } from '../components/Bits';
 
 interface OutItem {
   id: string;
@@ -35,6 +35,7 @@ export function OutPage() {
   const { data: shop } = useQuery({ queryKey: ['shopping-list'], queryFn: () => api.get('/api/shopping-list') });
   const [sel, setSel] = useState<Set<string> | null>(null);
   const [areaFilter, setAreaFilter] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const allItems = [...(data?.out ?? []), ...(data?.unaccounted ?? [])];
   const paths = [...new Set(allItems.map((i) => i.area_path || 'somewhere'))].sort();
   const inArea = (list: OutItem[]) =>
@@ -132,6 +133,7 @@ export function OutPage() {
       {!data && <Loader />}
       {data && total === 0 && <p className="muted">Everything's where it belongs.</p>}
       {!!total && (
+        <>
         <div className="row">
           {sel ? (
             <>
@@ -147,10 +149,20 @@ export function OutPage() {
           ) : (
             <button className="btn btn-ghost" onClick={() => setSel(new Set())}>Select</button>
           )}
-          {paths.length > 1 && (
+          <IconBtn
+            icon="filter"
+            badge={areaFilter ? 1 : 0}
+            className={areaFilter ? 'filter-active' : ''}
+            label={areaFilter ? 'Filters (1 active)' : 'Filters'}
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen((o) => !o)}
+          />
+        </div>
+        {filtersOpen && (
+          <div className="filter-tray">
             <select
               className="input"
-              style={{ width: 'auto' }}
+              style={{ flex: 1 }}
               value={areaFilter}
               onChange={(e) => setAreaFilter(e.target.value)}
               aria-label="Filter by area"
@@ -158,8 +170,12 @@ export function OutPage() {
               <option value="">All areas</option>
               {paths.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-          )}
-        </div>
+            {areaFilter && (
+              <button className="btn btn-ghost" onClick={() => setAreaFilter('')}>Clear</button>
+            )}
+          </div>
+        )}
+        </>
       )}
       {section('Items away', inArea(data?.out ?? []))}
       {section('Unaccounted for', inArea(data?.unaccounted ?? []))}

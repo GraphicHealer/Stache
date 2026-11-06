@@ -116,6 +116,7 @@ export function SearchPage() {
         </CaptureInput>
         <IconBtn
           icon="filter"
+          badge={activeFilters || undefined}
           className={activeFilters ? 'filter-active' : ''}
           label={activeFilters ? `Filters (${activeFilters} active)` : 'Filters'}
           aria-expanded={filtersOpen}
