@@ -198,6 +198,7 @@ export async function miscRoutes(app: FastifyInstance) {
         return {
           id: i.id,
           name: i.name,
+          ai_name: i.aiName ?? null,
           thumb: t ? thumbUrl(t) : null,
           hidden_at: i.hiddenAt,
         };

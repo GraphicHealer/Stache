@@ -289,7 +289,13 @@ export function ItemPage() {
 
       {editDlg && (
         <div className="dlg-overlay" onClick={() => setEditDlg(false)}>
-          <div className="dlg" role="dialog" aria-label="Edit item" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="dlg"
+            role="dialog"
+            aria-label="Edit item"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.key === 'Escape' && setEditDlg(false)}
+          >
             <h2>Edit item</h2>
             <label className="muted">Name</label>
             <input

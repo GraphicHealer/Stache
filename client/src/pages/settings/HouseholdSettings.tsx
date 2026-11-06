@@ -68,6 +68,7 @@ export function HouseholdSettings() {
           <div className="row">
             <button
               className="btn"
+              disabled={!member.name.trim() || !member.email.trim() || !member.password.trim()}
               onClick={async () => {
                 try {
                   await api.post('/api/users', member);

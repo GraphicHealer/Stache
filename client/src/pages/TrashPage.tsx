@@ -52,16 +52,16 @@ export function TrashPage() {
     <div className="page">
       <h1>Recently deleted & activity</h1>
 
-      <h2>Hidden items</h2>
+      <h2>Deleted items</h2>
       {empty && <p className="muted">Nothing in the trash.</p>}
       {(trash?.items ?? []).map((i: any) => (
         <div key={i.id} className="out-row">
-          <Link to={`/items/${i.id}`} className="out-thumb" aria-label={i.name ?? 'unnamed'}>
+          <Link to={`/items/${i.id}`} className="out-thumb" aria-label={i.name ?? i.ai_name ?? 'unnamed'}>
             {i.thumb ? <img src={i.thumb} alt="" /> : <span>?</span>}
           </Link>
           <div className="out-info">
-            <Link to={`/items/${i.id}`}>{i.name ?? 'unnamed'}</Link>
-            <span className="muted">hidden {new Date(i.hidden_at).toLocaleDateString()}</span>
+            <Link to={`/items/${i.id}`}>{i.name ?? i.ai_name ?? 'unnamed'}</Link>
+            <span className="muted">deleted {new Date(i.hidden_at).toLocaleDateString()}</span>
           </div>
           <div className="out-actions">
             <IconBtn icon="undo" className="btn-small" label="Restore item" onClick={() => restoreItem(i.id)} />
@@ -77,7 +77,7 @@ export function TrashPage() {
             <div key={a.id} className="out-row">
               <div className="out-info">
                 <Link to={`/areas/${a.id}`}>{a.name ?? 'unnamed'}</Link>
-                <span className="muted">hidden {new Date(a.archived_at).toLocaleDateString()}</span>
+                <span className="muted">deleted {new Date(a.archived_at).toLocaleDateString()}</span>
               </div>
               <div className="out-actions">
                 <IconBtn icon="undo" className="btn-small" label="Restore area" onClick={() => restoreArea(a.id)} />

@@ -141,6 +141,7 @@ textarea.input { resize: vertical; }
   position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 8px;
 }
+.scanner-actions .btn { white-space: nowrap; }
 
 /* Breadcrumbs */
 .breadcrumb { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -341,7 +342,7 @@ textarea.input { resize: vertical; }
 }
 .nav-link svg { width: 24px; height: 24px; }
 .nav-link.active { color: var(--accent-text); }
-button.nav-link { background: none; border: 0; font: inherit; cursor: pointer; }
+button.nav-link { background: none; border: 0; font-family: inherit; cursor: pointer; }
 
 /* "More" popover above the nav */
 .more-overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.35); }
@@ -584,3 +585,8 @@ select.input { max-width: 100%; }
 /* Member rows stay on one line - the button never wraps under the name. */
 .member-row { flex-wrap: nowrap; justify-content: space-between; }
 .member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Small interactive bits get usable hit areas. */
+input[type='checkbox'] { width: 18px; height: 18px; }
+.crumb { padding: 6px 2px; }
+.app-logo { min-height: 44px; align-items: center; }

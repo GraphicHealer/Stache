@@ -192,7 +192,7 @@ export function SearchPage() {
           />
         </>
       )}
-      {(data || photoResults) && (
+      {(data?.items?.length || photoResults?.length) && (
         <>
           <h2>Items</h2>
           <ItemGrid

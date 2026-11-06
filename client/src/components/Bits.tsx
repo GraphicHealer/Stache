@@ -194,7 +194,7 @@ export function ItemGrid({
         const body = (
           <>
             {i.thumb ? (
-              <img src={i.thumb} alt={i.name ?? 'item'} loading="lazy" />
+              <img src={i.thumb} alt="" loading="lazy" />
             ) : placeholderLogo ? (
               <img className="thumb-placeholder ph-logo" src="/icon.svg" alt="" />
             ) : (
