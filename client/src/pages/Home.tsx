@@ -96,7 +96,6 @@ export function Home() {
       await filePhoto(b, areaId);
     } else {
       setCurrentArea({ id: areaId, name, thumb: null });
-      toast(`Filing into ${name ?? 'area'}`);
     }
   };
 
@@ -188,6 +187,7 @@ export function Home() {
                   : 'Point at a label to pick a bin'}
             </span>
             {scannedIn && <IconBtn icon="undo" label="Revert to previous area" onClick={unscan} />}
+            {currentArea && !scannedIn && <IconBtn icon="x" label="Clear filing area" onClick={() => setCurrentArea(null)} />}
           </div>
         </CameraView>
       )}

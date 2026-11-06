@@ -83,7 +83,6 @@ export function AreaPage() {
   const useDest = async (mode: NonNullable<typeof scanFor>, dest: string) => {
     if (mode === 'set-current') {
       setCurrentArea({ id: dest, name: null, thumb: null });
-      toast('Set as current area');
       nav('/');
       return;
     }
