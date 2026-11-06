@@ -590,3 +590,6 @@ select.input { max-width: 100%; }
 input[type='checkbox'] { width: 18px; height: 18px; }
 .crumb { padding: 6px 2px; }
 .app-logo { min-height: 44px; align-items: center; }
+
+/* 44px hit cell around a small checkbox - label clicks toggle it. */
+.check-hit { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; margin: -8px 0; cursor: pointer; }

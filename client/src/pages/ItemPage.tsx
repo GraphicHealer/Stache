@@ -271,7 +271,9 @@ export function ItemPage() {
       </div>
 
       <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-        <h1 style={{ margin: 0 }}>{item.name ?? 'unnamed'}</h1>
+        <h1 style={{ margin: 0 }}>
+          {item.name ?? (item.ai_name ? <em className="muted">{item.ai_name}</em> : 'unnamed')}
+        </h1>
         <IconBtn
           icon="pencil"
           label="Edit item"

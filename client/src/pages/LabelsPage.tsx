@@ -378,6 +378,7 @@ export function LabelsPage() {
         {unclaimed.map((l: any) => (
           <div key={l.code} className="label-row">
             <span className="row" style={{ margin: 0 }}>
+              <label className="check-hit" aria-label={`Select ${l.code}`}>
               <input
                 type="checkbox"
                 aria-label={`Select ${l.code}`}
@@ -388,6 +389,7 @@ export function LabelsPage() {
                   setSel(next);
                 }}
               />
+              </label>
               <code>{l.code}</code>
             </span>
             {l.printed ? <span className="pill">printed</span> : <span className="muted">unclaimed</span>}
