@@ -42,6 +42,8 @@ export function LabelsPage() {
   const [sheet, setSheet] = useState<SheetLabel[]>([]);
   const [busy, setBusy] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [selClaimed, setSelClaimed] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<'unclaimed' | 'claimed'>('unclaimed');
   const [addN, setAddN] = useState('');
   const [printDlg, setPrintDlg] = useState(false);
   const [defaultId, setDefaultId] = useState('pc');
@@ -61,8 +63,9 @@ export function LabelsPage() {
   const printers: Printer[] = printerData?.printers ?? [];
   const claimed = labels.filter((l: any) => l.area_id).length;
   const unclaimed = labels.filter((l: any) => !l.area_id);
+  const claimedList = labels.filter((l: any) => l.area_id);
   const sheetCodes = sheet.map((l) => l.code);
-  const printCodes = sel.size ? [...sel] : sheetCodes;
+  const printCodes = sel.size || selClaimed.size ? [...sel, ...selClaimed] : sheetCodes;
 
   const render = async (codes: string[]) => {
     const origin = window.location.origin;
@@ -329,6 +332,76 @@ export function LabelsPage() {
       </div>
       {progress && <p className="muted">{progress}</p>}
 
+      <div className="tabs">
+        <button
+          type="button"
+          className={`tab${tab === 'unclaimed' ? ' on' : ''}`}
+          onClick={() => setTab('unclaimed')}
+        >
+          Unclaimed{unclaimed.length ? ` (${unclaimed.length})` : ''}
+        </button>
+        <button
+          type="button"
+          className={`tab${tab === 'claimed' ? ' on' : ''}`}
+          onClick={() => setTab('claimed')}
+        >
+          Claimed{claimed ? ` (${claimed})` : ''}
+        </button>
+      </div>
+
+      {tab === 'claimed' ? (
+        <>
+          <div className="row spread">
+            <h2>Claimed labels</h2>
+            {claimedList.length > 0 && (
+              <label className="row muted" style={{ gap: 6, margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={selClaimed.size === claimedList.length && claimedList.length > 0}
+                  onChange={(e) =>
+                    setSelClaimed(e.target.checked ? new Set(claimedList.map((l: any) => l.code)) : new Set())
+                  }
+                  aria-label="Select all claimed labels"
+                />
+                all
+              </label>
+            )}
+            {selClaimed.size > 0 && (
+              <button
+                className="btn btn-small"
+                onClick={() => setPrintDlg(true)}
+              >
+                Print {selClaimed.size}
+              </button>
+            )}
+          </div>
+          <div className="label-list">
+            {claimedList.map((l: any) => (
+              <div key={l.code} className="label-row">
+                <span className="row" style={{ margin: 0 }}>
+                  <label className="check-hit" aria-label={`Select ${l.code}`}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${l.code}`}
+                    checked={selClaimed.has(l.code)}
+                    onChange={(e) => {
+                      const next = new Set(selClaimed);
+                      e.target.checked ? next.add(l.code) : next.delete(l.code);
+                      setSelClaimed(next);
+                    }}
+                  />
+                  </label>
+                  <code>{l.code}</code>
+                </span>
+                <span className="muted">{l.area_name ?? 'area'}</span>
+                {l.printed ? <span className="pill">printed</span> : <span className="muted">claimed</span>}
+              </div>
+            ))}
+            {claimedList.length === 0 && <p className="muted">No claimed labels yet - scan a code on an area.</p>}
+          </div>
+        </>
+      ) : (
+        <>
       <div className="row spread">
         <h2>Unclaimed labels</h2>
         {unclaimed.length > 0 && (
@@ -384,6 +457,8 @@ export function LabelsPage() {
         ))}
         {unclaimed.length === 0 && <p className="muted">No unclaimed codes - every label is in use.</p>}
       </div>
+        </>
+      )}
 
       <p className="muted">
         Manage printers under{' '}

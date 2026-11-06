@@ -704,3 +704,12 @@ button, input, select, textarea { font-family: inherit; }
   font-size: .68rem; font-weight: 800; line-height: 16px; text-align: center;
   pointer-events: none;
 }
+
+/* Tabs (labels list: Unclaimed | Claimed). */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--muted); font: inherit; font-weight: 600;
+  padding: 10px 14px; cursor: pointer; min-height: 44px;
+}
+.tab.on { color: inherit; border-bottom-color: var(--accent); }
