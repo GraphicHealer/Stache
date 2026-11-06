@@ -647,3 +647,32 @@ button, input, select, textarea { font-family: inherit; }
 .area-chip.scanned { background: var(--accent); color: var(--accent-ink, #111318); }
 .area-chip .icon-btn { padding: 4px; min-height: 32px; min-width: 32px; }
 .area-chip.scanned .icon-btn { color: inherit; }
+
+/* QR reticle - dimmed edges, transparent window, corner brackets, sweep + dots. */
+.scan-reticle { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.scan-window {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(62vw, 260px); aspect-ratio: 1;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45);
+  border-radius: 8px;
+}
+.scan-corner { position: absolute; width: 34px; height: 34px; border: 3px solid var(--accent); }
+.scan-corner.tl { top: -3px; left: -3px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
+.scan-corner.tr { top: -3px; right: -3px; border-left: 0; border-bottom: 0; border-radius: 0 6px 0 0; }
+.scan-corner.bl { bottom: -3px; left: -3px; border-right: 0; border-top: 0; border-radius: 0 0 0 6px; }
+.scan-corner.br { bottom: -3px; right: -3px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
+.scan-sweep {
+  position: absolute; left: 8%; right: 8%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: scan-sweep 2.2s ease-in-out infinite;
+}
+@keyframes scan-sweep { 0%, 100% { top: 8%; } 50% { top: 92%; } }
+.scan-dots { position: absolute; top: 50%; left: 50%; transform: translate(-50%, calc(min(31vw, 130px) + 34px)); text-align: center; }
+.scan-dots i {
+  display: inline-block; width: 7px; height: 7px; margin: 0 5px;
+  border-radius: 50%; background: var(--accent);
+  animation: scan-dot 1.2s ease-in-out infinite;
+}
+.scan-dots i:nth-child(2) { animation-delay: .15s; }
+.scan-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes scan-dot { 0%, 60%, 100% { opacity: .25; transform: scale(.8); } 30% { opacity: 1; transform: scale(1.15); } }

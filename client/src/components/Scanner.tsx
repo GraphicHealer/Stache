@@ -122,6 +122,16 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPick
   return (
     <div className="scanner-overlay">
       <video ref={videoRef} className="scanner-video" muted playsInline />
+      {formats.includes('qr_code') && (
+        <div className="scan-reticle" aria-hidden>
+          <div className="scan-window">
+            <span className="scan-corner tl" /><span className="scan-corner tr" />
+            <span className="scan-corner bl" /><span className="scan-corner br" />
+            <span className="scan-sweep" />
+          </div>
+          <div className="scan-dots"><i /><i /><i /></div>
+        </div>
+      )}
       {(hint || error) && <div className="scanner-hint">{error ?? hint}</div>}
       <div className="scanner-actions">
         {onPickBin && (
