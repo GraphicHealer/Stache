@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
-import { useApp } from '../context';
+import { useApp, type AreaRef } from '../context';
 import { outboxAdd } from '../outbox';
 import { downscale } from '../image';
 import { detectBarcodeInPhoto, parseScan } from '../scan';
 import { CameraView } from '../components/CameraView';
+import { IconBtn } from '../components/Bits';
 import { ALL_FORMATS, Scanner } from '../components/Scanner';
 
 /**
@@ -132,6 +133,34 @@ export function Home() {
     await useArea(areaId, r?.area?.name ?? null);
   };
 
+  // A Stache label in the live viewfinder picks the area - the reversed
+  // order: bin first, photo second. prevArea restores on an accidental scan.
+  const [scannedIn, setScannedIn] = useState(false);
+  const prevArea = useRef<AreaRef | null>(null);
+
+  const onQrDetected = async (text: string) => {
+    const scan = parseScan(text);
+    if (!scan || scan.kind !== 'label') return;
+    const r = await api.get(`/api/labels/${scan.code}`).catch(() => null);
+    if (r?.status === 'unclaimed') {
+      nav(`/l/${scan.code}`);
+      return;
+    }
+    if (r?.status === 'area' && r.area && r.area.id !== currentArea?.id) {
+      if (!scannedIn) prevArea.current = currentArea;
+      setScannedIn(true);
+      await useArea(r.area.id, r.area.name);
+    }
+  };
+
+  const unscan = () => {
+    setScannedIn(false);
+    const prev = prevArea.current;
+    prevArea.current = null;
+    setCurrentArea(prev);
+    toast(prev ? `Back to ${prev.name ?? 'previous area'}` : 'Area cleared');
+  };
+
   return (
     <div className="home">
       <h1 className="sr-only">Scan</h1>
@@ -153,7 +182,16 @@ export function Home() {
 
       {/* Unmounted while the scanner runs - two getUserMedia streams would
           fight over the camera on some devices. */}
-      {!scanning && <CameraView onCapture={onCapture} label="Take photo" />}
+      {!scanning && (
+        <CameraView onCapture={onCapture} label="Take photo" onQr={onQrDetected}>
+          {currentArea && (
+            <div className={`area-chip ${scannedIn ? 'scanned' : ''}`}>
+              <span>{scannedIn ? `Scanned into ${currentArea.name ?? 'area'}` : `Filing into ${currentArea.name ?? 'area'}`}</span>
+              {scannedIn && <IconBtn icon="undo" label="Revert to previous area" onClick={unscan} />}
+            </div>
+          )}
+        </CameraView>
+      )}
 
       <div className="home-actions">
         <button className="btn btn-big" onClick={() => { setHint('Scan an area label'); setScanning(true); }}>

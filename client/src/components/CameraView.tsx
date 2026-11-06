@@ -4,6 +4,9 @@ import { IconBtn } from './Bits';
 interface Props {
   onCapture: (blob: Blob) => void;
   label?: string;
+  /** Called when a QR enters the frame - the same stream decodes while live. */
+  onQr?: (text: string) => void;
+  children?: React.ReactNode;
 }
 
 /**
@@ -12,14 +15,21 @@ interface Props {
  * The shutter freezes the frame for a confirm/retake step - nothing uploads
  * until the user taps check.
  */
-export function CameraView({ onCapture, label = 'Capture' }: Props) {
+export function CameraView({ onCapture, label = 'Capture', onQr, children }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
   const [shot, setShot] = useState<{ blob: Blob; url: string } | null>(null);
+  // Refs so the QR callback (created once) sees current state.
+  const shotRef = useRef(shot);
+  shotRef.current = shot;
+  const onQrRef = useRef(onQr);
+  onQrRef.current = onQr;
+  const lastQr = useRef({ text: '', at: 0 });
 
   useEffect(() => {
     let stream: MediaStream | null = null;
     let mounted = true;
+    let qrControls: { stop: () => void } | null = null;
     navigator.mediaDevices
       ?.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
       .then((s) => {
@@ -32,11 +42,31 @@ export function CameraView({ onCapture, label = 'Capture' }: Props) {
         if (v) {
           v.srcObject = s;
           v.play().catch(() => {});
+          // Continuous QR decode on the same stream - a Stache label in frame
+          // selects the area without a separate scan mode.
+          import('@zxing/browser').then(({ BrowserQRCodeReader }) => {
+            new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 300 })
+              .decodeFromVideoElement(v, (result, _err, controls) => {
+                if (!result || shotRef.current) return;
+                const text = result.getText();
+                const now = Date.now();
+                if (text === lastQr.current.text && now - lastQr.current.at < 4000) return;
+                lastQr.current = { text, at: now };
+                qrControls = controls;
+                onQrRef.current?.(text);
+              })
+              .then((c) => {
+                if (!mounted) c.stop();
+                else qrControls = c;
+              })
+              .catch(() => {});
+          }).catch(() => {});
         }
       })
       .catch(() => setFailed(true));
     return () => {
       mounted = false;
+      qrControls?.stop();
       stream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
@@ -103,6 +133,7 @@ export function CameraView({ onCapture, label = 'Capture' }: Props) {
       ) : (
         <button className="shutter" onClick={capture} aria-label={label} />
       )}
+      {children}
     </div>
   );
 }
