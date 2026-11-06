@@ -199,13 +199,8 @@ export function SearchPage() {
         </p>
       )}
       {isFetching && <p className="muted">Searching…</p>}
-      {data && !data.items?.length && !data.areas?.length && query && !isFetching && (
-        <p className="muted">No matches for "{query}"</p>
-      )}
-      {data && !data.items?.length && !data.areas?.length && barcode && !query && !isFetching && (
-        <p className="muted">
-          Nothing has this barcode yet. Add a photo with it and Stache will offer to attach it.
-        </p>
+      {data && !data.items?.length && !data.areas?.length && (query || barcode) && !isFetching && (
+        <p className="muted">No matches for "{query || barcode}"</p>
       )}
       {data?.areas?.length > 0 && (
         <>
