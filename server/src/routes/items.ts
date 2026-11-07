@@ -327,9 +327,9 @@ export async function itemRoutes(app: FastifyInstance) {
       evs.push({ type: 'item.updated', payload: { prev, next } });
     }
 
-    // A name is new context for the AI: remote providers read it in the
-    // prompt, the local one seeds tags from it. Re-scan with it.
-    const renamed = 'name' in next;
+    // A name or a confirmed barcode is new context for the AI: remote
+    // providers read it in the prompt, the local one seeds tags from it.
+    const rescan = 'name' in next || 'barcode' in next;
 
     // A private item with no owner would be invisible to everyone.
     if (item.isPrivate && !item.ownerId) item.ownerId = req.user?.id ?? null;
@@ -373,7 +373,7 @@ export async function itemRoutes(app: FastifyInstance) {
         .all();
       return { updated: u, eventIds: ids };
     });
-    if (renamed) {
+    if (rescan) {
       await maybeQueueItem(id);
       kickAi();
     }

@@ -8,7 +8,7 @@ import { downscale } from '../image';
 import { detectBarcodeInPhoto, parseScan } from '../scan';
 import { CameraView } from '../components/CameraView';
 import { IconBtn } from '../components/Bits';
-import { ALL_FORMATS, Scanner } from '../components/Scanner';
+import { Scanner } from '../components/Scanner';
 
 /**
  * Camera-first home: capture files into the current area; a scan either
@@ -199,7 +199,7 @@ export function Home() {
       {/* The scanner still opens on its own for a pending photo or an
           unclaimed-code claim - the ambient QR loop covers area labels. */}
 
-      {scanning && <Scanner formats={ALL_FORMATS} onResult={onScan} onClose={() => setScanning(false)} hint={hint} onPickBin={onPickBin} />}
+      {scanning && <Scanner formats={['qr_code']} onResult={onScan} onClose={() => setScanning(false)} hint={hint} onPickBin={onPickBin} />}
 
 
       {codePrompt && (

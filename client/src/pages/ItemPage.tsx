@@ -51,6 +51,23 @@ export function ItemPage() {
     refetchInterval: (q) =>
       q.state.data?.item?.ai_status === 'pending' ? 4000 : false,
   });
+  // Product lookups for barcodes detected in photos - show the resolved
+  // product ("Saltine crackers - Nabisco") instead of the raw code.
+  const [products, setProducts] = useState<Record<string, { name: string; brand: string | null }>>({});
+  useEffect(() => {
+    const codes = (data?.item?.detected_codes ?? [])
+      .map((c: any) => c.text as string)
+      .filter((t: string) => t && t !== data?.item?.barcode);
+    for (const text of codes) {
+      if (products[text]) continue;
+      api
+        .get(`/api/codes/${encodeURIComponent(text)}/lookup`)
+        .then((r) => r?.product && setProducts((p) => ({ ...p, [text]: r.product })))
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.item?.detected_codes, data?.item?.barcode]);
+
   const { data: areaHint } = useQuery({
     queryKey: ['suggested-area', id],
     queryFn: () => api.get(`/api/items/${id}/suggested-area`).catch(() => ({ suggestions: [] })),
@@ -483,7 +500,19 @@ export function ItemPage() {
         .filter((c: any) => c.text !== item.barcode)
         .map((c: any) => (
           <div key={c.text} className="suggest">
-            <p className="muted">Found barcode <b>{c.text}</b> in a photo - same item?</p>
+            <p className="muted">
+              Found a barcode in a photo -{' '}
+              {products[c.text] ? (
+                <>
+                  <b>{products[c.text].name}</b>
+                  {products[c.text].brand ? ` (${products[c.text].brand})` : ''} - same item?
+                </>
+              ) : (
+                <>
+                  <b>{c.text}</b> - same item?
+                </>
+              )}
+            </p>
             <div className="row">
               <button className="btn" onClick={() => patch({ barcode: c.text }, 'Barcode attached')}>Yes</button>
               <button
