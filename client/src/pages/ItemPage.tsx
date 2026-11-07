@@ -505,7 +505,8 @@ export function ItemPage() {
               {products[c.text] ? (
                 <>
                   <b>{products[c.text].name}</b>
-                  {products[c.text].brand ? ` (${products[c.text].brand})` : ''} - same item?
+                  {products[c.text].brand ? ` (${products[c.text].brand})` : ''}{' '}
+                  <span className="grid-sub">{c.text}</span> - same item?
                 </>
               ) : (
                 <>

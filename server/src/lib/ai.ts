@@ -222,7 +222,10 @@ function cleanTags(tags: unknown[]): string[] | null {
     if (typeof t !== 'string') continue;
     const tag = t.trim();
     const key = tag.toLowerCase();
-    if (!key || FILLER.has(key) || seen.has(key)) continue;
+    // Words glued together by the model ("testproductdedelete") are never
+    // useful search terms - a word over 15 chars is the give-away.
+    const runOn = tag.split(/\s+/).some((w) => w.length > 15);
+    if (!key || FILLER.has(key) || seen.has(key) || runOn) continue;
     seen.add(key);
     out.push(tag);
   }

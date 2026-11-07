@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import loadingAmber from '../assets/loading-amber.svg';
 import loadingBlack from '../assets/loading-black.svg';
@@ -519,7 +519,18 @@ export function ModelBanner() {
     refetchInterval: (q) => (q.state.data?.ml?.state === 'downloading' ? 3000 : 30000),
   });
   const ml = data?.ml;
+  const { pathname } = useLocation();
   if (ml?.state !== 'downloading') return null;
+  // On Scan the full banner covers the shutter - collapse to a small
+  // top-left chip: animated logo + percent, still links to Settings.
+  if (pathname === '/') {
+    return (
+      <Link to="/settings" className="model-banner compact" aria-label={`AI model downloading${ml.percent != null ? ` ${ml.percent}%` : ''} - open Settings`}>
+        <img src={loadingAmber} alt="" className="model-banner-logo" />
+        {ml.percent != null && <span className="muted">{ml.percent}%</span>}
+      </Link>
+    );
+  }
   return (
     <Link to="/settings" className="model-banner">
       <img src={loadingAmber} alt="" className="model-banner-logo" />
