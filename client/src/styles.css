@@ -721,6 +721,6 @@ button, input, select, textarea { font-family: inherit; }
 .model-banner-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 
 /* Compact download chip - Scan screen only (the full banner would cover
-   the shutter). Top-left, clear of the centered camera chip. */
-.model-banner.compact { flex-direction: row; align-items: center; gap: 6px; width: auto; padding: 8px 12px; bottom: auto; top: 76px; left: 12px; }
+   the shutter). Same bottom-left corner, just small. */
+.model-banner.compact { flex-direction: row; align-items: center; gap: 6px; width: auto; padding: 8px 12px; }
 .model-banner.compact .model-banner-logo { width: 20px; height: 20px; flex: 0 0 20px; }
