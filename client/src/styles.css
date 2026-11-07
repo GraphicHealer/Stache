@@ -142,6 +142,7 @@ textarea.input { resize: vertical; }
 .scanner-hint {
   position: absolute; top: 16px; left: 0; right: 0;
   text-align: center; font-weight: 600; text-shadow: 0 1px 4px #000;
+  color: #f5f5f5; /* over the camera feed, not the page theme */
 }
 .scanner-actions {
   position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
@@ -728,9 +729,13 @@ button, input, select, textarea { font-family: inherit; }
 /* Shutter + barcode prompt inside the scanner overlay (combined scan/search). */
 .scanner-shutter { position: absolute; left: 50%; transform: translateX(-50%); bottom: 92px; }
 .scanner-prompt {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: 160px;
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 180px;
   display: flex; align-items: center; gap: 8px; max-width: 92%;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
   padding: 8px 12px; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,.35);
 }
-.scanner-prompt > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.scanner-prompt > span {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 55vw;
+}
+.scanner-prompt .btn { min-height: 44px; }
