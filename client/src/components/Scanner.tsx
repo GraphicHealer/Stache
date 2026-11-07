@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import loadingWhite from '../assets/loading-white.svg';
+import { api } from '../api';
 import { AreaPicker } from './Bits';
 
 interface Props {
@@ -8,6 +9,16 @@ interface Props {
   hint?: string;
   /** Symbologies to detect. Defaults to QR only. */
   formats?: string[];
+  /**
+   * Optional shutter: adds a capture button and passes the snapped frame.
+   * For search flows (photo search alongside barcode scanning).
+   */
+  onPhoto?: (blob: Blob) => void;
+  /**
+   * Confirm before firing: a detected code gets looked up and shown as a
+   * prompt ("Saltines? Search") instead of firing immediately.
+   */
+  promptForBarcodes?: boolean;
   /**
    * Optional manual escape hatch: shows a "pick an area" button that opens the
    * area tree instead of scanning a label. The callback gets the area id.
@@ -25,10 +36,13 @@ const ALL_FORMATS = [
 ];
 
 /** Full-screen camera scanner. Native BarcodeDetector, @zxing fallback (QR only). */
-export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPickBin }: Props) {
+export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPickBin, onPhoto, promptForBarcodes }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [codePrompt, setCodePrompt] = useState<{ code: string; name: string | null; brand: string | null } | null>(null);
+  const promptGate = useRef(false);
+  const dismissed = useRef<{ code: string; t: number } | null>(null);
   const qrOnly = formats.length === 1 && formats[0] === 'qr_code';
   const cb = useRef(onResult);
   cb.current = onResult;
@@ -42,6 +56,22 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPick
 
     const fire = (text: string) => {
       if (fired || stopped) return;
+      if (promptForBarcodes) {
+        if (promptGate.current) return;
+        const d = dismissed.current;
+        if (d && d.code === text && Date.now() - d.t < 4000) return;
+        promptGate.current = true;
+        setCodePrompt({ code: text, name: null, brand: null });
+        api
+          .get(`/api/codes/${encodeURIComponent(text)}/lookup`)
+          .then((r) =>
+            setCodePrompt((p) =>
+              p && p.code === text ? { ...p, name: r?.product?.name ?? null, brand: r?.product?.brand ?? null } : p,
+            ),
+          )
+          .catch(() => {});
+        return;
+      }
       fired = true;
       cb.current(text);
     };
@@ -123,6 +153,52 @@ export function Scanner({ onResult, onClose, hint, formats = ['qr_code'], onPick
   return (
     <div className="scanner-overlay">
       <video ref={videoRef} className="scanner-video" muted playsInline />
+      {onPhoto && (
+        <button
+          className="shutter scanner-shutter"
+          aria-label="Take a photo"
+          onClick={() => {
+            const video = videoRef.current;
+            if (!video?.videoWidth) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d')!.drawImage(video, 0, 0);
+            canvas.toBlob((b) => b && onPhoto(b), 'image/jpeg', 0.9);
+          }}
+        />
+      )}
+      {codePrompt && (
+        <div className="scanner-prompt">
+          <span>
+            {codePrompt.name ? (
+              <>
+                <b>{codePrompt.name}</b>
+                {codePrompt.brand ? ` (${codePrompt.brand})` : ''}{' '}
+                <span className="grid-sub">{codePrompt.code}</span>
+              </>
+            ) : (
+              <code>{codePrompt.code}</code>
+            )}
+          </span>
+          <button
+            className="btn btn-small"
+            onClick={() => onResult(codePrompt.code)}
+          >
+            Search
+          </button>
+          <button
+            className="btn btn-small btn-ghost"
+            onClick={() => {
+              dismissed.current = { code: codePrompt.code, t: Date.now() };
+              promptGate.current = false;
+              setCodePrompt(null);
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {formats.includes('qr_code') && (
         <div className="scan-reticle" aria-hidden>
           <div className="scan-window">

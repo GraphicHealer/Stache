@@ -724,3 +724,13 @@ button, input, select, textarea { font-family: inherit; }
    the shutter). Same bottom-left corner, just small. */
 .model-banner.compact { flex-direction: row; align-items: center; gap: 6px; width: auto; padding: 8px 12px; }
 .model-banner.compact .model-banner-logo { width: 20px; height: 20px; flex: 0 0 20px; }
+
+/* Shutter + barcode prompt inside the scanner overlay (combined scan/search). */
+.scanner-shutter { position: absolute; left: 50%; transform: translateX(-50%); bottom: 92px; }
+.scanner-prompt {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 160px;
+  display: flex; align-items: center; gap: 8px; max-width: 92%;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 8px 12px; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.scanner-prompt > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

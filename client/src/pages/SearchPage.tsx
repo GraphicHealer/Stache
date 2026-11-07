@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
 import { downscale } from '../image';
-import { CaptureInput, Icon, IconBtn, ItemGrid, areaPaths, type AreaRow } from '../components/Bits';
+import { IconBtn, ItemGrid, areaPaths, type AreaRow } from '../components/Bits';
 import { ALL_FORMATS, Scanner } from '../components/Scanner';
 
 const path = (crumb: { name: string | null }[]) =>
@@ -105,22 +105,6 @@ export function SearchPage() {
     <div className="page">
       <h1 className="sr-only">Find</h1>
       <form onSubmit={submit} className="row">
-        <input
-          className="input"
-          style={{ flex: 1 }}
-          placeholder="Whatever you remember…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          autoFocus
-        />
-        <CaptureInput onCapture={searchByPhoto} className="btn icon-btn" aria-label="Search by photo" title="Search by photo">
-          <Icon name="camera" />
-        </CaptureInput>
-        <IconBtn
-          icon="barcode"
-          label="Scan a barcode"
-          onClick={() => setScanning(true)}
-        />
         <IconBtn
           icon="filter"
           badge={activeFilters || undefined}
@@ -129,6 +113,19 @@ export function SearchPage() {
           aria-expanded={filtersOpen}
           onClick={() => setFiltersOpen((o) => !o)}
         />
+        <input
+          className="input"
+          style={{ flex: 1 }}
+          placeholder="Whatever you remember…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoFocus
+        />
+        <IconBtn
+          icon="camera"
+          label="Scan a barcode or take a photo"
+          onClick={() => setScanning(true)}
+        />
         {activeFilters > 0 && !filtersOpen && (
           <IconBtn icon="x" label="Clear all filters" onClick={() => setParams(query ? { q: query } : {})} />
         )}
@@ -136,7 +133,12 @@ export function SearchPage() {
       {scanning && (
         <Scanner
           formats={ALL_FORMATS.filter((f) => f !== 'qr_code')}
-          hint="Scan a product barcode"
+          hint="Point at a barcode, or take a photo"
+          promptForBarcodes
+          onPhoto={(blob) => {
+            setScanning(false);
+            searchByPhoto(blob);
+          }}
           onResult={(text) => {
             setScanning(false);
             setParams({ barcode: text });
