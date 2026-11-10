@@ -89,7 +89,6 @@ export function Home() {
 
   // A Stache label means "open this area" - except with a photo waiting,
   // where it files the photo. Scanning never sets the filing area.
-  const [scannedLabel, setScannedLabel] = useState<{ id: string; name: string | null } | null>(null);
 
   const actOnArea = async (area: { id: string; name: string | null }) => {
     if (stagedPhoto) {
@@ -145,7 +144,7 @@ export function Home() {
         setStagedPhoto(null);
         await filePhoto(b, r.area.id);
       } else {
-        setScannedLabel({ id: r.area.id, name: r.area.name });
+        nav(`/areas/${r.area.id}`);
       }
     }
   };
@@ -172,17 +171,8 @@ export function Home() {
       {/* Unmounted while the scanner runs - two getUserMedia streams would
           fight over the camera on some devices. */}
       {!scanning && (
-        <CameraView onCapture={(b) => { setScannedLabel(null); onCapture(b); }} label="Take photo" onQr={onQrDetected} onQrGone={() => setScannedLabel(null)}>
-          {scannedLabel ? (
-            <button
-              type="button"
-              className="area-chip open"
-              onClick={() => nav(`/areas/${scannedLabel.id}`)}
-            >
-              {scannedLabel.name ?? 'Area'} · Open
-            </button>
-          ) : (
-            <div className="area-chip">
+        <CameraView onCapture={onCapture} label="Take photo" onQr={onQrDetected}>
+          <div className="area-chip">
               <span>
                 {currentArea
                   ? `Filing into ${currentArea.name ?? 'area'}`
@@ -191,8 +181,7 @@ export function Home() {
                     : 'Point at a label to open it'}
               </span>
               {currentArea && <IconBtn icon="x" label="Clear filing area" onClick={() => setCurrentArea(null)} />}
-            </div>
-          )}
+          </div>
         </CameraView>
       )}
 
