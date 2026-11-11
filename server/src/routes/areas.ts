@@ -107,7 +107,8 @@ export async function areaRoutes(app: FastifyInstance) {
 
     if (body.parent_id) {
       const [parent] = await db.select().from(areas).where(eq(areas.id, body.parent_id));
-      if (!parent || parent.archivedAt) return reply.notFound('parent area not found');
+      if (!parent || parent.archivedAt || !(await canSeeArea(body.parent_id!, req.user?.id ?? null, req.user?.role === 'admin')))
+        return reply.notFound('parent area not found');
     }
 
     let labelCode: string | null = null;
@@ -255,7 +256,8 @@ export async function areaRoutes(app: FastifyInstance) {
       if (body.parent_id === id) return reply.badRequest('an area cannot contain itself');
       if (body.parent_id) {
         const [parent] = await db.select().from(areas).where(eq(areas.id, body.parent_id));
-        if (!parent) return reply.badRequest('parent area not found');
+        if (!parent || !(await canSeeArea(body.parent_id, req.user?.id ?? null, req.user?.role === 'admin')))
+          return reply.badRequest('parent area not found');
         // Reject moving into own descendant.
         const chain = await breadcrumb(body.parent_id);
         if (chain.some((c) => c.id === id))
@@ -279,15 +281,16 @@ export async function areaRoutes(app: FastifyInstance) {
       if (!body.is_private && area.ownerId && area.ownerId !== req.user?.id && req.user?.role !== 'admin') {
         return reply.code(403).send('only the owner can un-private a bin');
       }
+      const prevOwner = area.ownerId;
       if (body.is_private && !area.isPrivate) {
-        area.ownerId = area.ownerId ?? req.user?.id ?? null;
+        area.ownerId = req.user?.id ?? null; // a public bin carries no owner - whoever privatizes owns it
       } else {
         clearedShares = (await db
           .select({ userId: objectShares.userId })
           .from(objectShares)
           .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id)))).map((r) => r.userId);
       }
-      evs.push({ type: 'area.updated', payload: { prev: { is_private: area.isPrivate, owner_id: area.ownerId, shares: clearedShares }, next: { is_private: body.is_private } } });
+      evs.push({ type: 'area.updated', payload: { prev: { is_private: !body.is_private, owner_id: prevOwner, shares: clearedShares }, next: { is_private: body.is_private } } });
       area.isPrivate = body.is_private;
       if (!body.is_private) area.ownerId = null;
     }

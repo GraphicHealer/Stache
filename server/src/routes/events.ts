@@ -229,7 +229,7 @@ export async function miscRoutes(app: FastifyInstance) {
     const { format } = req.query as { format?: string };
     const uid = req.user?.id ?? null;
     const admin = req.user?.role === 'admin';
-    const vis = itemVisible(uid);
+    const vis = itemVisible(uid, admin);
     const allItems = await db.select().from(items).where(vis).orderBy(asc(items.createdAt));
     const allAreas = await db.select().from(areas).where(areaVisible(uid, admin)).orderBy(asc(areas.createdAt));
     const pathCache = new Map<string, string>();

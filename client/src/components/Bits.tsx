@@ -750,7 +750,7 @@ export function ShareRow({ base, ownerId, shares, users, onChanged }: {
       {candidates.length > 0 && (
         <select
           className="input"
-          style={{ maxWidth: 170, minHeight: 34, padding: '4px 8px' }}
+          style={{ maxWidth: 170, minHeight: 44, padding: '4px 8px' }}
           value=""
           aria-label="Add a member to this private share"
           onChange={(e) => { if (e.target.value) add(e.target.value); }}
