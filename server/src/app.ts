@@ -180,6 +180,14 @@ export function buildApp() {
     }
   });
 
+  // Photo-path errors are per-viewer - a CDN caching a 401/404 by file
+  // extension would break the photo for members who ARE allowed to see it.
+  app.addHook('onSend', async (req, reply) => {
+    if (req.url?.startsWith('/photos/') && reply.statusCode >= 400) {
+      reply.header('Cache-Control', 'private, no-store');
+    }
+  });
+
   app.get('/api/me', async (req) => ({ user: req.user }));
 
   // First account is the admin: member management + settings are admin-only.
