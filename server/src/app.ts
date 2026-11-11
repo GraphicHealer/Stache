@@ -9,10 +9,11 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { env } from './env';
 import { getAuth, handleAuthRequest, sessionUser, userCount } from './auth';
-import { user } from './db/schema';
+import { items, user } from './db/schema';
 import { asc, eq } from 'drizzle-orm';
 import { db, queryOne } from './db';
 import { verifyPhotoSig } from './lib/signed';
+import { canSeeArea, canSeeItem } from './lib/visibility';
 import { parseBody } from './lib/validate';
 import { z } from 'zod';
 
@@ -159,15 +160,23 @@ export function buildApp() {
     // (Signed URLs bypassed earlier intentionally - digest/HA use.)
     if (pathOnly) {
       const name = pathOnly.split('/').pop()!;
-      const row = queryOne<{ owner_id: string | null; is_private: number | null }>(
-        `SELECT i.owner_id, i.is_private
-           FROM photos p LEFT JOIN items i ON i.id = p.item_id
-          WHERE p.path = ? OR p.thumb_path = ? LIMIT 1`,
+      const row = queryOne<{ item_id: string | null; area_id: string | null }>(
+        `SELECT p.item_id, p.area_id
+           FROM photos p WHERE p.path = ? OR p.thumb_path = ? LIMIT 1`,
         name,
         name,
       );
-      if (row?.is_private && row.owner_id !== user.id)
-        return reply.code(404).send({ error: 'not found' });
+      if (row?.item_id) {
+        const [item] = await db
+          .select({ id: items.id, isPrivate: items.isPrivate, ownerId: items.ownerId, areaId: items.areaId })
+          .from(items)
+          .where(eq(items.id, row.item_id));
+        if (item && !(await canSeeItem(item, user.id, user.role === 'admin')))
+          return reply.code(404).send({ error: 'not found' });
+      } else if (row?.area_id) {
+        if (!(await canSeeArea(row.area_id, user.id, user.role === 'admin')))
+          return reply.code(404).send({ error: 'not found' });
+      }
     }
   });
 
