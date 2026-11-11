@@ -243,3 +243,77 @@ describe('signed photo URLs', () => {
     expect((await get(`${p}?exp=${exp}`)).statusCode).toBe(401);
   });
 });
+
+describe('bin privacy - routes', () => {
+  let vault: any, secretItem: any;
+
+  beforeAll(async () => {
+    vault = await mkArea('vault');
+    await db
+      .update(schema.areas)
+      .set({ isPrivate: true, ownerId: owner.userId })
+      .where(eq(schema.areas.id, vault.id));
+    [secretItem] = await db
+      .insert(schema.items)
+      .values({ areaId: vault.id, name: 'secret-tape', barcode: '999000111222' })
+      .returning();
+  }, 30_000);
+
+  it('a member outside a private bin still sees public roots', async () => {
+    const roots = (await get('/api/areas', other)).json().areas.map((a: any) => a.id);
+    expect(roots).toContain(area.id);
+    expect(roots).not.toContain(vault.id);
+  });
+
+  it('reads inside a private bin 404 or empty for outsiders', async () => {
+    expect((await get(`/api/areas/${vault.id}`, other)).statusCode).toBe(404);
+    expect((await get(`/api/items/${secretItem.id}`, other)).statusCode).toBe(404);
+    const hits = (await get('/api/search?q=secret', other)).json().items.map((i: any) => i.id);
+    expect(hits).not.toContain(secretItem.id);
+    const byBarcode = (await get('/api/search?barcode=999000111222', other)).json().items.map((i: any) => i.id);
+    expect(byBarcode).not.toContain(secretItem.id);
+  });
+
+  it('outsiders cannot mutate a private bin or its contents', async () => {
+    expect(
+      (await app.inject({ method: 'PATCH', url: `/api/areas/${vault.id}`, headers: other, payload: { name: 'x' } })).statusCode,
+    ).toBe(404);
+    expect((await app.inject({ method: 'DELETE', url: `/api/areas/${vault.id}`, headers: other })).statusCode).toBe(404);
+    expect(
+      (await app.inject({ method: 'PATCH', url: `/api/items/${secretItem.id}`, headers: other, payload: { name: 'x' } })).statusCode,
+    ).toBe(404);
+  });
+
+  it('un-privatizing restores access and clears the share list', async () => {
+    await app.inject({
+      method: 'POST',
+      url: `/api/areas/${vault.id}/shares`,
+      headers: owner,
+      payload: { user_id: other.userId },
+    });
+    await app.inject({ method: 'PATCH', url: `/api/areas/${vault.id}`, headers: owner, payload: { is_private: false } });
+    expect((await get(`/api/areas/${vault.id}`, other)).statusCode).toBe(200);
+    // re-privatize - the cleared share list must NOT come back
+    await app.inject({ method: 'PATCH', url: `/api/areas/${vault.id}`, headers: owner, payload: { is_private: true } });
+    expect((await get(`/api/areas/${vault.id}`, other)).statusCode).toBe(404);
+    // cleanup - back to public so later suites are unaffected
+    await app.inject({ method: 'PATCH', url: `/api/areas/${vault.id}`, headers: owner, payload: { is_private: false } });
+  });
+
+  it('duplicate + unknown-user shares return 200/400, not 500', async () => {
+    await app.inject({ method: 'PATCH', url: `/api/areas/${vault.id}`, headers: owner, payload: { is_private: true } });
+    const first = await app.inject({
+      method: 'POST', url: `/api/areas/${vault.id}/shares`, headers: owner, payload: { user_id: other.userId },
+    });
+    expect(first.statusCode).toBe(200);
+    const dup = await app.inject({
+      method: 'POST', url: `/api/areas/${vault.id}/shares`, headers: owner, payload: { user_id: other.userId },
+    });
+    expect(dup.statusCode).toBe(200);
+    const bad = await app.inject({
+      method: 'POST', url: `/api/areas/${vault.id}/shares`, headers: owner, payload: { user_id: 'nope' },
+    });
+    expect(bad.statusCode).toBe(400);
+    await app.inject({ method: 'PATCH', url: `/api/areas/${vault.id}`, headers: owner, payload: { is_private: false } });
+  });
+});

@@ -20,7 +20,7 @@ import {
 } from '../lib/photos';
 import type { SavedPhoto } from '../lib/photos';
 import { items } from '../db/schema';
-import { areaVisible } from '../lib/visibility';
+import { areaVisible, canSeeArea } from '../lib/visibility';
 import { itemVisible } from '../lib/visibility';
 import { parseBody } from '../lib/validate';
 import { LABEL_CODE_RE } from '../lib/labelcode';
@@ -156,7 +156,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const deep = (req.query as { deep?: string }).deep === '1';
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
 
     const scopeIds = deep ? await descendantAreaIds(id) : [id];
     const [crumb, subs, contents, areaPhotos] = await Promise.all([
@@ -248,7 +248,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const body = parseBody(PatchAreaSchema, req.body, reply);
     if (!body) return;
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
     const evs: { type: 'area.moved' | 'area.updated'; payload: Record<string, unknown> }[] = [];
 
     if (body.parent_id !== undefined && body.parent_id !== area.parentId) {
@@ -274,15 +274,22 @@ export async function areaRoutes(app: FastifyInstance) {
     if (JSON.stringify(nextTags) !== JSON.stringify(prevTags)) {
       evs.push({ type: 'area.updated', payload: { prev: { tags: prevTags }, next: { tags: nextTags } } });
     }
+    let clearedShares: string[] = [];
     if (body.is_private !== undefined && body.is_private !== area.isPrivate) {
-      if (!body.is_private && area.ownerId && area.ownerId !== req.user?.id) {
+      if (!body.is_private && area.ownerId && area.ownerId !== req.user?.id && req.user?.role !== 'admin') {
         return reply.code(403).send('only the owner can un-private a bin');
       }
       if (body.is_private && !area.isPrivate) {
         area.ownerId = area.ownerId ?? req.user?.id ?? null;
+      } else {
+        clearedShares = (await db
+          .select({ userId: objectShares.userId })
+          .from(objectShares)
+          .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id)))).map((r) => r.userId);
       }
-      evs.push({ type: 'area.updated', payload: { prev: { is_private: area.isPrivate }, next: { is_private: body.is_private } } });
+      evs.push({ type: 'area.updated', payload: { prev: { is_private: area.isPrivate, shares: clearedShares }, next: { is_private: body.is_private } } });
       area.isPrivate = body.is_private;
+      if (!body.is_private) area.ownerId = null;
     }
     if (body.category !== undefined && body.category !== area.category) {
       evs.push({ type: 'area.updated', payload: { prev: { category: area.category }, next: { category: body.category } } });
@@ -304,6 +311,11 @@ export async function areaRoutes(app: FastifyInstance) {
         .where(eq(areas.id, id))
         .returning()
         .all();
+      if (clearedShares.length) {
+        tx.delete(objectShares)
+          .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id)))
+          .run();
+      }
       return { updated: u, eventIds: ids };
     });
     return { area: areaJson(updated), event_ids: eventIds };
@@ -317,17 +329,21 @@ export async function areaRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { user_id?: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
+    if (!area.isPrivate) return reply.badRequest('bin is not private');
     if (!(await canManageShare(area.ownerId, req.user?.id ?? null, id))) return reply.code(403).send('not a member of this private bin');
     if (!body.user_id || body.user_id === area.ownerId) return reply.badRequest('pick a member to add');
-    await db.insert(objectShares).values({ objectType: 'area', objectId: id, userId: body.user_id });
+    const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, body.user_id));
+    if (!u) return reply.badRequest('unknown member');
+    await db.insert(objectShares).values({ objectType: 'area', objectId: id, userId: body.user_id }).onConflictDoNothing();
     return { ok: true };
   });
 
   app.delete('/api/areas/:id/shares/:uid', async (req, reply) => {
     const { id, uid } = req.params as { id: string; uid: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
+    if (!area.isPrivate) return reply.badRequest('bin is not private');
     if (!(await canManageShare(area.ownerId, req.user?.id ?? null, id))) return reply.code(403).send('not a member of this private bin');
     await db
       .delete(objectShares)
@@ -338,7 +354,7 @@ export async function areaRoutes(app: FastifyInstance) {
   app.get('/api/areas/:id/suggest-tags', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
     const ids = await descendantAreaIds(id);
     const rows = await db
       .select({ aiTags: items.aiTags, tags: items.tags })
@@ -374,8 +390,8 @@ export async function areaRoutes(app: FastifyInstance) {
     if (!into_id || into_id === id) return reply.badRequest('into_id required (and must differ)');
     const [src] = await db.select().from(areas).where(eq(areas.id, id));
     const [dst] = await db.select().from(areas).where(eq(areas.id, into_id));
-    if (!src || src.archivedAt) return reply.notFound('area not found');
-    if (!dst || dst.archivedAt) return reply.badRequest('destination area not found');
+    if (!src || src.archivedAt || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
+    if (!dst || dst.archivedAt || !(await canSeeArea(into_id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.badRequest('destination area not found');
     const chain = await breadcrumb(into_id);
     if (chain.some((c) => c.id === id)) return reply.badRequest('cannot merge into a descendant');
 
@@ -400,7 +416,7 @@ export async function areaRoutes(app: FastifyInstance) {
   app.delete('/api/areas/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
     const ev = db.transaction((tx) => {
       tx.update(areas).set({ archivedAt: new Date() }).where(eq(areas.id, id)).run();
       tx.update(labels).set({ areaId: null }).where(eq(labels.areaId, id)).run();
@@ -413,7 +429,7 @@ export async function areaRoutes(app: FastifyInstance) {
   app.post('/api/areas/:id/restore', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
     const ev = db.transaction((tx) => {
       tx.update(areas).set({ archivedAt: null }).where(eq(areas.id, id)).run();
       return recordEventTx(tx, 'area.restored', 'area', id, { name: area.name }, req.user?.id);
@@ -426,7 +442,7 @@ export async function areaRoutes(app: FastifyInstance) {
   app.delete('/api/areas/:id/purge', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
     if (!area.archivedAt) return reply.badRequest('only archived areas can be purged');
     const [item] = await db.select().from(items).where(eq(items.areaId, id)).limit(1);
     if (item) return reply.badRequest('area still has items - move or purge them first');
@@ -435,6 +451,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const pics = await db.select().from(photos).where(eq(photos.areaId, id));
     db.transaction((tx) => {
       tx.delete(photos).where(eq(photos.areaId, id)).run();
+      tx.delete(objectShares).where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id))).run();
       tx.delete(areas).where(eq(areas.id, id)).run();
     });
     for (const p of pics) {
@@ -454,7 +471,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const { present_ids } = body;
     const markUnaccounted = body.mark_unaccounted !== false;
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
     const present = new Set(present_ids);
     const contents = await db
       .select()
@@ -503,7 +520,7 @@ export async function areaRoutes(app: FastifyInstance) {
   app.post('/api/areas/:id/photos', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
-    if (!area) return reply.notFound('area not found');
+    if (!area || !(await canSeeArea(id, req.user?.id ?? null, req.user?.role === 'admin'))) return reply.notFound('area not found');
 
     // Collect + validate every file before writing anything - a bad upload
     // must not leave earlier photos half-committed.

@@ -8,6 +8,7 @@ import { apiTokens, areas, items, labels, photos, type ApiToken } from '../db/sc
 import { recordEvent, recordEventTx } from '../lib/events';
 import { assertImage, photoUrl, removePhotoFiles, savePhotoFile, thumbUrl, PhotoBusyError, type SavedPhoto } from '../lib/photos';
 import { signPhotoUrl } from '../lib/signed';
+import { areaVisible, canSeeArea, itemVisible } from '../lib/visibility';
 import { analyzeItemPhoto } from '../lib/ml';
 import { detectAndStore } from './items';
 import { kickAi, maybeQueueItem } from '../lib/ai';
@@ -83,17 +84,17 @@ const areaJson = (a: typeof areas.$inferSelect, counts = new Map<string, number>
 async function resolveArea(ref: { area_id?: string; area_label?: string; area_name?: string }) {
   if (ref.area_id) {
     const [a] = await db.select().from(areas).where(and(eq(areas.id, ref.area_id), isNull(areas.archivedAt)));
-    return a ?? null;
+    return a && (await canSeeArea(a.id, null)) ? a : null;
   }
   if (ref.area_label) {
     const [l] = await db.select().from(labels).where(eq(labels.code, ref.area_label.toUpperCase()));
     if (!l?.areaId) return null;
     const [a] = await db.select().from(areas).where(and(eq(areas.id, l.areaId), isNull(areas.archivedAt)));
-    return a ?? null;
+    return a && (await canSeeArea(a.id, null)) ? a : null;
   }
   if (ref.area_name) {
     const [a] = await db.select().from(areas).where(and(eq(areas.name, ref.area_name), isNull(areas.archivedAt)));
-    if (a) return a;
+    if (a && (await canSeeArea(a.id, null))) return a;
     const [created] = await db.insert(areas).values({ name: ref.area_name.trim() }).returning();
     await recordEvent('area.created', 'area', created.id, { name: created.name }, null, 'api');
     return created;
@@ -134,9 +135,9 @@ export async function extRoutes(app: FastifyInstance) {
   app.get('/api/v1/areas', async (req, reply) => {
     const ctx = await apiAuth(req, reply);
     if (!ctx) return;
-    const rows = await db.select().from(areas).where(isNull(areas.archivedAt)).orderBy(asc(areas.name));
+    const rows = await db.select().from(areas).where(and(isNull(areas.archivedAt), areaVisible(null))).orderBy(asc(areas.name));
     const counts = new Map<string, number>();
-    for (const i of await db.select({ areaId: items.areaId }).from(items).where(eq(items.isPrivate, false))) {
+    for (const i of await db.select({ areaId: items.areaId }).from(items).where(itemVisible(null))) {
       if (i.areaId) counts.set(i.areaId, (counts.get(i.areaId) ?? 0) + 1);
     }
     return { areas: rows.map((a) => areaJson(a, counts)) };
@@ -147,11 +148,11 @@ export async function extRoutes(app: FastifyInstance) {
     if (!ctx) return;
     const { id } = req.params as { id: string };
     const [a] = await db.select().from(areas).where(and(eq(areas.id, id), isNull(areas.archivedAt)));
-    if (!a) return reply.notFound('area not found');
+    if (!a || !(await canSeeArea(id, null))) return reply.notFound('area not found');
     const contents = await db
       .select()
       .from(items)
-      .where(and(eq(items.areaId, id), eq(items.isPrivate, false), isNull(items.hiddenAt)))
+      .where(and(eq(items.areaId, id), itemVisible(null), isNull(items.hiddenAt)))
       .orderBy(asc(items.createdAt));
     return { area: areaJson(a), items: contents.map(itemJson) };
   });
@@ -163,7 +164,7 @@ export async function extRoutes(app: FastifyInstance) {
     const q = (query.q ?? '').trim().toLowerCase();
     const limit = Math.min(200, Math.max(1, Number.parseInt(query.limit ?? '50') || 50));
     const offset = Math.max(0, Number.parseInt(query.offset ?? '0') || 0);
-    const where = [eq(items.isPrivate, false), isNull(items.hiddenAt)];
+    const where = [itemVisible(null), isNull(items.hiddenAt)];
     if (query.area_id) where.push(eq(items.areaId, query.area_id));
     if (query.status && ['home', 'out', 'lent', 'unaccounted', 'gone'].includes(query.status))
       where.push(eq(items.status, query.status));
@@ -202,7 +203,7 @@ export async function extRoutes(app: FastifyInstance) {
     const ctx = await apiAuth(req, reply);
     if (!ctx) return;
     const { id } = req.params as { id: string };
-    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false), isNull(items.hiddenAt)));
+    const [item] = await db.select().from(items).where(and(eq(items.id, id), itemVisible(null), isNull(items.hiddenAt)));
     if (!item) return reply.notFound('item not found');
     const itemPhotos = await db.select().from(photos).where(eq(photos.itemId, id)).orderBy(asc(photos.createdAt));
     return {
@@ -224,7 +225,7 @@ export async function extRoutes(app: FastifyInstance) {
     let area = null;
     if (l.areaId) {
       const [a] = await db.select().from(areas).where(eq(areas.id, l.areaId));
-      if (a && !a.archivedAt) area = areaJson(a);
+      if (a && !a.archivedAt && (await canSeeArea(a.id, null))) area = areaJson(a);
     }
     return { label: { code: l.code, printed_at: l.printedAt }, area };
   });
@@ -407,7 +408,7 @@ export async function extRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = parseBody(ItemPatchSchema, req.body, reply);
     if (!body) return;
-    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false), isNull(items.hiddenAt)));
+    const [item] = await db.select().from(items).where(and(eq(items.id, id), itemVisible(null), isNull(items.hiddenAt)));
     if (!item) return reply.notFound('item not found');
 
     const evs: { type: Parameters<typeof recordEventTx>[1]; payload: Record<string, unknown> }[] = [];
@@ -500,7 +501,7 @@ export async function extRoutes(app: FastifyInstance) {
     if (!ctx) return;
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { area_id?: string; area_label?: string; area_name?: string };
-    const [item] = await db.select().from(items).where(and(eq(items.id, id), eq(items.isPrivate, false), isNull(items.hiddenAt)));
+    const [item] = await db.select().from(items).where(and(eq(items.id, id), itemVisible(null), isNull(items.hiddenAt)));
     if (!item) return reply.notFound('item not found');
     const areaRefs = [body.area_id, body.area_label, body.area_name].filter((v) => typeof v === 'string' && v.trim() !== '');
     if (areaRefs.length !== 1) return reply.badRequest('pass exactly one of area_id, area_label, or area_name');

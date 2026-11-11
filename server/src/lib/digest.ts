@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { itemVisible } from './visibility';
 import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql as dsql } from 'drizzle-orm';
 import { db } from '../db';
 import { items, settings } from '../db/schema';
@@ -72,10 +73,8 @@ export interface OutRow {
 }
 
 /** Everything not currently in its home, split by state. */
-export async function fetchMissing(userId: string | null = null) {
-  const visible = userId
-    ? or(eq(items.isPrivate, false), eq(items.ownerId, userId))!
-    : eq(items.isPrivate, false);
+export async function fetchMissing(userId: string | null = null, isAdmin = false) {
+  const visible = itemVisible(userId, isAdmin);
   const rows = await db
     .select()
     .from(items)
@@ -132,20 +131,17 @@ export async function outJson(rows: OutRow[]) {
   );
 }
 
-const visibleTo = (userId: string | null) =>
-  userId
-    ? or(eq(items.isPrivate, false), eq(items.ownerId, userId))!
-    : eq(items.isPrivate, false);
+const visibleTo = (userId: string | null, isAdmin = false) => itemVisible(userId, isAdmin);
 
 /** Consumables at or under their restock threshold. */
-export async function fetchLowStock(userId: string | null = null) {
+export async function fetchLowStock(userId: string | null = null, isAdmin = false) {
   return db
     .select()
     .from(items)
     .where(
       and(
         isNull(items.hiddenAt),
-        visibleTo(userId),
+        visibleTo(userId, isAdmin),
         isNotNull(items.restockBelow),
         lte(items.quantity, items.restockBelow),
       ),
@@ -153,14 +149,14 @@ export async function fetchLowStock(userId: string | null = null) {
 }
 
 /** Items whose warranty ends within `days` days (inclusive of today). */
-export async function fetchWarrantyExpiring(userId: string | null = null, days = 30) {
+export async function fetchWarrantyExpiring(userId: string | null = null, days = 30, isAdmin = false) {
   return db
     .select()
     .from(items)
     .where(
       and(
         isNull(items.hiddenAt),
-        visibleTo(userId),
+        visibleTo(userId, isAdmin),
         isNotNull(items.warrantyUntil),
         dsql`warranty_until >= date('now') AND warranty_until <= date('now', '+' || ${days} || ' days')`,
       ),

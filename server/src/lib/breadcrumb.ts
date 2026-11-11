@@ -1,3 +1,4 @@
+import { itemVisibleWhere } from './visibility';
 import { query } from '../db';
 
 
@@ -46,6 +47,7 @@ export async function descendantAreaIds(areaId: string): Promise<string[]> {
 export async function directItemCounts(
   areaIds: string[],
   userId: string | null,
+  isAdmin = false,
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();
   if (!areaIds.length) return map;
@@ -53,10 +55,10 @@ export async function directItemCounts(
   const rows = query<{ area_id: string; n: number }>(
     `SELECT area_id, COUNT(*) AS n FROM items
       WHERE area_id IN (${ph}) AND hidden_at IS NULL
-        AND (is_private = 0 OR owner_id = ?)
+        AND ${itemVisibleWhere('items', userId, isAdmin).text}
       GROUP BY area_id`,
     ...areaIds,
-    userId,
+    ...itemVisibleWhere('items', userId, isAdmin).params,
   );
   for (const r of rows) map.set(r.area_id, r.n);
   return map;
@@ -65,6 +67,7 @@ export async function directItemCounts(
 export async function subtreeItemCounts(
   areaIds: string[],
   userId: string | null,
+  isAdmin = false,
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();
   if (!areaIds.length) return map;
@@ -80,10 +83,10 @@ export async function subtreeItemCounts(
     SELECT t.root, COUNT(i.id) AS n
       FROM tree t
       LEFT JOIN items i ON i.area_id = t.id AND i.hidden_at IS NULL
-        AND (i.is_private = 0 OR i.owner_id = ?)
+        AND ${itemVisibleWhere('i', userId, isAdmin).text}
      GROUP BY t.root`,
     ...areaIds,
-    userId,
+    ...itemVisibleWhere('i', userId, isAdmin).params,
   );
   for (const r of rows) map.set(r.root, r.n);
   return map;

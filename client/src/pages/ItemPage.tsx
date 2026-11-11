@@ -725,7 +725,10 @@ export function ItemPage() {
       {item.is_private && <span className="badge warn">private</span>}
       {item.is_private && (
         <div className="share-row">
-          <span className="muted">Only you +</span>
+          <span className="muted">
+            Private · {users?.users?.find((u: any) => u.id === item.owner_id)?.name ?? 'owner'} (owner)
+            {(data?.shared_with ?? []).length > 0 ? ' +' : ''}
+          </span>
           <ShareRow
             base={`/api/items/${item.id}`}
             ownerId={item.owner_id}

@@ -6,6 +6,7 @@ import { breadcrumb, descendantAreaIds } from '../lib/breadcrumb';
 import { thumbsForItems, thumbUrl, photoUrl, coverThumbsForAreas } from '../lib/photos';
 import { embedImage, embedText, mlHealthy, nearestByVector, warmClip } from '../lib/ml';
 import { searchItemIds, wordSim, trigramSim, levenshtein, soundex } from '../lib/textsearch';
+import { canSeeArea, itemVisible, itemVisibleWhere } from '../lib/visibility';
 
 export async function searchRoutes(app: FastifyInstance) {
   // ?q= fuzzy/full-text  ·  ?barcode= exact product match ("do I own this?")
@@ -20,6 +21,7 @@ export async function searchRoutes(app: FastifyInstance) {
       tag?: string;
     };
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const tagLc = tag?.trim().toLowerCase() || null;
     const hasFilters = !!(status || area_id || priv || tagLc);
     const tagCond = () =>
@@ -54,15 +56,16 @@ export async function searchRoutes(app: FastifyInstance) {
     };
 
     if (barcode) {
+      const vis = itemVisibleWhere('items', uid, admin);
       const rows = query<{ id: string }>(
         `SELECT id FROM items
          WHERE barcode = ? AND hidden_at IS NULL
-           AND (is_private = 0 OR owner_id = ?)
+           AND ${vis.text}
          LIMIT 50`,
         barcode,
-        uid,
+        ...vis.params,
       );
-      return { items: await hydrateItems(await applyFilters(rows.map((r) => r.id)), uid), areas: [] };
+      return { items: await hydrateItems(await applyFilters(rows.map((r) => r.id)), uid, admin), areas: [] };
     }
 
     const q2 = (q ?? '').trim();
@@ -71,7 +74,7 @@ export async function searchRoutes(app: FastifyInstance) {
       // Filters-only browse: newest matching items.
       const conds = [
         isNull(items.hiddenAt),
-        uid ? or(eq(items.isPrivate, false), eq(items.ownerId, uid))! : eq(items.isPrivate, false),
+        itemVisible(uid, admin),
       ];
       if (status) conds.push(eq(items.status, status));
       if (areaScope) conds.push(inArray(items.areaId, areaScope));
@@ -83,10 +86,10 @@ export async function searchRoutes(app: FastifyInstance) {
         .where(and(...conds))
         .orderBy(desc(items.createdAt))
         .limit(50);
-      return { items: await hydrateItems(rows.map((r) => r.id), uid), areas: [] };
+      return { items: await hydrateItems(rows.map((r) => r.id), uid, admin), areas: [] };
     }
 
-    const itemRows = searchItemIds(q2, uid);
+    const itemRows = searchItemIds(q2, uid, 50, admin);
 
     // Areas: same fuzzy rules, all in JS - the area table is tiny.
     const lq = q2.toLowerCase();
@@ -110,6 +113,9 @@ export async function searchRoutes(app: FastifyInstance) {
       .sort((a, b) => b.score - a.score)
       .slice(0, 20);
 
+    const areaVisibleTo: Record<string, boolean> = {};
+    for (const a of areaRows) areaVisibleTo[a.id] = await canSeeArea(a.id, uid, admin);
+
     const covers = await coverThumbsForAreas(
       areaRows.map((a) => ({ id: a.id, coverPhotoId: a.cover_photo_id })),
     );
@@ -120,7 +126,7 @@ export async function searchRoutes(app: FastifyInstance) {
     if (mlHealthy()) {
       try {
         const vec = await embedText(q2);
-        const similar = (await nearestByVector(vec, 12, uid)).filter((n) => 1 - n.dist > 0.3);
+        const similar = (await nearestByVector(vec, 12, uid, admin)).filter((n) => 1 - n.dist > 0.3);
         const seen = new Set(itemIds);
         itemIds = itemIds.concat(similar.filter((n) => !seen.has(n.id)).map((n) => n.id));
       } catch {
@@ -131,8 +137,8 @@ export async function searchRoutes(app: FastifyInstance) {
     }
 
     return {
-      items: await hydrateItems(await applyFilters(itemIds), uid),
-      areas: areaRows.map((a) => {
+      items: await hydrateItems(await applyFilters(itemIds), uid, admin),
+      areas: areaRows.filter((a) => areaVisibleTo[a.id]).map((a) => {
         const c = covers.get(a.id);
         return { id: a.id, name: a.name, cover_thumb: c ? thumbUrl(c) : null };
       }),
@@ -155,32 +161,31 @@ export async function searchRoutes(app: FastifyInstance) {
       return reply.badRequest('ML service not available');
     }
     const neighbors = (await nearestByVector(vec, 25, req.user?.id ?? null)).filter((n) => 1 - n.dist > 0.2);
-    return { items: await hydrateItems(neighbors.map((n) => n.id), req.user?.id ?? null), areas: [] };
+    return { items: await hydrateItems(neighbors.map((n) => n.id), req.user?.id ?? null, req.user?.role === 'admin'), areas: [] };
   });
 
   // "Recently filed" feed - newest items plus the areas they landed in.
   app.get('/api/recent', async (req) => {
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const rows = await db
       .select({ id: items.id, areaId: items.areaId })
       .from(items)
       .where(
         and(
           isNull(items.hiddenAt),
-          uid ? or(eq(items.isPrivate, false), eq(items.ownerId, uid))! : eq(items.isPrivate, false),
+          itemVisible(uid, admin),
         ),
       )
       .orderBy(desc(items.createdAt))
       .limit(24);
-    return { items: await hydrateItems(rows.map((r) => r.id), uid) };
+    return { items: await hydrateItems(rows.map((r) => r.id), uid, admin) };
   });
 }
 
-async function hydrateItems(ids: string[], userId: string | null = null) {
+async function hydrateItems(ids: string[], userId: string | null = null, admin = false) {
   if (!ids.length) return [];
-  const visible = userId
-    ? or(eq(items.isPrivate, false), eq(items.ownerId, userId))!
-    : eq(items.isPrivate, false);
+  const visible = itemVisible(userId, admin);
   const rows = await db
     .select({
       id: items.id,

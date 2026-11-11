@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
-import { itemVisible } from './lib/visibility';
+import { areaVisible, canSeeArea, canSeeItem, itemVisible } from './lib/visibility';
 import { db, queryOne } from './db';
 import { areas, items, labels, mcpTokens, photos } from './db/schema';
 import { breadcrumb } from './lib/breadcrumb';
@@ -25,8 +25,9 @@ function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | n
   // personal connections see shared + the owner's private items. Never the
   // client-supplied id - always the authenticated connection's owner.
   const vis = itemVisible(conn.ownerId);
-  const owns = (i: { isPrivate: boolean; ownerId: string | null }) =>
-    !i.isPrivate || (!!conn.ownerId && i.ownerId === conn.ownerId);
+  const areaVis = areaVisible(conn.ownerId);
+  const seesItem = (i: typeof items.$inferSelect) => canSeeItem(i, conn.ownerId);
+  const seesArea = (id: string) => canSeeArea(id, conn.ownerId);
   // NB: a NULL item.owner_id (owner deleted -> SET NULL) must never satisfy a
   // NULL conn.owner_id - orphaned private items are inaccessible to everyone.
   const server = new McpServer({ name: 'stache', version: '0.1.0' });
@@ -71,7 +72,7 @@ function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | n
       const rows = await db
         .select()
         .from(areas)
-        .where(and(isNull(areas.parentId), isNull(areas.archivedAt)));
+        .where(and(isNull(areas.parentId), isNull(areas.archivedAt), areaVis));
       return text({
         areas: rows.map((a) => ({ id: a.id, name: a.name, label_code: a.labelCode })),
       });
@@ -85,12 +86,13 @@ function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | n
       inputSchema: { area_id: z.string().uuid() },
     },
     async ({ area_id }) => {
+      if (!(await seesArea(area_id))) return text({ error: 'area not found' });
       const crumb = await breadcrumb(area_id);
       if (!crumb.length) return text({ error: 'area not found' });
       const subs = await db
         .select()
         .from(areas)
-        .where(and(eq(areas.parentId, area_id), isNull(areas.archivedAt)));
+        .where(and(eq(areas.parentId, area_id), isNull(areas.archivedAt), areaVis));
       const contents = await db
         .select()
         .from(items)
@@ -114,7 +116,7 @@ function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | n
     },
     async ({ item_id }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i || !owns(i) || i.hiddenAt) return text({ error: 'item not found' });
+      if (!i || !(await seesItem(i)) || i.hiddenAt) return text({ error: 'item not found' });
       const pics = await db.select().from(photos).where(eq(photos.itemId, item_id));
       return text({
         item: {
@@ -135,7 +137,7 @@ function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | n
     },
     async ({ item_id, area_id }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i || !owns(i) || i.hiddenAt) return text({ error: 'item not found' });
+      if (!i || !(await seesItem(i)) || i.hiddenAt) return text({ error: 'item not found' });
       const [a] = await db.select().from(areas).where(eq(areas.id, area_id));
       if (!a || a.archivedAt) return text({ error: 'area not found' });
       db.transaction((tx) => {
@@ -236,7 +238,7 @@ function buildMcpServer(conn: { slug: string; scope: string; ownerId: string | n
     },
     async ({ item_id, status, lent_to, ...fields }) => {
       const [i] = await db.select().from(items).where(eq(items.id, item_id));
-      if (!i || !owns(i) || i.hiddenAt) return text({ error: 'item not found' });
+      if (!i || !(await seesItem(i)) || i.hiddenAt) return text({ error: 'item not found' });
 
       const edits: Record<string, unknown> = {};
       const prev: Record<string, unknown> = {};

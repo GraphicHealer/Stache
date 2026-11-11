@@ -88,9 +88,16 @@ This is the local test instance, not a deploy; always rebuild it when you finish
   Guard: `onRequest` hook in `app.ts` 401s `/api/*` + `/photos/*` without a
   session; `/api/auth`, `/api/health`, `/api/setup`, `/mcp` are open. Secret
   persists in `settings.auth_secret` (env `BETTER_AUTH_SECRET` overrides).
-- **Privacy**: `items.is_private` + `items.owner_id`. Filter via
-  `itemVisible(userId)` (drizzle) or `AND (is_private = 0 OR owner_id = ?)`
-  in raw SQL. `req.user` is set by the guard. MCP sees shared items only.
+- **Privacy**: `items.is_private` + `items.owner_id` on items AND
+  `areas.is_private` + `areas.owner_id` on bins, plus `object_shares`
+  (area|item) grants. Privacy is file-permission style: a private bin gates
+  everything inside it (items and sub-bins) for owner + shares; inherited,
+  never stored on children. Filter via `itemVisible(uid, isAdmin)` (drizzle),
+  `itemVisibleWhere(alias, uid, isAdmin)` (raw `{text, params}`), and
+  `canSeeItem`/`canSeeArea` (async per-object checks - use for 404s on
+  single-record routes). Admin bypasses BIN gates only - an item's own
+  private flag is never overridden. `req.user` is set by the guard. MCP and
+  `/api/v1` see shared only (`uid = null`).
   Drizzle export names `user`/`session`/`account`/`verification` are fixed -
   Better Auth's adapter looks them up by key.
 - **Out/missing**: `status` is `home|out|lent|unaccounted|gone` (`gone` also

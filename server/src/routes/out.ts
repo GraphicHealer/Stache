@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { itemVisible, itemVisibleWhere } from '../lib/visibility';
 import { db, queryOne } from '../db';
 import { items } from '../db/schema';
 import { recordEventTx } from '../lib/events';
@@ -33,7 +34,7 @@ function requestToken(req: FastifyRequest): string | undefined {
 export async function outRoutes(app: FastifyInstance) {
   // Everything removed from its space, split "out" vs "unaccounted for".
   app.get('/api/out', async (req) => {
-    const { out, unaccounted } = await fetchMissing(req.user?.id ?? null);
+    const { out, unaccounted } = await fetchMissing(req.user?.id ?? null, req.user?.role === 'admin');
     return {
       out: await outJson(out),
       unaccounted: await outJson(unaccounted),
@@ -43,6 +44,7 @@ export async function outRoutes(app: FastifyInstance) {
   // Dashboard widget: newest out items + total. Empty hides the widget.
   app.get('/api/out/summary', async (req) => {
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const rows = await db
       .select()
       .from(items)
@@ -50,16 +52,17 @@ export async function outRoutes(app: FastifyInstance) {
         and(
           isNull(items.hiddenAt),
           inArray(items.status, ['out', 'lent', 'unaccounted']),
-          uid ? or(eq(items.isPrivate, false), eq(items.ownerId, uid)) : eq(items.isPrivate, false),
+          itemVisible(uid, admin),
         ),
       )
       .orderBy(desc(items.outSince))
       .limit(7);
+    const vis = itemVisibleWhere('items', uid, admin);
     const { n } = queryOne<{ n: number }>(
       `SELECT count(*) AS n FROM items
        WHERE hidden_at IS NULL AND status IN ('out','lent','unaccounted')
-         AND (is_private = 0 OR owner_id = ?)`,
-      uid,
+         AND ${vis.text}`,
+      ...vis.params,
     ) ?? { n: 0 };
     const thumbs = await thumbsForItems(rows.map((r) => r.id));
     return {
@@ -75,6 +78,7 @@ export async function outRoutes(app: FastifyInstance) {
   app.get('/api/areas/:id/out', async (req, reply) => {
     const { id } = req.params as { id: string };
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const rows = await db
       .select()
       .from(items)
@@ -83,7 +87,7 @@ export async function outRoutes(app: FastifyInstance) {
           eq(items.areaId, id),
           isNull(items.hiddenAt),
           inArray(items.status, ['out', 'lent', 'unaccounted']),
-          uid ? or(eq(items.isPrivate, false), eq(items.ownerId, uid)) : eq(items.isPrivate, false),
+          itemVisible(uid, admin),
         ),
       );
     const thumbs = await thumbsForItems(rows.map((r) => r.id));
@@ -100,6 +104,7 @@ export async function outRoutes(app: FastifyInstance) {
     const { ids } = parseBody(PutBackSchema, req.body, reply) ?? {};
     if (!ids) return;
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const eventIds: string[] = [];
     for (const id of ids) {
       const [item] = await db.select().from(items).where(eq(items.id, id));
@@ -153,6 +158,7 @@ export async function outRoutes(app: FastifyInstance) {
   // Shopping list: consumables at/under their restock threshold.
   app.get('/api/shopping-list', async (req) => {
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const low = await fetchLowStock(uid);
     const thumbs = await thumbsForItems(low.map((i) => i.id));
     return {

@@ -5,6 +5,7 @@ import { db, query, queryOne } from '../db';
 import { areas, labels } from '../db/schema';
 import { newLabelCode } from '../lib/labelcode';
 import { recordEventTx } from '../lib/events';
+import { canSeeArea } from '../lib/visibility';
 import { parseBody } from '../lib/validate';
 
 const DeleteLabelsSchema = z.object({
@@ -13,7 +14,9 @@ const DeleteLabelsSchema = z.object({
 
 export async function labelRoutes(app: FastifyInstance) {
   // All labels, with what each is attached to (for the print sheet + status).
-  app.get('/api/labels', async () => {
+  app.get('/api/labels', async (req) => {
+    const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const rows = await db
       .select({
         code: labels.code,
@@ -44,7 +47,10 @@ export async function labelRoutes(app: FastifyInstance) {
       return parts.length ? parts.join(' / ') : null;
     };
     return {
-      labels: rows.map((r) => ({ ...r, area_path: pathFor(r.area_id) })),
+      labels: await Promise.all(rows.map(async (r) =>
+        r.area_id && !(await canSeeArea(r.area_id, uid, admin))
+          ? { ...r, area_name: null, area_tags: null, area_category: null, area_path: null }
+          : { ...r, area_path: pathFor(r.area_id) })),
     };
   });
 
@@ -99,7 +105,10 @@ export async function labelRoutes(app: FastifyInstance) {
     const [label] = await db.select().from(labels).where(eq(labels.code, code));
     if (!label) return reply.notFound('unknown label');
     const [area] = await db.select().from(areas).where(eq(areas.id, body.area_id));
-    if (!area || area.archivedAt) return reply.badRequest('area not found');
+    if (!area || area.archivedAt || !(await canSeeArea(area.id, req.user?.id ?? null, req.user?.role === 'admin')))
+      return reply.badRequest('area not found');
+    if (label.areaId && !(await canSeeArea(label.areaId, req.user?.id ?? null, req.user?.role === 'admin')))
+      return reply.notFound('label not found');
     const prevAreaId = label.areaId;
     db.transaction((tx) => {
       tx.update(labels).set({ areaId: area.id }).where(eq(labels.code, code)).run();
@@ -115,6 +124,8 @@ export async function labelRoutes(app: FastifyInstance) {
     const code = raw.toUpperCase();
     const [label] = await db.select().from(labels).where(eq(labels.code, code));
     if (!label) return reply.notFound('unknown label');
+    if (label.areaId && !(await canSeeArea(label.areaId, req.user?.id ?? null, req.user?.role === 'admin')))
+      return reply.notFound('label not found');
     db.transaction((tx) => {
       tx.update(labels).set({ areaId: null }).where(eq(labels.code, code)).run();
       tx.update(areas).set({ labelCode: null }).where(eq(areas.labelCode, code)).run();
@@ -130,6 +141,8 @@ export async function labelRoutes(app: FastifyInstance) {
     const [label] = await db.select().from(labels).where(eq(labels.code, code));
     if (!label) return reply.notFound('unknown label');
     if (!label.areaId) return { status: 'unclaimed', code: label.code };
+    if (!(await canSeeArea(label.areaId, req.user?.id ?? null, req.user?.role === 'admin')))
+      return { status: 'private', code: label.code };
     const [area] = await db.select().from(areas).where(eq(areas.id, label.areaId));
     return {
       status: 'area',

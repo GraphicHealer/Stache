@@ -57,6 +57,13 @@ export function LabelPage() {
   }, [data, nav]);
 
   if (isLoading) return <div className="page"><p className="muted">Checking label…</p></div>;
+  if (data?.status === 'private')
+    return (
+      <div className="page">
+        <h1>Private bin</h1>
+        <p className="muted">This label belongs to a bin you can't see.</p>
+      </div>
+    );
   if (error || !data)
     return (
       <div className="page">

@@ -742,5 +742,5 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Share row on private bins/items + badge remove-x. */
 .share-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.badge-x { background: none; border: 0; color: inherit; font: inherit; margin-left: 4px; padding: 0 2px; cursor: pointer; opacity: .7; }
+.badge-x { background: none; border: 0; color: inherit; font: inherit; margin-left: 2px; padding: 6px 10px; min-width: 32px; min-height: 32px; cursor: pointer; opacity: .7; border-radius: 6px; }
 .badge-x:hover { opacity: 1; }

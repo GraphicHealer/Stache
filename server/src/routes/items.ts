@@ -13,6 +13,7 @@ import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
 import { analyzeItemPhoto, hasEmbedding, mlHealthy, nearestToItem } from '../lib/ml';
 import { detectCodes, lookupBarcode, type DetectedCode } from '../lib/barcodes';
 import { parseBody } from '../lib/validate';
+import { canSeeItem } from '../lib/visibility';
 import { z } from 'zod';
 
 // A real calendar date, not just a YYYY-MM-DD shape ("2026-02-30" fails).
@@ -129,8 +130,8 @@ function itemJson(i: typeof items.$inferSelect) {
 }
 
 /** Private items are visible to their owner only - everyone else gets a 404. */
-const hiddenFrom = (i: typeof items.$inferSelect, req: { user: { id: string } | null }) =>
-  i.isPrivate && i.ownerId !== req.user?.id;
+const hiddenFrom = async (i: typeof items.$inferSelect, req: { user: { id: string; role?: string } | null }) =>
+  !(await canSeeItem(i, req.user?.id ?? null, req.user?.role === 'admin'));
 
 export async function itemRoutes(app: FastifyInstance) {
   // File an item. Accepts multipart (photo files + fields) - the normal path -
@@ -221,7 +222,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const [crumb, itemPhotos] = await Promise.all([
       breadcrumb(item.areaId),
       db.select().from(photos).where(eq(photos.itemId, id)).orderBy(asc(photos.createdAt)),
@@ -244,7 +245,7 @@ export async function itemRoutes(app: FastifyInstance) {
     const body = parseBody(ItemPatchSchema, req.body, reply);
     if (!body) return;
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     // Events are collected, then written in one transaction with the update -
     // a failed update can't leave an undoable event for nothing.
     const evs: { type: EventType; payload: Record<string, unknown> }[] = [];
@@ -389,7 +390,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/photos', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const saved = [];
     const bufs: Buffer[] = [];
     for await (const part of req.parts()) {
@@ -420,7 +421,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/photos/:photoId/replace', async (req, reply) => {
     const { id, photoId } = req.params as { id: string; photoId: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const [photo] = await db.select().from(photos).where(eq(photos.id, photoId));
     if (!photo || photo.itemId !== id) return reply.notFound('photo not found');
 
@@ -465,7 +466,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/not-here', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
 
     const { ev, updated } = db.transaction((tx) => {
       const e = recordEventTx(tx, 'item.not_here', 'item', id, {
@@ -519,9 +520,9 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id/similar', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     if (!mlHealthy()) return { items: [], ml: false };
-    const neighbors = await nearestToItem(id, 12, req.user?.id ?? null);
+    const neighbors = await nearestToItem(id, 12, req.user?.id ?? null, req.user?.role === 'admin');
     const thumbs = await thumbsForItems(neighbors.map((n) => n.id));
     const meta = neighbors.length
       ? query<{ id: string; name: string | null; area_id: string; quantity: number; status: string }>(
@@ -554,10 +555,10 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id/suggested-area', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     if (!mlHealthy() || !hasEmbedding(id)) return { suggestions: [] };
 
-    const neighbors = await nearestToItem(id, 12, req.user?.id ?? null);
+    const neighbors = await nearestToItem(id, 12, req.user?.id ?? null, req.user?.role === 'admin');
     if (!neighbors.length) return { suggestions: [] };
     const meta = query<{ id: string; area_id: string }>(
       `SELECT id, area_id FROM items WHERE id IN (${placeholders(neighbors.length)})`,
@@ -590,7 +591,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/split-suggestions', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const [photo] = await db
       .select()
       .from(photos)
@@ -616,7 +617,7 @@ export async function itemRoutes(app: FastifyInstance) {
     const { picks } = parseBody(SplitSchema, req.body, reply) ?? {};
     if (!picks) return;
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const [photo] = await db
       .select()
       .from(photos)
@@ -686,7 +687,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.delete('/api/items/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const ev = db.transaction((tx) => {
       tx.update(items).set({ hiddenAt: new Date() }).where(eq(items.id, id)).run();
       return recordEventTx(tx, 'item.hidden', 'item', id, { name: item.name }, req.user?.id);
@@ -698,7 +699,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/restore', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const ev = db.transaction((tx) => {
       tx.update(items).set({ hiddenAt: null }).where(eq(items.id, id)).run();
       return recordEventTx(tx, 'item.restored', 'item', id, { name: item.name }, req.user?.id);
@@ -734,11 +735,12 @@ export async function itemRoutes(app: FastifyInstance) {
   app.delete('/api/items/:id/purge', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     if (!item.hiddenAt) return reply.badRequest('only hidden items can be purged');
     const pics = await db.select().from(photos).where(eq(photos.itemId, id));
     db.transaction((tx) => {
       tx.delete(photos).where(eq(photos.itemId, id)).run();
+      tx.delete(objectShares).where(and(eq(objectShares.objectType, 'item'), eq(objectShares.objectId, id))).run();
       tx.delete(items).where(eq(items.id, id)).run();
     });
     for (const p of pics) {
@@ -755,7 +757,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id/events', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
 
     const rows = query<{ id: string; type: string; entity_type: string; payload: string; user_id: string | null; actor: string | null; undone_at: number | null; created_at: number }>(
       `SELECT id, type, entity_type, payload, user_id, actor, undone_at, created_at
@@ -801,7 +803,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id/receipts', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     return { receipts: receiptRows(id) };
   });
 
@@ -810,7 +812,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.post('/api/items/:id/receipts', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
 
     const ctype = req.headers['content-type'] ?? '';
     let photoIds: string[] = [];
@@ -847,7 +849,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.delete('/api/items/:id/receipts/:photoId', async (req, reply) => {
     const { id, photoId } = req.params as { id: string; photoId: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const ev = db.transaction((tx) => {
       tx.delete(itemReceipts)
         .where(and(eq(itemReceipts.itemId, id), eq(itemReceipts.photoId, photoId)))
@@ -885,7 +887,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.get('/api/items/:id/links', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     return { links: await linkedItems(id, req.user?.id ?? null) };
   });
 
@@ -896,9 +898,9 @@ export async function itemRoutes(app: FastifyInstance) {
     const otherId = body.item_id;
     if (otherId === id) return reply.badRequest("can't link an item to itself");
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const [other] = await db.select().from(items).where(eq(items.id, otherId));
-    if (!other || hiddenFrom(other, req)) return reply.notFound('linked item not found');
+    if (!other || await hiddenFrom(other, req)) return reply.notFound('linked item not found');
 
     const [a, b] = [id, otherId].sort();
     const ev = db.transaction((tx) => {
@@ -911,7 +913,7 @@ export async function itemRoutes(app: FastifyInstance) {
   app.delete('/api/items/:id/links/:other', async (req, reply) => {
     const { id, other } = req.params as { id: string; other: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
-    if (!item || hiddenFrom(item, req)) return reply.notFound('item not found');
+    if (!item || await hiddenFrom(item, req)) return reply.notFound('item not found');
     const [a, b] = [id, other].sort();
     const ev = db.transaction((tx) => {
       tx.delete(itemLinks).where(and(eq(itemLinks.aId, a), eq(itemLinks.bId, b))).run();
@@ -930,9 +932,9 @@ export async function itemRoutes(app: FastifyInstance) {
     if (loserId === id) return reply.badRequest("can't merge an item into itself");
 
     const [winner] = await db.select().from(items).where(eq(items.id, id));
-    if (!winner || hiddenFrom(winner, req)) return reply.notFound('item not found');
+    if (!winner || await hiddenFrom(winner, req)) return reply.notFound('item not found');
     const [loser] = await db.select().from(items).where(eq(items.id, loserId));
-    if (!loser || hiddenFrom(loser, req)) return reply.notFound('duplicate not found');
+    if (!loser || await hiddenFrom(loser, req)) return reply.notFound('duplicate not found');
     if (loser.hiddenAt) return reply.badRequest('duplicate is already hidden');
 
     const loserPics = await db.select().from(photos).where(eq(photos.itemId, loserId));

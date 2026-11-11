@@ -14,10 +14,10 @@ export function AreaPage() {
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const togglePrivate = async () => {
     const r = await api.patch(`/api/areas/${id}`, { is_private: !area?.is_private }).catch((e) => (toast(e.message), null));
-    if (r) { toast(r.item?.is_private ?? !area?.is_private ? 'Bin made private' : 'Bin is public'); qc.invalidateQueries({ queryKey: ['area', id] }); }
+    if (r) { toast((r.area?.is_private ?? !area?.is_private) ? 'Bin made private' : 'Bin is public'); qc.invalidateQueries({ queryKey: ['area', id] }); }
   };
   const qc = useQueryClient();
-  const { setCurrentArea, toast } = useApp();
+  const { setCurrentArea, toast, user } = useApp();
   const [askPrompt, promptUi] = usePrompt();
   const [selecting, setSelecting] = useState<Set<string>>(new Set());
   // Stocktake mode: set of item ids confirmed physically present. Persisted
@@ -233,17 +233,22 @@ export function AreaPage() {
         <div>
           <div className="row" style={{ gap: 6, alignItems: 'center' }}>
             <h1>{area.name ?? 'unnamed area'}</h1>
-            <IconBtn
-              icon="lock"
-              label={area.is_private ? 'Make bin public' : 'Make bin private'}
-              onClick={togglePrivate}
-            />
+            {(!area.is_private || area.owner_id === user?.id || user?.role === 'admin') && (
+              <IconBtn
+                icon="lock"
+                label={area.is_private ? 'Make bin public' : 'Make bin private'}
+                onClick={togglePrivate}
+              />
+            )}
             <IconBtn icon="pencil" label="Edit area" onClick={openEdit} />
           </div>
           {area.category && <div className="muted">{area.category}</div>}
           {area.is_private && (
             <div className="share-row">
-              <span className="muted">Only you +</span>
+              <span className="muted">
+                Private · {users?.users?.find((u: any) => u.id === area.owner_id)?.name ?? 'owner'} (owner)
+                {(data.shared_with ?? []).length > 0 ? ' +' : ''}
+              </span>
               <ShareRow
                 base={`/api/areas/${id}`}
                 ownerId={area.owner_id}

@@ -1,3 +1,4 @@
+import { itemVisibleWhere } from './visibility';
 import { query } from '../db';
 
 /**
@@ -149,6 +150,7 @@ export function searchItemIds(
   q: string,
   viewerId: string | null,
   limit = 50,
+  isAdmin = false,
 ): { id: string; score: number }[] {
   const ftsHits = new Map<string, number>();
   const fq = ftsQuery(q);
@@ -176,8 +178,8 @@ export function searchItemIds(
     tags: string | null;
   }>(
     `SELECT id, name, description, barcode, ai_name, ai_tags, ocr_text, tags FROM items
-     WHERE hidden_at IS NULL AND (is_private = 0 OR owner_id = ?)`,
-    viewerId,
+     WHERE hidden_at IS NULL AND ${itemVisibleWhere('items', viewerId, isAdmin).text}`,
+    ...itemVisibleWhere('items', viewerId, isAdmin).params,
   );
 
   const scored: { id: string; score: number }[] = [];

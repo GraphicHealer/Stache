@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { itemVisibleWhere } from './visibility';
 import { query, queryOne, sqlite, placeholders } from '../db';
 import { env } from '../env';
 
@@ -190,6 +191,7 @@ function knnVisible(
   params: unknown[],
   limit: number,
   viewerId: string | null,
+  isAdmin = false,
 ): { id: string; dist: number }[] {
   const knn = query<{ item_id: string; distance: number }>(
     `SELECT item_id, distance FROM photo_embeddings
@@ -208,9 +210,9 @@ function knnVisible(
   const visible = new Set(
     query<{ id: string }>(
       `SELECT id FROM items WHERE id IN (${placeholders(ids.length)})
-       AND hidden_at IS NULL AND (is_private = 0 OR owner_id = ?)`,
+       AND hidden_at IS NULL AND ${itemVisibleWhere('items', viewerId, isAdmin).text}`,
       ...ids,
-      viewerId,
+      ...itemVisibleWhere('items', viewerId, isAdmin).params,
     ).map((r) => r.id),
   );
   return ids
@@ -220,16 +222,17 @@ function knnVisible(
     .slice(0, limit);
 }
 
-export async function nearestByVector(vec: number[], limit = 25, viewerId: string | null = null): Promise<{ id: string; dist: number }[]> {
+export async function nearestByVector(vec: number[], limit = 25, viewerId: string | null = null, isAdmin = false): Promise<{ id: string; dist: number }[]> {
   return knnVisible('?', [vecLiteral(vec)], limit, viewerId);
 }
 
-export async function nearestToItem(itemId: string, limit = 12, viewerId: string | null = null): Promise<{ id: string; dist: number }[]> {
+export async function nearestToItem(itemId: string, limit = 12, viewerId: string | null = null, isAdmin = false): Promise<{ id: string; dist: number }[]> {
   return knnVisible(
     `(SELECT embedding FROM photo_embeddings WHERE item_id = ? LIMIT 1)`,
     [itemId],
     limit,
     viewerId,
+    isAdmin,
   ).filter((n) => n.id !== itemId);
 }
 

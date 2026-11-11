@@ -5,6 +5,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm'
 import { db, queryOne, run, sqlite } from '../db';
 import { env } from '../env';
 import { areas, events, items, user } from '../db/schema';
+import { canSeeArea, canSeeItem } from '../lib/visibility';
 import { undoEvent } from '../lib/events';
 import { itemVisible } from '../lib/visibility';
 import { requireAdmin } from '../lib/guards';
@@ -18,14 +19,20 @@ async function eventVisibleToUser(
   entityType: string | null,
   entityId: string | null,
   userId: string | null,
+  isAdmin = false,
 ): Promise<boolean> {
-  if (entityType !== 'item' || !entityId) return true;
-  const [it] = await db
-    .select({ isPrivate: items.isPrivate, ownerId: items.ownerId })
-    .from(items)
-    .where(eq(items.id, entityId));
-  if (!it) return true;
-  return !it.isPrivate || it.ownerId === userId;
+  if (!entityId) return true;
+  if (entityType === 'item') {
+    const [it] = await db.select().from(items).where(eq(items.id, entityId));
+    if (!it) return true;
+    return canSeeItem(it, userId, isAdmin);
+  }
+  if (entityType === 'area') return canSeeArea(entityId, userId, isAdmin);
+  if (entityType === 'label') {
+    const [a] = await db.select({ id: areas.id }).from(areas).where(eq(areas.labelCode, entityId));
+    if (a) return canSeeArea(a.id, userId, isAdmin);
+  }
+  return true;
 }
 
 export async function miscRoutes(app: FastifyInstance) {
@@ -33,6 +40,7 @@ export async function miscRoutes(app: FastifyInstance) {
   app.get('/api/events', async (req) => {
     const { limit } = req.query as { limit?: string };
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const rows = await db
       .select()
       .from(events)
@@ -40,7 +48,7 @@ export async function miscRoutes(app: FastifyInstance) {
       .limit(Math.min(100, parseInt(limit ?? '30', 10) || 30));
     const visible: (typeof events.$inferSelect)[] = [];
     for (const e of rows) {
-      if (await eventVisibleToUser(e.entityType, e.entityId, uid)) visible.push(e);
+      if (await eventVisibleToUser(e.entityType, e.entityId, uid, admin)) visible.push(e);
     }
     const names = new Map(
       (await db.select({ id: user.id, name: user.name }).from(user)).map((u) => [u.id, u.name]),
@@ -124,8 +132,9 @@ export async function miscRoutes(app: FastifyInstance) {
 
     // Quiet notices: low stock + warranties ending soon. Optional data only.
     const uid = req.user?.id ?? null;
-    const low = await fetchLowStock(uid);
-    const expiring = await fetchWarrantyExpiring(uid);
+    const admin = req.user?.role === 'admin';
+    const low = await fetchLowStock(uid, admin);
+    const expiring = await fetchWarrantyExpiring(uid, 30, admin);
     const miscThumbs = await thumbsForItems([...low, ...expiring].map((i) => i.id));
     for (const i of [...low, ...expiring]) {
       if (!crumbs.has(i.areaId)) {
