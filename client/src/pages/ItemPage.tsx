@@ -6,7 +6,7 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu, TagEditor, usePrompt, Loader } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, KebabMenu, ShareRow, TagEditor, usePrompt, Loader } from '../components/Bits';
 
 import { describeEvent } from '../lib/events';
 
@@ -14,6 +14,7 @@ export function ItemPage() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
+  const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
   const { toast, user } = useApp();
   const [askPrompt, promptUi] = usePrompt();
   const [name, setName] = useState('');
@@ -722,6 +723,18 @@ export function ItemPage() {
       )}
 
       {item.is_private && <span className="badge warn">private</span>}
+      {item.is_private && (
+        <div className="share-row">
+          <span className="muted">Only you +</span>
+          <ShareRow
+            base={`/api/items/${item.id}`}
+            ownerId={item.owner_id}
+            shares={data?.shared_with ?? []}
+            users={users?.users ?? []}
+            onChanged={() => qc.invalidateQueries({ queryKey: ['item', id] })}
+          />
+        </div>
+      )}
       {item.duplicate_of && (
         <p className="muted">
           This photo looks very similar to{' '}

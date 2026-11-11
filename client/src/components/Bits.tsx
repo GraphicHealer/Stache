@@ -45,6 +45,7 @@ const GLYPHS = {
   download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></>,
   wrench: <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />,
   back: <><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></>,
+  lock: <><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
 };
 
 export type IconName = keyof typeof GLYPHS;
@@ -710,6 +711,53 @@ export function Loader({
           <source srcSet={loadingBlack} media="(prefers-color-scheme: light)" />
           <img src={loadingWhite} width={size} height={size} alt="" />
         </picture>
+      )}
+    </div>
+  );
+}
+
+
+/**
+ * Share row for a private bin or item: member chips with × plus an
+ * "Add member" picker (household users not already inside).
+ */
+export function ShareRow({ base, ownerId, shares, users, onChanged }: {
+  base: string; // e.g. `/api/areas/${id}` or `/api/items/${id}`
+  ownerId: string | null;
+  shares: { userId: string; name: string | null }[];
+  users: { id: string; name: string }[];
+  onChanged: () => void;
+}) {
+  const { toast } = useApp();
+  const add = async (userId: string) => {
+    const r = await api.post(`${base}/shares`, { user_id: userId }).catch((e) => (toast(e.message), null));
+    if (r) { toast('Shared'); onChanged(); }
+  };
+  const remove = async (userId: string) => {
+    const r = await api.del(`${base}/shares/${userId}`).catch((e) => (toast(e.message), null));
+    if (r) { toast('Removed'); onChanged(); }
+  };
+  const inside = new Set([ownerId, ...shares.map((s) => s.userId)].filter(Boolean));
+  const candidates = users.filter((u) => !inside.has(u.id));
+  return (
+    <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+      {shares.map((s) => (
+        <span key={s.userId} className="badge">
+          {s.name ?? 'member'}
+          <button className="badge-x" aria-label={`Remove ${s.name ?? 'member'}`} onClick={() => remove(s.userId)}>×</button>
+        </span>
+      ))}
+      {candidates.length > 0 && (
+        <select
+          className="input"
+          style={{ maxWidth: 170, minHeight: 34, padding: '4px 8px' }}
+          value=""
+          aria-label="Add a member to this private share"
+          onChange={(e) => { if (e.target.value) add(e.target.value); }}
+        >
+          <option value="">Add member…</option>
+          {candidates.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
       )}
     </div>
   );

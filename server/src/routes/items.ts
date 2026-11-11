@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, query, placeholders, run } from '../db';
 import { env } from '../env';
-import { areas, items, itemLinks, itemReceipts, photos, user } from '../db/schema';
+import { areas, items, itemLinks, itemReceipts, objectShares, photos, user } from '../db/schema';
 import { breadcrumb } from '../lib/breadcrumb';
 import { recordEventTx, type EventType } from '../lib/events';
 import { assertImage, insertPhoto, PhotoBusyError, photoUrl, savePhotoFile, thumbUrl, thumbsForItems } from '../lib/photos';
@@ -226,8 +226,14 @@ export async function itemRoutes(app: FastifyInstance) {
       breadcrumb(item.areaId),
       db.select().from(photos).where(eq(photos.itemId, id)).orderBy(asc(photos.createdAt)),
     ]);
+    const shareRows = await db
+      .select({ userId: objectShares.userId, name: user.name })
+      .from(objectShares)
+      .leftJoin(user, eq(user.id, objectShares.userId))
+      .where(and(eq(objectShares.objectType, 'item'), eq(objectShares.objectId, id)));
     return {
       item: itemJson(item),
+      shared_with: shareRows,
       breadcrumb: crumb,
       photos: itemPhotos.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })),
     };
@@ -702,6 +708,29 @@ export async function itemRoutes(app: FastifyInstance) {
 
   // Permanent delete - removes the row, its photo rows, files, and vectors.
   // Only for the Trash page; hiding is the normal path.
+  // Share management on a private item: owner or an existing share member.
+  app.post('/api/items/:id/shares', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { user_id?: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item) return reply.notFound('item not found');
+    if (!(await canManageItemShare(item, req.user?.id ?? null))) return reply.code(403).send('not a member of this private item');
+    if (!body.user_id || body.user_id === item.ownerId) return reply.badRequest('pick a member to add');
+    await db.insert(objectShares).values({ objectType: 'item', objectId: id, userId: body.user_id });
+    return { ok: true };
+  });
+
+  app.delete('/api/items/:id/shares/:uid', async (req, reply) => {
+    const { id, uid } = req.params as { id: string; uid: string };
+    const [item] = await db.select().from(items).where(eq(items.id, id));
+    if (!item) return reply.notFound('item not found');
+    if (!(await canManageItemShare(item, req.user?.id ?? null))) return reply.code(403).send('not a member of this private item');
+    await db
+      .delete(objectShares)
+      .where(and(eq(objectShares.objectType, 'item'), eq(objectShares.objectId, id), eq(objectShares.userId, uid)));
+    return { ok: true };
+  });
+
   app.delete('/api/items/:id/purge', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [item] = await db.select().from(items).where(eq(items.id, id));
@@ -938,4 +967,17 @@ export async function itemRoutes(app: FastifyInstance) {
     });
     return { ok: true, event_id: ev.id };
   });
+}
+
+
+/** Access-set check for item share management: owner or an existing share. */
+async function canManageItemShare(item: typeof items.$inferSelect, userId: string | null) {
+  if (!userId) return false;
+  if (item.ownerId === userId) return true;
+  const [row] = await db
+    .select()
+    .from(objectShares)
+    .where(and(eq(objectShares.objectType, 'item'), eq(objectShares.objectId, item.id), eq(objectShares.userId, userId)))
+    .limit(1);
+  return !!row;
 }

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { env } from '../env';
-import { areas, labels, photos } from '../db/schema';
+import { areas, labels, objectShares, photos, user } from '../db/schema';
 import { breadcrumb, descendantAreaIds, directItemCounts, subtreeItemCounts } from '../lib/breadcrumb';
 import { recordEventTx } from '../lib/events';
 import {
@@ -20,6 +20,7 @@ import {
 } from '../lib/photos';
 import type { SavedPhoto } from '../lib/photos';
 import { items } from '../db/schema';
+import { areaVisible } from '../lib/visibility';
 import { itemVisible } from '../lib/visibility';
 import { parseBody } from '../lib/validate';
 import { LABEL_CODE_RE } from '../lib/labelcode';
@@ -33,6 +34,7 @@ const CreateAreaSchema = z.object({
 }).passthrough();
 
 const PatchAreaSchema = z.object({
+  is_private: z.boolean().optional(),
   name: z.string().max(200).nullish(),
   parent_id: z.string().nullish(),
   cover_photo_id: z.string().nullish(),
@@ -63,6 +65,8 @@ function areaJson(
     cover_url: cover?.url ?? null,
     created_at: a.createdAt,
     archived_at: a.archivedAt,
+    is_private: a.isPrivate,
+    owner_id: a.ownerId,
     last_audit_at: a.lastAuditAt,
     tags: a.tags ?? [],
     category: a.category,
@@ -79,7 +83,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const roots = await db
       .select()
       .from(areas)
-      .where(all ? isNull(areas.archivedAt) : and(isNull(areas.parentId), isNull(areas.archivedAt)))
+      .where(and(all ? isNull(areas.archivedAt) : and(isNull(areas.parentId), isNull(areas.archivedAt)), areaVisible(req.user?.id ?? null)))
       .orderBy(asc(areas.createdAt));
     const covers = await coverThumbsForAreas(roots);
     const counts = await subtreeItemCounts(
@@ -160,7 +164,7 @@ export async function areaRoutes(app: FastifyInstance) {
       db
         .select()
         .from(areas)
-        .where(and(eq(areas.parentId, id), isNull(areas.archivedAt)))
+        .where(and(eq(areas.parentId, id), isNull(areas.archivedAt), areaVisible(req.user?.id ?? null)))
         .orderBy(asc(areas.createdAt)),
       db
         .select()
@@ -198,7 +202,13 @@ export async function areaRoutes(app: FastifyInstance) {
       .where(eq(labels.areaId, id))
       .orderBy(asc(labels.code));
 
+    const shareRows = await db
+      .select({ userId: objectShares.userId, name: user.name })
+      .from(objectShares)
+      .leftJoin(user, eq(user.id, objectShares.userId))
+      .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id)));
     return {
+      shared_with: shareRows,
       area: areaJson(
         area,
         cover ? { thumbUrl: thumbUrl(cover), url: photoUrl(cover) } : null,
@@ -264,6 +274,16 @@ export async function areaRoutes(app: FastifyInstance) {
     if (JSON.stringify(nextTags) !== JSON.stringify(prevTags)) {
       evs.push({ type: 'area.updated', payload: { prev: { tags: prevTags }, next: { tags: nextTags } } });
     }
+    if (body.is_private !== undefined && body.is_private !== area.isPrivate) {
+      if (!body.is_private && area.ownerId && area.ownerId !== req.user?.id) {
+        return reply.code(403).send('only the owner can un-private a bin');
+      }
+      if (body.is_private && !area.isPrivate) {
+        area.ownerId = area.ownerId ?? req.user?.id ?? null;
+      }
+      evs.push({ type: 'area.updated', payload: { prev: { is_private: area.isPrivate }, next: { is_private: body.is_private } } });
+      area.isPrivate = body.is_private;
+    }
     if (body.category !== undefined && body.category !== area.category) {
       evs.push({ type: 'area.updated', payload: { prev: { category: area.category }, next: { category: body.category } } });
     }
@@ -278,6 +298,8 @@ export async function areaRoutes(app: FastifyInstance) {
           coverPhotoId: body.cover_photo_id === undefined ? area.coverPhotoId : body.cover_photo_id,
           tags: body.tags === undefined ? area.tags : nextTags,
           category: body.category === undefined ? area.category : body.category,
+          isPrivate: area.isPrivate,
+          ownerId: area.ownerId,
         })
         .where(eq(areas.id, id))
         .returning()
@@ -289,6 +311,30 @@ export async function areaRoutes(app: FastifyInstance) {
 
   // Suggest tags for the bin: most common ai_tags + user tags on its items,
   // minus what's already on the area. Local-AI assisted, no remote calls.
+  // Share management on a private bin: anyone in the access set (owner or
+  // a shared member) can add/remove members. View + manage, no levels.
+  app.post('/api/areas/:id/shares', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { user_id?: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    if (!canManageShare(area.ownerId, req.user?.id ?? null, id)) return reply.code(403).send('not a member of this private bin');
+    if (!body.user_id || body.user_id === area.ownerId) return reply.badRequest('pick a member to add');
+    await db.insert(objectShares).values({ objectType: 'area', objectId: id, userId: body.user_id });
+    return { ok: true };
+  });
+
+  app.delete('/api/areas/:id/shares/:uid', async (req, reply) => {
+    const { id, uid } = req.params as { id: string; uid: string };
+    const [area] = await db.select().from(areas).where(eq(areas.id, id));
+    if (!area) return reply.notFound('area not found');
+    if (!canManageShare(area.ownerId, req.user?.id ?? null, id)) return reply.code(403).send('not a member of this private bin');
+    await db
+      .delete(objectShares)
+      .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id), eq(objectShares.userId, uid)));
+    return { ok: true };
+  });
+
   app.get('/api/areas/:id/suggest-tags', async (req, reply) => {
     const { id } = req.params as { id: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
@@ -509,4 +555,17 @@ export async function areaRoutes(app: FastifyInstance) {
       photos: savedPhotos.map((p) => ({ id: p.id, url: photoUrl(p), thumb: thumbUrl(p) })),
     });
   });
+}
+
+
+/** Access-set check for share management: owner or an existing share. */
+async function canManageShare(ownerId: string | null, userId: string | null, areaId: string) {
+  if (!userId) return false;
+  if (ownerId === userId) return true;
+  const [row] = await db
+    .select()
+    .from(objectShares)
+    .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, areaId), eq(objectShares.userId, userId)))
+    .limit(1);
+  return !!row;
 }

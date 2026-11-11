@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import {
-  sqliteTable, text, integer, real, index, uniqueIndex,
+  sqliteTable, text, integer, real, index, uniqueIndex, primaryKey,
 } from 'drizzle-orm/sqlite-core';
 
 // SQLite port: uuids are app-generated text; timestamps are INTEGER ms
@@ -29,6 +29,10 @@ export const areas = sqliteTable('areas', {
   archivedAt: ts('archived_at'),
   // Last completed stocktake - "audited ... ago" on the area page.
   lastAuditAt: ts('last_audit_at'),
+  // Private bin: owner + object_shares('area', id, uid) see inside; the
+  // privacy is inherited by everything under it (not stored on children).
+  isPrivate: integer('is_private', { mode: 'boolean' }).notNull().default(false),
+  ownerId: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
   // User-editable tags (JSON string[]), searchable - not printed on labels.
   tags: text('tags', { mode: 'json' }),
   // Prints as the third line on labels ("Christmas", "Electronics").
@@ -244,3 +248,13 @@ export const apiTokens = sqliteTable('api_tokens', {
   scope: text('scope').notNull().default('read-write'),
 });
 export type ApiToken = typeof apiTokens.$inferSelect;
+
+/** Share grants on an area or an item - "who else can see inside". */
+export const objectShares = sqliteTable('object_shares', {
+  objectType: text('object_type').notNull(), // 'area' | 'item'
+  objectId: text('object_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+}, (t) => [
+  primaryKey({ columns: [t.objectType, t.objectId, t.userId] }),
+]);

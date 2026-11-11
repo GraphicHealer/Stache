@@ -6,11 +6,16 @@ import { useApp } from '../context';
 import { downscale } from '../image';
 import { parseScan } from '../scan';
 import { Scanner } from '../components/Scanner';
-import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu, PrintDialog, usePrompt, Loader } from '../components/Bits';
+import { Breadcrumb, CaptureInput, Icon, IconBtn, ItemGrid, KebabMenu, PrintDialog, ShareRow, usePrompt, Loader } from '../components/Bits';
 
 export function AreaPage() {
   const { id = '' } = useParams();
   const nav = useNavigate();
+  const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/api/users') });
+  const togglePrivate = async () => {
+    const r = await api.patch(`/api/areas/${id}`, { is_private: !area?.is_private }).catch((e) => (toast(e.message), null));
+    if (r) { toast(r.item?.is_private ?? !area?.is_private ? 'Bin made private' : 'Bin is public'); qc.invalidateQueries({ queryKey: ['area', id] }); }
+  };
   const qc = useQueryClient();
   const { setCurrentArea, toast } = useApp();
   const [askPrompt, promptUi] = usePrompt();
@@ -228,9 +233,26 @@ export function AreaPage() {
         <div>
           <div className="row" style={{ gap: 6, alignItems: 'center' }}>
             <h1>{area.name ?? 'unnamed area'}</h1>
+            <IconBtn
+              icon="lock"
+              label={area.is_private ? 'Make bin public' : 'Make bin private'}
+              onClick={togglePrivate}
+            />
             <IconBtn icon="pencil" label="Edit area" onClick={openEdit} />
           </div>
           {area.category && <div className="muted">{area.category}</div>}
+          {area.is_private && (
+            <div className="share-row">
+              <span className="muted">Only you +</span>
+              <ShareRow
+                base={`/api/areas/${id}`}
+                ownerId={area.owner_id}
+                shares={data.shared_with ?? []}
+                users={users?.users ?? []}
+                onChanged={() => qc.invalidateQueries({ queryKey: ['area', id] })}
+              />
+            </div>
+          )}
           {(area.tags ?? []).map((t: string) => (
             <span key={t} className="badge">{t}</span>
           ))}
@@ -238,6 +260,7 @@ export function AreaPage() {
             <span key={c} className="badge">{c}</span>
           ))}
           {data.archived && <span className="badge warn">hidden</span>}
+          {area.is_private && <span className="badge warn">private</span>}
         </div>
       </div>
 
