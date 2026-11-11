@@ -318,7 +318,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as { user_id?: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
-    if (!canManageShare(area.ownerId, req.user?.id ?? null, id)) return reply.code(403).send('not a member of this private bin');
+    if (!(await canManageShare(area.ownerId, req.user?.id ?? null, id))) return reply.code(403).send('not a member of this private bin');
     if (!body.user_id || body.user_id === area.ownerId) return reply.badRequest('pick a member to add');
     await db.insert(objectShares).values({ objectType: 'area', objectId: id, userId: body.user_id });
     return { ok: true };
@@ -328,7 +328,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const { id, uid } = req.params as { id: string; uid: string };
     const [area] = await db.select().from(areas).where(eq(areas.id, id));
     if (!area) return reply.notFound('area not found');
-    if (!canManageShare(area.ownerId, req.user?.id ?? null, id)) return reply.code(403).send('not a member of this private bin');
+    if (!(await canManageShare(area.ownerId, req.user?.id ?? null, id))) return reply.code(403).send('not a member of this private bin');
     await db
       .delete(objectShares)
       .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id), eq(objectShares.userId, uid)));

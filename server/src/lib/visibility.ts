@@ -14,7 +14,7 @@ const ancestorBlocked = (userId: string | null, fromCol: SQLiteColumn) =>
   userId
     ? sql`exists (with recursive anc(id,parent_id) as (
         select id,parent_id from areas where id = ${fromCol}
-        union all select a.id,a.parent_id from areas a join anc on a.id = anc.parent
+        union all select a.id,a.parent_id from areas a join anc on a.id = anc.parent_id
       ) select 1 from anc join areas pa on pa.id = anc.id
         where pa.is_private = 1 and coalesce(pa.owner_id,'') <> ${userId}
           and not exists (
@@ -23,7 +23,7 @@ const ancestorBlocked = (userId: string | null, fromCol: SQLiteColumn) =>
           ))`
     : sql`exists (with recursive anc(id,parent_id) as (
         select id,parent_id from areas where id = ${fromCol}
-        union all select a.id,a.parent_id from areas a join anc on a.id = anc.parent
+        union all select a.id,a.parent_id from areas a join anc on a.id = anc.parent_id
       ) select 1 from anc join areas pa on pa.id = anc.id where pa.is_private = 1)`;
 
 export const itemVisible = (userId: string | null) => {
