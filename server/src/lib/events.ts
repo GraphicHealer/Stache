@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, query } from '../db';
-import { areas, events, itemLinks, itemReceipts, items, labels, photos } from '../db/schema';
+import { areas, objectShares, events, itemLinks, itemReceipts, items, labels, photos } from '../db/schema';
 import { env } from '../env';
 
 export type EventType =
@@ -294,8 +294,24 @@ export async function undoEvent(id: string): Promise<{ ok: boolean; message?: st
       if ('cover_photo_id' in prev) set.coverPhotoId = prev.cover_photo_id;
       if ('tags' in prev) set.tags = prev.tags;
       if ('category' in prev) set.category = prev.category;
+      if ('is_private' in prev) {
+        set.isPrivate = prev.is_private;
+        set.ownerId = prev.owner_id ?? null;
+      }
       if (Object.keys(set).length)
         await db.update(areas).set(set).where(eq(areas.id, entityId));
+      if ('is_private' in prev) {
+        // Restore the recorded share list: wipe current, re-insert prev.
+        await db
+          .delete(objectShares)
+          .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, entityId)));
+        for (const uid of (prev.shares ?? []) as string[]) {
+          await db
+            .insert(objectShares)
+            .values({ objectType: 'area', objectId: entityId, userId: uid })
+            .onConflictDoNothing();
+        }
+      }
       break;
     }
     default:

@@ -247,7 +247,7 @@ export function AreaPage() {
             <div className="share-row">
               <span className="muted">
                 Private · {users?.users?.find((u: any) => u.id === area.owner_id)?.name ?? 'owner'} (owner)
-                {(data.shared_with ?? []).length > 0 ? ' +' : ''}
+                {' · admins can see this'}
               </span>
               <ShareRow
                 base={`/api/areas/${id}`}

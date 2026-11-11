@@ -49,7 +49,7 @@ export async function labelRoutes(app: FastifyInstance) {
     return {
       labels: await Promise.all(rows.map(async (r) =>
         r.area_id && !(await canSeeArea(r.area_id, uid, admin))
-          ? { ...r, area_name: null, area_tags: null, area_category: null, area_path: null }
+          ? { ...r, area_id: null, area_name: null, area_tags: null, area_category: null, area_path: null, area_private: true }
           : { ...r, area_path: pathFor(r.area_id) })),
     };
   });

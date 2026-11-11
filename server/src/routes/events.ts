@@ -7,7 +7,7 @@ import { env } from '../env';
 import { areas, events, items, user } from '../db/schema';
 import { canSeeArea, canSeeItem } from '../lib/visibility';
 import { undoEvent } from '../lib/events';
-import { itemVisible } from '../lib/visibility';
+import { areaVisible, itemVisible } from '../lib/visibility';
 import { requireAdmin } from '../lib/guards';
 import { thumbsForItems, thumbUrl } from '../lib/photos';
 import { breadcrumb } from '../lib/breadcrumb';
@@ -20,14 +20,21 @@ async function eventVisibleToUser(
   entityId: string | null,
   userId: string | null,
   isAdmin = false,
+  actorId: string | null = null,
 ): Promise<boolean> {
   if (!entityId) return true;
+  // A purged entity can't be checked - only its actor or an admin keeps it.
+  const goneVisible = () => userId === actorId || isAdmin;
   if (entityType === 'item') {
     const [it] = await db.select().from(items).where(eq(items.id, entityId));
-    if (!it) return true;
+    if (!it) return goneVisible();
     return canSeeItem(it, userId, isAdmin);
   }
-  if (entityType === 'area') return canSeeArea(entityId, userId, isAdmin);
+  if (entityType === 'area') {
+    const [a] = await db.select({ id: areas.id }).from(areas).where(eq(areas.id, entityId));
+    if (!a) return goneVisible();
+    return canSeeArea(entityId, userId, isAdmin);
+  }
   if (entityType === 'label') {
     const [a] = await db.select({ id: areas.id }).from(areas).where(eq(areas.labelCode, entityId));
     if (a) return canSeeArea(a.id, userId, isAdmin);
@@ -48,7 +55,7 @@ export async function miscRoutes(app: FastifyInstance) {
       .limit(Math.min(100, parseInt(limit ?? '30', 10) || 30));
     const visible: (typeof events.$inferSelect)[] = [];
     for (const e of rows) {
-      if (await eventVisibleToUser(e.entityType, e.entityId, uid, admin)) visible.push(e);
+      if (await eventVisibleToUser(e.entityType, e.entityId, uid, admin, e.userId)) visible.push(e);
     }
     const names = new Map(
       (await db.select({ id: user.id, name: user.name }).from(user)).map((u) => [u.id, u.name]),
@@ -221,9 +228,10 @@ export async function miscRoutes(app: FastifyInstance) {
   app.get('/api/export', async (req, reply) => {
     const { format } = req.query as { format?: string };
     const uid = req.user?.id ?? null;
+    const admin = req.user?.role === 'admin';
     const vis = itemVisible(uid);
     const allItems = await db.select().from(items).where(vis).orderBy(asc(items.createdAt));
-    const allAreas = await db.select().from(areas).orderBy(asc(areas.createdAt));
+    const allAreas = await db.select().from(areas).where(areaVisible(uid, admin)).orderBy(asc(areas.createdAt));
     const pathCache = new Map<string, string>();
     const areaPath = async (id: string) => {
       if (!pathCache.has(id)) {

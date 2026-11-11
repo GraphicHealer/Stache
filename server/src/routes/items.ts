@@ -13,7 +13,7 @@ import { detectObjects, kickAi, maybeQueueItem } from '../lib/ai';
 import { analyzeItemPhoto, hasEmbedding, mlHealthy, nearestToItem } from '../lib/ml';
 import { detectCodes, lookupBarcode, type DetectedCode } from '../lib/barcodes';
 import { parseBody } from '../lib/validate';
-import { canSeeItem } from '../lib/visibility';
+import { canSeeArea, canSeeItem } from '../lib/visibility';
 import { z } from 'zod';
 
 // A real calendar date, not just a YYYY-MM-DD shape ("2026-02-30" fails).
@@ -163,7 +163,8 @@ export async function itemRoutes(app: FastifyInstance) {
       .select({ id: areas.id })
       .from(areas)
       .where(and(eq(areas.id, areaId), isNull(areas.archivedAt)));
-    if (!area) return reply.badRequest('area not found');
+    if (!area || !(await canSeeArea(areaId, req.user?.id ?? null, req.user?.role === 'admin')))
+      return reply.badRequest('area not found');
 
     // Offline replays carry a client_id - if the first attempt actually
     // landed, return the existing item instead of filing a duplicate.
@@ -256,7 +257,8 @@ export async function itemRoutes(app: FastifyInstance) {
         .select({ id: areas.id })
         .from(areas)
         .where(and(eq(areas.id, body.area_id), isNull(areas.archivedAt)));
-      if (!area) return reply.badRequest('destination area not found');
+      if (!area || !(await canSeeArea(body.area_id, req.user?.id ?? null, req.user?.role === 'admin')))
+        return reply.badRequest('destination area not found');
       evs.push({
         type: 'item.moved',
         payload: { from_area_id: item.areaId, to_area_id: body.area_id },
@@ -716,8 +718,11 @@ export async function itemRoutes(app: FastifyInstance) {
     const [item] = await db.select().from(items).where(eq(items.id, id));
     if (!item) return reply.notFound('item not found');
     if (!(await canManageItemShare(item, req.user?.id ?? null))) return reply.code(403).send('not a member of this private item');
+    if (!item.isPrivate) return reply.badRequest('item is not private');
     if (!body.user_id || body.user_id === item.ownerId) return reply.badRequest('pick a member to add');
-    await db.insert(objectShares).values({ objectType: 'item', objectId: id, userId: body.user_id });
+    const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, body.user_id));
+    if (!u) return reply.badRequest('unknown member');
+    await db.insert(objectShares).values({ objectType: 'item', objectId: id, userId: body.user_id }).onConflictDoNothing();
     return { ok: true };
   });
 

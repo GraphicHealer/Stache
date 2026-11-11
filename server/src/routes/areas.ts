@@ -83,7 +83,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const roots = await db
       .select()
       .from(areas)
-      .where(and(all ? isNull(areas.archivedAt) : and(isNull(areas.parentId), isNull(areas.archivedAt)), areaVisible(req.user?.id ?? null)))
+      .where(and(all ? isNull(areas.archivedAt) : and(isNull(areas.parentId), isNull(areas.archivedAt)), areaVisible(req.user?.id ?? null, req.user?.role === 'admin')))
       .orderBy(asc(areas.createdAt));
     const covers = await coverThumbsForAreas(roots);
     const counts = await subtreeItemCounts(
@@ -164,7 +164,7 @@ export async function areaRoutes(app: FastifyInstance) {
       db
         .select()
         .from(areas)
-        .where(and(eq(areas.parentId, id), isNull(areas.archivedAt), areaVisible(req.user?.id ?? null)))
+        .where(and(eq(areas.parentId, id), isNull(areas.archivedAt), areaVisible(req.user?.id ?? null, req.user?.role === 'admin')))
         .orderBy(asc(areas.createdAt)),
       db
         .select()
@@ -287,7 +287,7 @@ export async function areaRoutes(app: FastifyInstance) {
           .from(objectShares)
           .where(and(eq(objectShares.objectType, 'area'), eq(objectShares.objectId, id)))).map((r) => r.userId);
       }
-      evs.push({ type: 'area.updated', payload: { prev: { is_private: area.isPrivate, shares: clearedShares }, next: { is_private: body.is_private } } });
+      evs.push({ type: 'area.updated', payload: { prev: { is_private: area.isPrivate, owner_id: area.ownerId, shares: clearedShares }, next: { is_private: body.is_private } } });
       area.isPrivate = body.is_private;
       if (!body.is_private) area.ownerId = null;
     }

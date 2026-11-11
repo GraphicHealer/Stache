@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useApp } from '../context';
@@ -62,6 +62,7 @@ export function LabelPage() {
       <div className="page">
         <h1>Private bin</h1>
         <p className="muted">This label belongs to a bin you can't see.</p>
+        <Link to="/" className="btn">Back to Scan</Link>
       </div>
     );
   if (error || !data)
