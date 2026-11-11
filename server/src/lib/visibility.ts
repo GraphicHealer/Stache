@@ -86,14 +86,18 @@ export async function canSeeArea(areaId: string | null, userId: string | null, i
 }
 
 export async function canSeeItem(item: { id: string; isPrivate: boolean; ownerId: string | null; areaId: string | null }, userId: string | null, isAdmin = false) {
-  if (item.isPrivate && item.ownerId !== userId) {
+  if (item.isPrivate) {
+    // A private item needs an owner match or an explicit share - null
+    // viewers and ownerless private items are never inside the set.
     if (!userId) return false;
-    const [share] = await db
-      .select({ userId: objectShares.userId })
-      .from(objectShares)
-      .where(and(eq(objectShares.objectType, 'item'), eq(objectShares.objectId, item.id), eq(objectShares.userId, userId)))
-      .limit(1);
-    if (!share) return false;
+    if (item.ownerId !== userId) {
+      const [share] = await db
+        .select({ userId: objectShares.userId })
+        .from(objectShares)
+        .where(and(eq(objectShares.objectType, 'item'), eq(objectShares.objectId, item.id), eq(objectShares.userId, userId)))
+        .limit(1);
+      if (!share) return false;
+    }
   }
   return canSeeArea(item.areaId, userId, isAdmin);
 }
