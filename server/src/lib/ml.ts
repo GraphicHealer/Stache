@@ -265,6 +265,10 @@ function vlmFor(level: number): { kind: VlmKind; model: string; dtype: Record<st
 }
 // Kind of the loaded model - set by loadVlm, read by vlmAsk's arg ordering.
 let vlmKind: VlmKind = 'lfm2vl';
+/** Kind of the currently loaded VLM (accurate after ensureVlm resolves). */
+export function currentVlmKind(): VlmKind {
+  return vlmKind;
+}
 
 // Download progress for the Settings UI + corner banner.
 const dl = {
@@ -387,9 +391,14 @@ export async function vlmAsk(buf: Buffer, question: string, maxNewTokens = 256):
     const vlm = await ensureVlm();
     const image = await rawImage(buf);
     if (vlmKind === 'moondream') {
-      const q = `<image>\n\nQuestion: ${question}\n\nAnswer:`;
-      const textInputs = vlm.tokenizer(q);
       const visionInputs = await vlm.processor(image);
+      // The merge scatters image features 1:1 onto <image> marker tokens, but
+      // moondream's SiglipProcessor doesn't expand the single marker. Expand it
+      // to the patch count (SigLIP-378, patch 14 -> 27x27 = 729 markers).
+      const [h, w] = visionInputs.pixel_values.dims.slice(-2) as number[];
+      const patches = Math.floor(h / 14) * Math.floor(w / 14);
+      const q = `${'<image>'.repeat(patches)}\n\nQuestion: ${question}\n\nAnswer:`;
+      const textInputs = vlm.tokenizer(q);
       const ids = await vlm.model.generate({
         ...textInputs,
         ...visionInputs,

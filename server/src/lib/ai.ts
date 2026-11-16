@@ -5,7 +5,7 @@ import { db } from '../db';
 import { items, photos, settings } from '../db/schema';
 import { env } from '../env';
 import { lookupBarcode, type DetectedCode } from './barcodes';
-import { activeMlLevel, mlDisabled, vlmAsk, vlmGenerate } from './ml';
+import { activeMlLevel, currentVlmKind, ensureVlm, mlDisabled, vlmAsk, vlmGenerate } from './ml';
 import { checkedLookup } from './urlcheck';
 import { Agent, fetch as undiciFetch } from 'undici';
 
@@ -178,8 +178,24 @@ async function suggestOne(itemId: string): Promise<void> {
       tags: localTags(item.name, description, ocrText),
       ocr_text: ocrText,
     };
+  } else if (cfg.provider === 'local' && (await ensureVlm()) && currentVlmKind() === 'moondream') {
+    // Moondream ignores the JSON contract - ask plainly and assemble the fields.
+    const name = await vlmAsk(buf, 'What is the main object in this photo? Reply with a short noun phrase only.', 40);
+    const description = await vlmAsk(buf, 'Describe it in one factual sentence: brand, model, color, condition.', 80);
+    const ocrRaw = await vlmAsk(buf, 'What text is readable in this photo? Brands, model numbers, labels. Reply "none" if there is none.', 80);
+    const ocr_text = /^(none|nothing|n\/a)\b/i.test(ocrRaw.trim()) ? null : ocrRaw;
+    const cleanPlain = (s: string) => {
+      const t = s.trim().replace(/^["'`]+|["'`.]+$/g, '').replace(/^(a|an|the)\s+/i, '');
+      return t.length > 0 && t.length <= 200 && !t.includes('?') ? t : null;
+    };
+    parsed = {
+      name: cleanPlain(name),
+      description: cleanPlain(description),
+      tags: localTags(item.name, description, ocr_text),
+      ocr_text,
+    };
   } else if (cfg.provider === 'local') {
-    // Prompted local VLM (SmolVLM2 / Moondream2): same question as remote,
+    // Prompted local VLM (LFM2-VL): same question as remote,
     // answered on-device with the owner's name as real context.
     const question = `${context.join(' ')} ${PROMPT}`.trim();
     const raw = await vlmAsk(buf, question, 320);
