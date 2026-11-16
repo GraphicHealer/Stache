@@ -144,7 +144,28 @@ export function AISettings() {
           />
         </>
       )}
-      <button className="btn" onClick={save}>Save</button>
+      <div className="row">
+        <button className="btn" onClick={save}>Save</button>
+        {form.provider === 'remote' && (
+          <button
+            className="btn btn-ghost"
+            onClick={async () => {
+              try {
+                const r = await api.post('/api/settings/ai/test', {
+                  base_url: form.base_url,
+                  model: form.model,
+                  ...(form.api_key ? { api_key: form.api_key } : {}),
+                });
+                toast(`Connected - the model answered: "${r.reply}"`);
+              } catch (e) {
+                toast(`Test failed: ${(e as Error).message}`);
+              }
+            }}
+          >
+            Test connection
+          </button>
+        )}
+      </div>
 
       <h2>Out reminders</h2>
       <p className="muted">
@@ -235,21 +256,38 @@ export function AISettings() {
       <h2>Reprocess existing items</h2>
       <p className="muted">
         Runs AI suggestions and photo-search indexing on items that were filed
-        before AI was enabled. Runs in the background - one photo at a time.
+        before AI was enabled or that failed. Runs in the background - one photo
+        at a time. After changing providers or models, use "all items" to redo
+        everything.
       </p>
-      <button
-        className="btn"
-        onClick={async () => {
-          try {
-            const r = await api.post('/api/settings/backfill');
-            toast(`Queued ${r.ai_queued} AI + ${r.embeddings_queued} embeddings`);
-          } catch (e) {
-            toast(`Failed: ${(e as Error).message}`);
-          }
-        }}
-      >
-        Reprocess existing items
-      </button>
+      <div className="row">
+        <button
+          className="btn"
+          onClick={async () => {
+            try {
+              const r = await api.post('/api/settings/backfill');
+              toast(`Queued ${r.ai_queued} AI + ${r.embeddings_queued} embeddings`);
+            } catch (e) {
+              toast(`Failed: ${(e as Error).message}`);
+            }
+          }}
+        >
+          Reprocess new + failed
+        </button>
+        <button
+          className="btn btn-ghost"
+          onClick={async () => {
+            try {
+              const r = await api.post('/api/settings/backfill', { all: true });
+              toast(`Queued ${r.ai_queued} AI + ${r.embeddings_queued} embeddings`);
+            } catch (e) {
+              toast(`Failed: ${(e as Error).message}`);
+            }
+          }}
+        >
+          Re-run on all items
+        </button>
+      </div>
     </SettingsShell>
   );
 }

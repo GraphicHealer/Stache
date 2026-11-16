@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { asc, eq } from 'drizzle-orm';
 import { db, sqlite } from '../db';
 import { items, mcpTokens, settings } from '../db/schema';
-import { getAiConfig, kickAi, setAiConfig } from '../lib/ai';
+import { callVlm, getAiConfig, kickAi, setAiConfig } from '../lib/ai';
 import { badAiUrl } from '../lib/urlcheck';
 import { activeMlLevel, analyzeItemPhoto, invalidateMlLevel, vlmDownloaded, vlmStatus, warmVlm } from '../lib/ml';
 import { getDigestConfig, setDigestConfig, webhookToken } from '../lib/digest';
@@ -107,18 +107,46 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Backfill: items filed before AI/ML was switched on. Re-queues pending
-  // suggestions for anything that never got one, and embeds every photo
-  // missing a vector. Runs in the background - inference stays serialized.
+  // Reprocess/backfill: default re-queues items that never got a suggestion
+  // plus ones that failed (AI hiccups). { all: true } re-runs EVERYTHING -
+  // the button to press after changing providers or models. Embeddings for
+  // missing vectors happen either way. Runs in the background.
+  app.post('/api/settings/ai/test', async (req, reply) => {
+    const body = (req.body ?? {}) as { base_url?: string; model?: string; api_key?: string };
+    const saved = await getAiConfig();
+    const cfg = {
+      enabled: true,
+      provider: 'remote' as const,
+      base_url: (body.base_url ?? saved?.base_url ?? '').trim(),
+      model: (body.model ?? saved?.model ?? '').trim(),
+      api_key: body.api_key || saved?.api_key,
+    };
+    if (!cfg.base_url || !cfg.model) return reply.badRequest('base URL and model are required');
+    const err = await badAiUrl(cfg.base_url);
+    if (err) return reply.badRequest(err);
+    try {
+      const text = await callVlm(cfg, 'You are a connectivity check.', [
+        { type: 'text', text: 'Reply with the single word: ok' },
+      ]);
+      return { ok: true, reply: String(text).slice(0, 200) };
+    } catch (e) {
+      return reply.badRequest(`connection failed: ${(e as Error).message}`);
+    }
+  });
+
   app.post('/api/settings/backfill', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
-  }, async () => {
+  }, async (req) => {
+    const { all } = (req.body ?? {}) as { all?: boolean };
     const cfg = await getAiConfig();
+    // ai_status: off | pending | done | failed | skipped. Default re-queues
+    // anything that never produced a suggestion; `all` redoes 'done' too.
     const aiQueued = cfg?.enabled
       ? sqlite
           .prepare(
             `UPDATE items SET ai_status = 'pending'
-             WHERE ai_status IS NULL AND hidden_at IS NULL
+             WHERE hidden_at IS NULL
+               AND ai_status IN (${all ? "'off','done','failed','skipped'" : "'off','failed','skipped'"})
                AND EXISTS (SELECT 1 FROM photos WHERE photos.item_id = items.id)`,
           )
           .run().changes

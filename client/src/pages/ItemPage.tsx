@@ -753,17 +753,17 @@ export function ItemPage() {
 
       <div className="row">
         <button className="btn" onClick={() => setScanning(true)}>Move…</button>
+        {photos.length > 0 && (
+          <button className="btn" onClick={startSplit} disabled={splitBusy}>
+            {splitBusy ? 'Looking…' : 'Split into items…'}
+          </button>
+        )}
         <KebabMenu
           className="page-menu"
           items={[
             {
               label: `Not here${item.not_here_count > 0 ? ` (${item.not_here_count})` : ''}`,
               onSelect: notHere,
-            },
-            {
-              label: splitBusy ? 'Looking…' : 'Split pile…',
-              disabled: splitBusy || !photos.length,
-              onSelect: startSplit,
             },
             'sep',
             item.hidden

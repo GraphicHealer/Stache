@@ -268,3 +268,121 @@ describe('PATCH /api/items/:id validation', () => {
     expect(i.retailer).toBe('hardware store');
   });
 });
+
+describe('AI test + reprocess routes', () => {
+  let admin: any, member: any, area: any;
+  beforeAll(async () => {
+    admin = await login('ai-adm@t.dev', 'admin');
+    member = await login('ai-mem@t.dev', 'member');
+    [area] = await db.insert(schema.areas).values({ name: 'ai-bin' }).returning();
+  });
+
+  const post = (headers: any, url: string, payload: any = {}) =>
+    app.inject({ method: 'POST', url, headers, payload });
+
+  it('ai/test requires admin', async () => {
+    expect((await post({}, '/api/settings/ai/test')).statusCode).toBe(401);
+    expect((await post(member, '/api/settings/ai/test')).statusCode).toBe(403);
+  });
+
+  it('ai/test 400s without base_url/model and refuses prohibited hosts', async () => {
+    expect((await post(admin, '/api/settings/ai/test')).statusCode).toBe(400);
+    const r = await post(admin, '/api/settings/ai/test', { base_url: 'http://169.254.169.254', model: 'x' });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it('ai/test reaches a live OpenAI-compatible endpoint', async () => {
+    const http = await import('node:http');
+    const fake = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        expect(JSON.parse(body).model).toBe('fake-vlm');
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }));
+      });
+    });
+    await new Promise((r) => fake.listen(0, '127.0.0.1', r as any));
+    try {
+      const port = (fake.address() as any).port;
+      const res = await post(admin, '/api/settings/ai/test', {
+        base_url: `http://127.0.0.1:${port}/v1`,
+        model: 'fake-vlm',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().ok).toBe(true);
+    } finally {
+      fake.close();
+    }
+  });
+
+  it('ai/test reports a clean failure for a dead endpoint', async () => {
+    const res = await post(admin, '/api/settings/ai/test', {
+      base_url: 'http://127.0.0.1:1/v1',
+      model: 'x',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(String(res.json().message)).toContain('connection failed');
+  });
+
+  it('backfill re-queues off/failed/skipped; all=true adds done; hidden excluded', { timeout: 30_000 }, async () => {
+    const mk = async (aiStatus: string, hidden = false, withPhoto = true) => {
+      const [i] = await db.insert(schema.items).values({
+        areaId: area.id, name: `it-${aiStatus}-${hidden}`, aiStatus,
+        hiddenAt: hidden ? new Date() : null,
+      }).returning();
+      if (withPhoto)
+        await db.insert(schema.photos).values({ itemId: i.id, path: 'p.webp', thumbPath: 'p.webp' });
+      return i;
+    };
+    const off = await mk('off');
+    const failed = await mk('failed');
+    const skipped = await mk('skipped');
+    const done = await mk('done');
+    const hidden = await mk('failed', true);
+    const noPhoto = await mk('failed', false, false);
+
+    // AI must be enabled for the queue half of the route.
+    const prev = await db.select().from(schema.settings).where(eq(schema.settings.key, 'ai'));
+    await db.insert(schema.settings)
+      .values({ key: 'ai', value: { enabled: true, provider: 'remote', base_url: 'http://x', model: 'm' } })
+      .onConflictDoUpdate({ target: schema.settings.key, set: { value: { enabled: true, provider: 'remote', base_url: 'http://x', model: 'm' } } });
+
+    const get = async (id: string) =>
+      (await db.select().from(schema.items).where(eq(schema.items.id, id)))[0].aiStatus;
+
+    let r = await post(admin, '/api/settings/backfill');
+    expect(r.json().ai_queued).toBe(3); // off + failed + skipped
+    expect(await get(off.id)).toBe('pending');
+    expect(await get(failed.id)).toBe('pending');
+    expect(await get(skipped.id)).toBe('pending');
+    expect(await get(done.id)).toBe('done');
+    expect(await get(hidden.id)).toBe('failed');
+    expect(await get(noPhoto.id)).toBe('failed');
+
+    // Reset statuses directly - kickAi() runs the queue in the background,
+    // so item statuses are racy right after the first call.
+    const set = (id: string, s: string) =>
+      db.update(schema.items).set({ aiStatus: s }).where(eq(schema.items.id, id));
+    await set(off.id, 'off'); await set(failed.id, 'failed');
+    await set(skipped.id, 'skipped'); await set(done.id, 'done');
+    await set(hidden.id, 'failed'); await set(noPhoto.id, 'failed');
+
+    r = await post(admin, '/api/settings/backfill', { all: true });
+    expect(r.json().ai_queued).toBe(4); // off + failed + skipped + done
+    expect(await get(done.id)).toBe('pending');
+    expect(await get(hidden.id)).toBe('failed');
+    expect(await get(noPhoto.id)).toBe('failed');
+
+    // Wait for the background queue to drain, then confirm a steady state:
+    // with everything 'done' the default run queues nothing.
+    for (let i = 0; i < 100; i++) {
+      const pending = await db.select().from(schema.items).where(eq(schema.items.aiStatus, 'pending'));
+      if (pending.length === 0) break;
+      await new Promise((r2) => setTimeout(r2, 100));
+    }
+    await db.update(schema.items).set({ aiStatus: 'done' });
+    r = await post(admin, '/api/settings/backfill');
+    expect(r.json().ai_queued).toBe(0);
+  });
+});
