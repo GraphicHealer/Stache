@@ -10,17 +10,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fastify/cors": "^11.4.1",
+    "@fastify/cors": "^11.4.3",
     "@fastify/helmet": "^13.2.0",
     "@fastify/multipart": "^10.1.8",
     "@fastify/rate-limit": "^11.2.2",
-    "@fastify/sensible": "^6.0.3",
-    "@fastify/static": "^10.1.8",
+    "@fastify/sensible": "^6.0.8",
+    "@fastify/static": "^10.1.11",
     "@huggingface/transformers": "^4.3.2",
     "@modelcontextprotocol/sdk": "^1.18.0",
     "adm-zip": "^0.6.1",
-    "better-auth": "^1.7.18",
-    "better-sqlite3": "^13.0.3",
+    "better-auth": "^1.7.25",
+    "better-sqlite3": "^13.2.0",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.12.8",
     "qrcode": "^1.5.4",
@@ -29,7 +29,7 @@
     "undici": "^8.12.4",
     "zod": "^4.6.7",
     "zpl-image-ts": "^1.0.1",
-    "zxing-wasm": "^3.1.6"
+    "zxing-wasm": "^3.1.7"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.6.0",
