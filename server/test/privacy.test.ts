@@ -317,3 +317,32 @@ describe('bin privacy - routes', () => {
     await app.inject({ method: 'PATCH', url: `/api/areas/${vault.id}`, headers: owner, payload: { is_private: false } });
   });
 });
+
+describe('cover grid visibility (A2)', () => {
+  it('excludes photos of items the viewer cannot see', async () => {
+    // Public bin holding a private item + a shared item, each with a photo.
+    const [pubBin] = await db.insert(schema.areas).values({ name: 'cg-pub' }).returning();
+    const [pubItem] = await db.insert(schema.items).values({ areaId: pubBin.id, name: 'cg-pub-item' }).returning();
+    const [privItem] = await db.insert(schema.items).values({
+      areaId: pubBin.id, name: 'cg-priv-item', isPrivate: true, ownerId: owner.userId,
+    }).returning();
+    await db.insert(schema.photos).values({ itemId: pubItem.id, path: 'cgpub.webp', thumbPath: 'cgpub.webp' });
+    await db.insert(schema.photos).values({ itemId: privItem.id, path: 'cgpriv.webp', thumbPath: 'cgpriv.webp' });
+
+    const asOther = (await get('/api/areas', other)).json().areas.find((a: any) => a.id === pubBin.id);
+    const asOwner = (await get('/api/areas', owner)).json().areas.find((a: any) => a.id === pubBin.id);
+
+    // Owner sees both; outsider only the public item's photo.
+    expect(asOwner.cover_grid.length).toBe(2);
+    expect(asOther.cover_grid.length).toBe(1);
+    expect(asOther.cover_grid[0]).toContain('cgpub');
+    expect(JSON.stringify(asOther.cover_grid)).not.toContain('cgpriv');
+
+    // The area-detail path uses the same helper for sub-bin mosaics.
+    const [rootBin] = await db.insert(schema.areas).values({ name: 'cg-root' }).returning();
+    await db.update(schema.areas).set({ parentId: rootBin.id }).where(eq(schema.areas.id, pubBin.id));
+    const detail = (await get(`/api/areas/${rootBin.id}`, other)).json();
+    const sub = detail.subareas.find((a: any) => a.id === pubBin.id);
+    expect(JSON.stringify(sub?.cover_grid ?? [])).not.toContain('cgpriv');
+  });
+});

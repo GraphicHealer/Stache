@@ -130,7 +130,11 @@ export async function settingsRoutes(app: FastifyInstance) {
       ]);
       return { ok: true, reply: String(text).slice(0, 200) };
     } catch (e) {
-      return reply.badRequest(`connection failed: ${(e as Error).message}`);
+      // "fetch failed" alone is useless - surface the transport cause
+      // (ENOTFOUND, ECONNREFUSED, CERT_*, the DNS-pin refusal, ...).
+      const err = e as Error & { cause?: { code?: string; message?: string } };
+      const why = err.cause?.code ?? err.cause?.message;
+      return reply.badRequest(`connection failed: ${err.message}${why ? ` (${why})` : ''}`);
     }
   });
 

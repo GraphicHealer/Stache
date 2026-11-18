@@ -6,6 +6,7 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import { db, query } from '../db';
 import { photos, type Photo } from '../db/schema';
 import { descendantAreaIds } from './breadcrumb';
+import { itemVisibleWhere } from './visibility';
 import { env } from '../env';
 
 const PHOTO_DIR = () => path.join(env.dataDir, 'photos');
@@ -183,17 +184,23 @@ export async function coverThumbsForAreas(
  * Album-style cover grid: up to 4 newest item photos across the area's
  * subtree, for cards when the area has no cover shot of its own.
  */
-export async function coverGridForAreas(areaIds: string[]): Promise<Map<string, Photo[]>> {
+export async function coverGridForAreas(
+  areaIds: string[],
+  userId: string | null = null,
+  isAdmin = false,
+): Promise<Map<string, Photo[]>> {
   const map = new Map<string, Photo[]>();
   for (const id of areaIds) {
     const tree = await descendantAreaIds(id);
     const ph = tree.map(() => '?').join(',');
+    const vis = itemVisibleWhere('i', userId, isAdmin);
     const rows = query<{ id: string }>(
       `SELECT p.id FROM items i
         JOIN photos p ON p.item_id = i.id
-        WHERE i.area_id IN (${ph}) AND i.hidden_at IS NULL
+        WHERE i.area_id IN (${ph}) AND i.hidden_at IS NULL AND ${vis.text}
         ORDER BY (i.area_id = ?) DESC, p.created_at DESC LIMIT 4`,
       ...tree,
+      ...vis.params,
       id,
     );
     if (!rows.length) continue;

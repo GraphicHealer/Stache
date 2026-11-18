@@ -130,6 +130,46 @@ describe('checkedLookup (connect-time DNS check)', () => {
     }
   });
 
+  it('returns an address array when undici asks for { all: true }', async () => {
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    const lookup = checkedLookup(() =>
+      Promise.resolve([
+        { address: '192.168.1.50', family: 4 },
+        { address: '192.168.1.51', family: 4 },
+      ]),
+    );
+    const got: any = await new Promise((res, rej) =>
+      lookup('nas.lan', { all: true }, (e, addrs) => (e ? rej(e) : res(addrs))),
+    );
+    // autoSelectFamily dials per-answer - must get the full list back.
+    expect(got).toHaveLength(2);
+    expect(got[0]).toEqual({ address: '192.168.1.50', family: 4 });
+  });
+
+  it('undici actually connects through the Agent (A1 regression)', async () => {
+    const http = await import('node:http');
+    const { Agent, fetch: undiciFetch } = await import('undici');
+    const { checkedLookup } = await import('../src/lib/urlcheck');
+    const fake = http.createServer((_req, res) => res.end('ok'));
+    await new Promise((r) => fake.listen(0, '127.0.0.1', r as any));
+    try {
+      const port = (fake.address() as any).port;
+      // A hostname (not an IP literal) is what exercises the lookup path:
+      // with the old single-address callback shape undici died with
+      // ERR_INVALID_IP_ADDRESS before any packet left.
+      const agent = new Agent({
+        connect: {
+          lookup: checkedLookup(() => Promise.resolve([{ address: '127.0.0.1', family: 4 }])),
+        } as any,
+      });
+      const res = await undiciFetch(`http://ollama.lan:${port}/`, { dispatcher: agent });
+      expect(res.status).toBe(200);
+      await agent.close();
+    } finally {
+      fake.close();
+    }
+  });
+
   it('blocks IPv4-mapped and NAT64-embedded metadata answers', async () => {
     const { checkedLookup } = await import('../src/lib/urlcheck');
     for (const addr of ['::ffff:169.254.169.254', '64:ff9b::169.254.169.254', '64:ff9b::a9fe:a9fe']) {

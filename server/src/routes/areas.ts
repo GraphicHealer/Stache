@@ -91,7 +91,7 @@ export async function areaRoutes(app: FastifyInstance) {
       req.user?.id ?? null,
     );
     const ownCounts = await directItemCounts(roots.map((a) => a.id), req.user?.id ?? null);
-    const grids = await coverGridForAreas(roots.filter((a) => !covers.get(a.id)).map((a) => a.id));
+    const grids = await coverGridForAreas(roots.filter((a) => !covers.get(a.id)).map((a) => a.id), req.user?.id ?? null, req.user?.role === 'admin');
     return {
       areas: roots.map((a) => {
         const c = covers.get(a.id);
@@ -184,7 +184,7 @@ export async function areaRoutes(app: FastifyInstance) {
     const covers = await coverThumbsForAreas(subs);
     const subCounts = await subtreeItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
     const ownCounts = await directItemCounts(subs.map((a) => a.id), req.user?.id ?? null);
-    const subGrids = await coverGridForAreas(subs.filter((a) => !covers.get(a.id)).map((a) => a.id));
+    const subGrids = await coverGridForAreas(subs.filter((a) => !covers.get(a.id)).map((a) => a.id), req.user?.id ?? null, req.user?.role === 'admin');
     const thumbs = await thumbsForItems(contents.map((i) => i.id));
     // The page header only shows a real cover shot - a placeholder signals
     // "no cover, you can add one" (the album grid is for cards, not here).

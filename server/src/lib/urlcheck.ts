@@ -122,7 +122,10 @@ type LookupFn = (hostname: string, opts: any) => Promise<{ address: string; fami
  *  address and leave the OS to pick. */
 export function checkedLookup(lookupFn?: LookupFn) {
   const lookup: LookupFn = lookupFn ?? ((h) => dns.lookup(h, { all: true }) as any);
-  return (hostname: string, _opts: unknown, cb: (err: Error | null, addr?: string, fam?: number) => void) => {
+  // Node 20+ dials with autoSelectFamily, which calls lookup with
+  // { all: true } and expects an ARRAY of {address, family} back - the
+  // single-address form dies as ERR_INVALID_IP_ADDRESS inside undici.
+  return (hostname: string, opts: { all?: boolean } | undefined, cb: (err: Error | null, addr?: any, fam?: number) => void) => {
     lookup(hostname, { all: true })
       .then((answers) => {
         const list = (Array.isArray(answers) ? answers : [answers]).map((a: any) =>
@@ -131,6 +134,7 @@ export function checkedLookup(lookupFn?: LookupFn) {
           if (badIpLiteral(a.family === 4 ? a.address : `[${a.address}]`))
             return cb(new Error('ai endpoint resolves to a prohibited address'));
         }
+        if (opts?.all) return cb(null, list);
         cb(null, list[0].address, list[0].family);
       })
       .catch((e) => cb(e instanceof Error ? e : new Error(String(e))));
