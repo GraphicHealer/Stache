@@ -356,6 +356,29 @@ describe('AI test + reprocess routes', () => {
     }
   });
 
+  it('ai/test sanitizes HTML error pages from the provider', async () => {
+    const http = await import('node:http');
+    const fake = http.createServer((_req, res) => {
+      res.statusCode = 405;
+      res.end('<!doctype html><html><body><h1>Method Not Allowed</h1></body></html>');
+    });
+    await new Promise((r) => fake.listen(0, '127.0.0.1', r as any));
+    try {
+      const port = (fake.address() as any).port;
+      const res = await post(admin, '/api/settings/ai/test', {
+        base_url: `http://127.0.0.1:${port}/v1`,
+        model: 'fake-vlm',
+      });
+      expect(res.statusCode).toBe(400);
+      const msg = String(res.json().message);
+      expect(msg).toContain('405');
+      expect(msg).not.toContain('<');
+      expect(msg).toContain('Method Not Allowed');
+    } finally {
+      fake.close();
+    }
+  });
+
   it('ai/test reports a clean failure for a dead endpoint', async () => {
     const res = await post(admin, '/api/settings/ai/test', {
       base_url: 'http://127.0.0.1:1/v1',

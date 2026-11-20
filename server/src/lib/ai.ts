@@ -110,7 +110,16 @@ export async function callVlm(cfg: AiConfig, system: string, userContent: any[])
   });
   if (res.status >= 300 && res.status < 400)
     throw new Error('AI provider answered with a redirect - refused');
-  if (!res.ok) throw new Error(`AI provider ${res.status}: ${(await res.text()).slice(0, 500)}`);
+  if (!res.ok) {
+    // Error pages are often HTML - strip tags and keep it short enough to
+    // show in a toast/log line.
+    const detail = (await res.text())
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+    throw new Error(`AI provider ${res.status}${detail ? `: ${detail}` : ''}`);
+  }
   // A hostile or garbage endpoint could return anything - cap the read.
   const raw = await res.text();
   if (raw.length > 2_000_000) throw new Error('AI response too large');

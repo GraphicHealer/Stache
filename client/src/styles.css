@@ -334,6 +334,7 @@ textarea.input { resize: vertical; }
   pointer-events: auto; display: flex; align-items: center; gap: 14px;
   background: var(--panel-2); border-radius: 12px; padding: 12px 18px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5); font-weight: 600;
+  max-width: calc(100vw - 32px); overflow-wrap: anywhere;
 }
 .toast-undo { background: none; border: 0; color: var(--accent-text); font-weight: 800; font-size: 1rem; cursor: pointer; }
 
